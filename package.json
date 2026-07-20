@@ -1,0 +1,26 @@
+{
+  "name": "pd-ai-engine",
+  "version": "0.1.0",
+  "description": "面向产品经理的 AI 产品设计工作流引擎",
+  "type": "module",
+  "bin": {
+    "pae": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "check": "tsc -p tsconfig.json --noEmit && npm test",
+    "example": "npm run build && node dist/cli.js run examples/b2b-requirement.md --out output/example"
+  },
+  "keywords": ["product-management", "ai", "workflow", "prototype", "prd"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}
