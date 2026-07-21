@@ -42,7 +42,7 @@ export interface PrototypePage {
 export interface PrototypeDsl {
   schemaVersion: "0.1";
   product: { name: string; description: string };
-  navigation: Array<{ label: string; pageId: string }>;
+  navigation: Array<{ label: string; pageId: string; roles?: string[] }>;
   pages: PrototypePage[];
   rules: Array<{ id: string; description: string; appliesTo: string[] }>;
 }
