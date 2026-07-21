@@ -5,7 +5,7 @@ import process from "node:process";
 import { MockStageExecutor } from "./execution/mock-executor.js";
 import { ProductDesignWorkflow } from "./workflow/workflow.js";
 
-const HELP = `PAE — Product Design AI Engine v0.1.0
+const HELP = `PAE — Product Design AI Engine v0.2.0
 
 用法：
   pae run <需求文件> [--out <输出目录>]

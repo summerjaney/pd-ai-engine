@@ -40,11 +40,71 @@ export interface PrototypePage {
 }
 
 export interface PrototypeDsl {
-  schemaVersion: "0.1";
+  schemaVersion: "0.2";
   product: { name: string; description: string };
   navigation: Array<{ label: string; pageId: string; roles?: string[] }>;
   pages: PrototypePage[];
   rules: Array<{ id: string; description: string; appliesTo: string[] }>;
+}
+
+export interface PrototypeTransition {
+  sourcePageId: string;
+  triggerType: "navigation" | "action";
+  triggerId: string;
+  triggerLabel: string;
+  targetPageId: string;
+}
+
+export interface PrototypePageManifest {
+  id: string;
+  name: string;
+  route: string;
+  pattern: PrototypePage["pattern"];
+  roles: string[];
+  fieldCount: number;
+  actionCount: number;
+  preview: string;
+}
+
+export interface PrototypeBundleManifest {
+  schemaVersion: "0.2";
+  entry: "prototype.html";
+  dsl: "prototype.json";
+  mastergoData: "mastergo-data.json";
+  previewDirectory: "preview";
+  navigation: PrototypeDsl["navigation"];
+  pages: PrototypePageManifest[];
+  transitions: PrototypeTransition[];
+}
+
+export interface MasterGoScreenNode {
+  id: string;
+  name: string;
+  type: "field" | "action" | "section";
+  component: string;
+  description: string;
+  required?: boolean;
+}
+
+export interface MasterGoScreen {
+  id: string;
+  name: string;
+  route: string;
+  pattern: PrototypePage["pattern"];
+  frame: { width: number; height: number };
+  nodes: MasterGoScreenNode[];
+  interactions: PrototypeTransition[];
+}
+
+export interface MasterGoData {
+  schemaVersion: "0.2";
+  product: PrototypeDsl["product"];
+  tokens: {
+    color: Record<string, string>;
+    spacing: Record<string, number>;
+    radius: Record<string, number>;
+  };
+  screens: MasterGoScreen[];
 }
 
 export interface WorkflowArtifacts {

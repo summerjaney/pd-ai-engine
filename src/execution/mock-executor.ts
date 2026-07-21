@@ -11,7 +11,7 @@ const md = (title: string, body: string) => `# ${title}\n\n${body.trim()}\n`;
 
 function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
   return {
-    schemaVersion: "0.1",
+    schemaVersion: "0.2",
     product: {
       name: context.input.title,
       description: "依据原始需求生成的 B 端产品原型模型。",
@@ -310,7 +310,7 @@ export class MockStageExecutor implements StageExecutor {
         if (!prototype) throw new Error("PRD 阶段必须依赖 Prototype DSL");
         const pages = prototype.pages.map((page) => `### ${page.name}\n\n- 路由：\`${page.route}\`\n- 页面模式：${page.pattern}\n- 字段：${page.fields.map((field) => `${field.label}${field.required ? "（必填）" : ""}`).join("、") || "无"}\n- 操作：${page.actions.map((action) => action.label).join("、")}`).join("\n\n");
         const rules = prototype.rules.map((rule, index) => `${index + 1}. ${rule.description}`).join("\n");
-        artifact = md("产品需求文档（PRD）", `> 本文档由 Prototype DSL 派生，原型模型为产品定义的单一事实来源。\n\n## 产品目标\n\n${prototype.product.description}\n\n## 页面需求\n\n${pages}\n\n## 业务规则\n\n${rules}`);
+        artifact = md("产品需求文档（PRD）", `> 本文档由 Prototype DSL 派生，原型模型为产品定义的单一事实来源。\n> 原型目录约定为 \`06-prototype/\`，其中 \`prototype.html\` 可用于交互预览，\`mastergo-data.json\` 可用于后续设计工具适配。\n\n## 产品目标\n\n${prototype.product.description}\n\n## 页面需求\n\n${pages}\n\n## 业务规则\n\n${rules}`);
         break;
       }
       case "review": {

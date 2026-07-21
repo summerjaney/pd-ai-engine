@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { PrototypeDsl } from "../src/domain/types.js";
+import type { MasterGoData, PrototypeBundleManifest, PrototypeDsl } from "../src/domain/types.js";
 import { MockStageExecutor, runReviewChecks } from "../src/execution/mock-executor.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
+
+async function readJson<T>(filePath: string): Promise<T> {
+  return JSON.parse(await readFile(filePath, "utf8")) as T;
+}
 
 test("完整运行 MVP 工作流并由 Prototype DSL 派生 PRD", async () => {
   const output = await mkdtemp(path.join(os.tmpdir(), "pae-"));
@@ -16,10 +20,14 @@ test("完整运行 MVP 工作流并由 Prototype DSL 派生 PRD", async () => {
     content: "# 测试产品\n\n创建并审批申请。",
   }, output);
 
-  assert.equal(context.artifacts.prototype?.schemaVersion, "0.1");
-  assert.match(context.artifacts.prd ?? "", /单一事实来源/);
-  const manifest = JSON.parse(await readFile(path.join(output, "manifest.json"), "utf8")) as { stages: unknown[] };
+  assert.equal(context.artifacts.prototype?.schemaVersion, "0.2");
+  assert.match(context.artifacts.prd ?? "", /06-prototype\//);
+  const manifest = await readJson<{ stages: Array<{ id: string; type: string; files?: string[] }> }>(path.join(output, "manifest.json"));
   assert.equal(manifest.stages.length, 8);
+  const prototypeStage = manifest.stages.find((stage) => stage.id === "prototype");
+  assert.ok(prototypeStage, "manifest 中必须存在 prototype 阶段");
+  assert.equal(prototypeStage.type, "directory");
+  assert.ok(prototypeStage.files?.includes("06-prototype/prototype.html"), "manifest 应记录 prototype.html");
 });
 
 test("Prototype DSL 包含 6 个预期页面", async () => {
@@ -107,7 +115,7 @@ test("角色名称与原始需求一致", async () => {
 
 test("Review 能识别人为构造的页面缺失问题", () => {
   const incompletePrototype: PrototypeDsl = {
-    schemaVersion: "0.1",
+    schemaVersion: "0.2",
     product: { name: "测试", description: "测试" },
     navigation: [{ label: "申请管理", pageId: "request-list" }],
     pages: [
@@ -157,4 +165,81 @@ test("PRD 页面与 Prototype DSL 保持一致", async () => {
   for (const rule of prototype.rules) {
     assert.ok(prd.includes(rule.description), `PRD 应包含规则 ${rule.description}`);
   }
+
+  assert.ok(prd.includes("prototype.html"), "PRD 应引用交互式原型");
+  assert.ok(prd.includes("mastergo-data.json"), "PRD 应引用 MasterGo 适配数据");
+});
+
+test("Prototype Bundle 输出目录包含 HTML、manifest、MasterGo 数据和预览图", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-"));
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  const context = await workflow.run({
+    sourcePath: "requirement.md",
+    title: "员工请假管理",
+    content: "# 员工请假管理\n\n员工请假申请和审批。",
+  }, output);
+
+  const prototype = context.artifacts.prototype;
+  assert.ok(prototype, "Prototype DSL 必须存在");
+
+  const bundleDir = path.join(output, "06-prototype");
+  const dsl = await readJson<PrototypeDsl>(path.join(bundleDir, "prototype.json"));
+  const bundleManifest = await readJson<PrototypeBundleManifest>(path.join(bundleDir, "prototype-manifest.json"));
+  const masterGoData = await readJson<MasterGoData>(path.join(bundleDir, "mastergo-data.json"));
+  const html = await readFile(path.join(bundleDir, "prototype.html"), "utf8");
+  const previewFiles = await readdir(path.join(bundleDir, "preview"));
+
+  assert.equal(dsl.schemaVersion, "0.2");
+  assert.equal(bundleManifest.entry, "prototype.html");
+  assert.equal(bundleManifest.pages.length, prototype.pages.length);
+  assert.equal(masterGoData.screens.length, prototype.pages.length);
+  assert.equal(previewFiles.length, prototype.pages.length);
+  assert.match(html, /Prototype DSL \+ 可交互 HTML \+ MasterGo 适配数据/);
+  assert.match(html, /data-target-page="request-list"/);
+  assert.match(html, /新建申请/);
+});
+
+test("Prototype manifest 和 MasterGo 数据包含页面跳转关系", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-"));
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  await workflow.run({
+    sourcePath: "requirement.md",
+    title: "员工请假管理",
+    content: "# 员工请假管理\n\n员工请假申请和审批。",
+  }, output);
+
+  const bundleDir = path.join(output, "06-prototype");
+  const bundleManifest = await readJson<PrototypeBundleManifest>(path.join(bundleDir, "prototype-manifest.json"));
+  const masterGoData = await readJson<MasterGoData>(path.join(bundleDir, "mastergo-data.json"));
+
+  const createTransition = bundleManifest.transitions.find((transition) =>
+    transition.sourcePageId === "request-list" && transition.triggerId === "create"
+  );
+  assert.ok(createTransition, "manifest 应包含从申请列表到新建申请的跳转");
+  assert.equal(createTransition.targetPageId, "request-create");
+
+  const approvalScreen = masterGoData.screens.find((screen) => screen.id === "approval-detail");
+  assert.ok(approvalScreen, "MasterGo 数据必须包含审批详情页面");
+  assert.ok(
+    approvalScreen.interactions.some((transition) => transition.triggerId === "approve" && transition.targetPageId === "approval-todo"),
+    "审批详情应声明审批后返回待办列表的交互",
+  );
+});
+
+test("重复运行会清理旧版 prototype 单文件产物", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-"));
+  await writeFile(path.join(output, "06-prototype.json"), "{\"legacy\":true}\n", "utf8");
+
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  await workflow.run({
+    sourcePath: "requirement.md",
+    title: "员工请假管理",
+    content: "# 员工请假管理\n\n员工请假申请和审批。",
+  }, output);
+
+  const manifest = await readJson<{ stages: Array<{ id: string }> }>(path.join(output, "manifest.json"));
+  const stageIds = manifest.stages.map((stage) => stage.id);
+
+  assert.ok(stageIds.includes("prototype"), "运行后仍应包含 prototype 阶段");
+  await assert.rejects(readFile(path.join(output, "06-prototype.json"), "utf8"));
 });
