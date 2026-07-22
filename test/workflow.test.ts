@@ -22,8 +22,9 @@ test("完整运行 MVP 工作流并由 Prototype DSL 派生 PRD", async () => {
 
   assert.equal(context.artifacts.prototype?.schemaVersion, "0.2");
   assert.match(context.artifacts.prd ?? "", /06-prototype\//);
+  assert.match(context.artifacts.prd ?? "", /07-mastergo\//);
   const manifest = await readJson<{ stages: Array<{ id: string; type: string; files?: string[] }> }>(path.join(output, "manifest.json"));
-  assert.equal(manifest.stages.length, 8);
+  assert.equal(manifest.stages.length, 10);
   const prototypeStage = manifest.stages.find((stage) => stage.id === "prototype");
   assert.ok(prototypeStage, "manifest 中必须存在 prototype 阶段");
   assert.equal(prototypeStage.type, "directory");
@@ -129,6 +130,13 @@ test("Review 能识别人为构造的页面缺失问题", () => {
       },
     ],
     rules: [],
+    transitions: [],
+    designTokens: {
+      colors: {},
+      spacing: {},
+      radius: {},
+      typography: { fontSize: {}, fontWeight: {}, lineHeight: {} },
+    },
   };
 
   const issues = runReviewChecks(incompletePrototype);
@@ -142,6 +150,12 @@ test("Review 能识别人为构造的页面缺失问题", () => {
 
   const missingRoleIssue = issues.find((i) => i.type === "角色操作页面缺失");
   assert.ok(missingRoleIssue, "应发现角色操作页面缺失");
+
+  const missingMasterGoIssue = issues.find((i) => i.type === "MasterGo 原型数据缺失");
+  assert.ok(missingMasterGoIssue, "应发现 MasterGo 原型数据缺失");
+
+  const notConfirmedIssue = issues.find((i) => i.type === "原型未确认");
+  assert.ok(notConfirmedIssue, "应发现原型未确认");
 });
 
 test("PRD 页面与 Prototype DSL 保持一致", async () => {
@@ -166,8 +180,8 @@ test("PRD 页面与 Prototype DSL 保持一致", async () => {
     assert.ok(prd.includes(rule.description), `PRD 应包含规则 ${rule.description}`);
   }
 
-  assert.ok(prd.includes("prototype.html"), "PRD 应引用交互式原型");
-  assert.ok(prd.includes("mastergo-data.json"), "PRD 应引用 MasterGo 适配数据");
+  assert.ok(prd.includes("06-prototype/"), "PRD 应引用原型目录");
+  assert.ok(prd.includes("07-mastergo/"), "PRD 应引用 MasterGo 目录");
 });
 
 test("Prototype Bundle 输出目录包含 HTML、manifest、MasterGo 数据和预览图", async () => {
@@ -242,4 +256,141 @@ test("重复运行会清理旧版 prototype 单文件产物", async () => {
 
   assert.ok(stageIds.includes("prototype"), "运行后仍应包含 prototype 阶段");
   await assert.rejects(readFile(path.join(output, "06-prototype.json"), "utf8"));
+});
+
+test("工作流包含 10 个阶段", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-"));
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  await workflow.run({
+    sourcePath: "requirement.md",
+    title: "员工请假管理",
+    content: "# 员工请假管理\n\n员工请假申请和审批。",
+  }, output);
+
+  const manifest = await readJson<{ stages: Array<{ id: string }> }>(path.join(output, "manifest.json"));
+  const stageIds = manifest.stages.map((stage) => stage.id);
+
+  assert.equal(stageIds.length, 10, "工作流应包含 10 个阶段");
+  assert.ok(stageIds.includes("mastergo"), "工作流应包含 mastergo 阶段");
+  assert.ok(stageIds.includes("prototype-confirmation"), "工作流应包含 prototype-confirmation 阶段");
+
+  const expectedOrder = [
+    "requirement-analysis",
+    "product-outline",
+    "product-architecture",
+    "core-flow",
+    "page-structure",
+    "prototype",
+    "mastergo",
+    "prototype-confirmation",
+    "prd",
+    "review",
+  ];
+  assert.deepEqual(stageIds, expectedOrder, "阶段顺序应符合预期");
+});
+
+test("mastergo 阶段生成数据文件", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-"));
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  const context = await workflow.run({
+    sourcePath: "requirement.md",
+    title: "员工请假管理",
+    content: "# 员工请假管理\n\n员工请假申请和审批。",
+  }, output);
+
+  const mastergo = context.artifacts.mastergo;
+  assert.ok(mastergo, "mastergo 产物必须存在");
+  assert.ok(mastergo.data, "mastergo 数据必须存在");
+  assert.ok(mastergo.result, "mastergo 结果必须存在");
+  assert.equal(mastergo.data.schemaVersion, "0.2");
+  assert.equal(mastergo.result.schemaVersion, "0.2");
+  assert.equal(mastergo.data.screens.length, 6, "MasterGo 屏幕数量应为 6 个");
+
+  const mastergoDir = path.join(output, "07-mastergo");
+  const mastergoData = await readJson<MasterGoData>(path.join(mastergoDir, "mastergo-data.json"));
+  const mastergoResult = await readJson<{ createdPages: Array<{ pageId: string; pageName: string; nodeId: string }> }>(path.join(mastergoDir, "mastergo-result.json"));
+
+  assert.equal(mastergoData.screens.length, 6);
+  assert.equal(mastergoResult.createdPages.length, 6);
+});
+
+test("prototype-confirmation 阶段生成确认状态", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-"));
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  const context = await workflow.run({
+    sourcePath: "requirement.md",
+    title: "员工请假管理",
+    content: "# 员工请假管理\n\n员工请假申请和审批。",
+  }, output);
+
+  const confirmation = context.artifacts["prototype-confirmation"];
+  assert.ok(confirmation, "原型确认产物必须存在");
+  assert.equal(confirmation.status, "confirmed", "原型确认状态应为 confirmed");
+  assert.ok(confirmation.confirmedAt, "应包含确认时间");
+  assert.ok(confirmation.confirmedBy, "应包含确认人");
+
+  const confirmationFile = await readJson<{ status: string }>(path.join(output, "08-prototype-confirmation.json"));
+  assert.equal(confirmationFile.status, "confirmed");
+});
+
+test("Prototype DSL 包含 transitions 和 designTokens", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-"));
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  const context = await workflow.run({
+    sourcePath: "requirement.md",
+    title: "员工请假管理",
+    content: "# 员工请假管理\n\n员工请假申请和审批。",
+  }, output);
+
+  const prototype = context.artifacts.prototype;
+  assert.ok(prototype, "Prototype DSL 必须存在");
+  assert.ok(prototype.transitions, "必须包含 transitions");
+  assert.ok(prototype.transitions.length > 0, "transitions 不能为空");
+  assert.ok(prototype.designTokens, "必须包含 designTokens");
+  assert.ok(Object.keys(prototype.designTokens.colors).length > 0, "designTokens.colors 不能为空");
+});
+
+test("Review 检查 MasterGo 屏幕数量与 DSL 页面数量一致", () => {
+  const prototype: PrototypeDsl = {
+    schemaVersion: "0.2",
+    product: { name: "测试", description: "测试" },
+    navigation: [
+      { label: "申请管理", pageId: "request-list", roles: ["员工"] },
+      { label: "审批工作台", pageId: "approval-todo", roles: ["部门负责人"] },
+      { label: "基础设置", pageId: "leave-type-list", roles: ["人事管理员"] },
+    ],
+    pages: [
+      { id: "request-list", name: "申请列表", route: "/requests", pattern: "list", fields: [], actions: [] },
+      { id: "request-create", name: "新建申请", route: "/requests/new", pattern: "form", fields: [], actions: [] },
+    ],
+    rules: [],
+    transitions: [],
+    designTokens: {
+      colors: { primary: "#3B82F6" },
+      spacing: { s16: 16 },
+      radius: { r12: 12 },
+      typography: { fontSize: { sm: 14 }, fontWeight: { normal: 400 }, lineHeight: { sm: 20 } },
+    },
+  };
+
+  const mastergo = {
+    data: {
+      schemaVersion: "0.2",
+      product: prototype.product,
+      tokens: { color: {}, spacing: {}, radius: {} },
+      screens: [
+        { id: "request-list", name: "申请列表", route: "/requests", pattern: "list", frame: { width: 1440, height: 900 }, nodes: [], interactions: [] },
+      ],
+    },
+    result: {
+      schemaVersion: "0.2",
+      createdPages: [{ pageId: "request-list", pageName: "申请列表", nodeId: "mg-request-list" }],
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    },
+  };
+
+  const issues = runReviewChecks(prototype, mastergo, { status: "confirmed" });
+  const screenCountIssue = issues.find((i) => i.type === "MasterGo 屏幕数量不一致");
+  assert.ok(screenCountIssue, "应发现 MasterGo 屏幕数量不一致");
 });

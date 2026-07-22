@@ -145,6 +145,51 @@ function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
       { id: "reject-comment-required", description: "驳回时审批意见必填。", appliesTo: ["reject"] },
       { id: "withdraw-pending-only", description: "仅待审批申请允许撤回。", appliesTo: ["withdraw"] },
     ],
+    transitions: [
+      { sourcePageId: "request-list", triggerType: "action", triggerId: "create", triggerLabel: "新建申请", targetPageId: "request-create" },
+      { sourcePageId: "request-list", triggerType: "action", triggerId: "view", triggerLabel: "查看", targetPageId: "request-detail" },
+      { sourcePageId: "request-create", triggerType: "action", triggerId: "submit", triggerLabel: "提交", targetPageId: "request-list" },
+      { sourcePageId: "request-create", triggerType: "action", triggerId: "cancel", triggerLabel: "取消", targetPageId: "request-list" },
+      { sourcePageId: "request-detail", triggerType: "action", triggerId: "withdraw", triggerLabel: "撤回", targetPageId: "request-list" },
+      { sourcePageId: "approval-todo", triggerType: "action", triggerId: "view", triggerLabel: "查看", targetPageId: "approval-detail" },
+      { sourcePageId: "approval-detail", triggerType: "action", triggerId: "approve", triggerLabel: "审批通过", targetPageId: "approval-todo" },
+      { sourcePageId: "approval-detail", triggerType: "action", triggerId: "reject", triggerLabel: "审批驳回", targetPageId: "approval-todo" },
+      { sourcePageId: "leave-type-list", triggerType: "action", triggerId: "create", triggerLabel: "新增", targetPageId: "request-create" },
+      { sourcePageId: "leave-type-list", triggerType: "action", triggerId: "edit", triggerLabel: "编辑", targetPageId: "request-create" },
+    ],
+    designTokens: {
+      colors: {
+        primary: "#3B82F6",
+        success: "#10B981",
+        danger: "#EF4444",
+        warning: "#F59E0B",
+        bgPage: "#F6F7FB",
+        bgCard: "#FFFFFF",
+        textPrimary: "#111827",
+        textSecondary: "#6B7280",
+        border: "#E5E7EB",
+      },
+      spacing: {
+        s8: 8,
+        s12: 12,
+        s16: 16,
+        s20: 20,
+        s24: 24,
+        s32: 32,
+        s40: 40,
+      },
+      radius: {
+        r8: 8,
+        r12: 12,
+        r16: 16,
+        r24: 24,
+      },
+      typography: {
+        fontSize: { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, xxl: 28 },
+        fontWeight: { normal: 400, medium: 500, semibold: 600, bold: 700 },
+        lineHeight: { xs: 16, sm: 20, md: 24, lg: 28, xl: 32, xxl: 36 },
+      },
+    },
   };
 }
 
@@ -156,7 +201,13 @@ interface ReviewIssue {
   suggestion: string;
 }
 
-export function runReviewChecks(prototype: PrototypeDsl): ReviewIssue[] {
+import type { MasterGoData, MasterGoResult } from "../domain/types.js";
+
+export function runReviewChecks(
+  prototype: PrototypeDsl,
+  mastergo?: { data: MasterGoData; result?: MasterGoResult },
+  confirmation?: { status: "pending" | "confirmed" | "rejected" },
+): ReviewIssue[] {
   const issues: ReviewIssue[] = [];
   const pageIds = prototype.pages.map((p) => p.id);
   const pageNames = prototype.pages.map((p) => p.name);
@@ -278,13 +329,73 @@ export function runReviewChecks(prototype: PrototypeDsl): ReviewIssue[] {
     });
   }
 
+  // 检查 8: MasterGo 原型生成状态
+  if (!mastergo || !mastergo.data) {
+    issues.push({
+      type: "MasterGo 原型数据缺失",
+      location: `mastergo-data.json`,
+      severity: "error",
+      relatedRequirement: "MasterGo 原型必须基于 Prototype DSL 生成",
+      suggestion: "执行 mastergo 阶段生成 mastergo-data.json",
+    });
+  } else {
+    // 检查 9: MasterGo 屏幕数量与 DSL 页面数量一致
+    const screenIds = mastergo.data.screens.map((s) => s.id);
+    if (mastergo.data.screens.length !== prototype.pages.length) {
+      issues.push({
+        type: "MasterGo 屏幕数量不一致",
+        location: `mastergo-data.json screens（${mastergo.data.screens.length} 个）vs DSL pages（${prototype.pages.length} 个）`,
+        severity: "error",
+        relatedRequirement: "MasterGo 原型必须覆盖所有 DSL 页面",
+        suggestion: `检查是否遗漏页面：${pageIds.filter((id) => !screenIds.includes(id)).join("、")}`,
+      });
+    }
+
+    // 检查 10: MasterGo 交互与 DSL 跳转一致
+    for (const page of prototype.pages) {
+      const dslTransitions = prototype.transitions.filter((t) => t.sourcePageId === page.id);
+      const mgScreen = mastergo.data.screens.find((s) => s.id === page.id);
+      if (mgScreen && dslTransitions.length !== mgScreen.interactions.length) {
+        issues.push({
+          type: "MasterGo 交互数量不一致",
+          location: `页面：${page.name}（${page.id}）`,
+          severity: "warning",
+          relatedRequirement: "MasterGo 交互必须与 DSL 跳转定义一致",
+          suggestion: `检查交互定义，DSL 有 ${dslTransitions.length} 个跳转，MasterGo 有 ${mgScreen.interactions.length} 个`,
+        });
+      }
+    }
+  }
+
+  // 检查 11: 原型确认状态
+  if (!confirmation || confirmation.status !== "confirmed") {
+    issues.push({
+      type: "原型未确认",
+      location: `prototype-confirmation.json`,
+      severity: "error",
+      relatedRequirement: "PRD 必须在原型确认后生成",
+      suggestion: "完成原型确认后再进入 PRD 阶段",
+    });
+  }
+
+  // 检查 12: 过渡定义完整性
+  if (!prototype.transitions || prototype.transitions.length === 0) {
+    issues.push({
+      type: "页面过渡定义缺失",
+      location: `Prototype DSL transitions`,
+      severity: "warning",
+      relatedRequirement: "页面之间需要定义跳转关系",
+      suggestion: "为各页面添加 transitions 定义",
+    });
+  }
+
   return issues;
 }
 
 export class MockStageExecutor implements StageExecutor {
   async execute(stage: StageId, context: Readonly<WorkflowContext>): Promise<StageResult> {
     const title = context.input.title;
-    let artifact: string | PrototypeDsl;
+    let artifact: StageResult["artifact"];
 
     switch (stage) {
       case "requirement-analysis":
@@ -305,25 +416,94 @@ export class MockStageExecutor implements StageExecutor {
       case "prototype":
         artifact = createPrototype(context);
         break;
+      case "mastergo": {
+        const prototype = context.artifacts.prototype;
+        if (!prototype) throw new Error("MasterGo 阶段必须依赖 Prototype DSL");
+        const screens = prototype.pages.map((page) => ({
+          id: page.id,
+          name: page.name,
+          route: page.route,
+          pattern: page.pattern,
+          frame: { width: 1440, height: 900 },
+          nodes: [
+            ...page.fields.map((field) => ({
+              id: field.id,
+              name: field.label,
+              type: "field" as const,
+              component: field.type === "textarea" ? "TextArea" : field.type === "select" ? "Select" : field.type === "datetime" ? "DateTimePicker" : "Input",
+              description: `${field.label}${field.required ? "（必填）" : ""}`,
+              required: field.required,
+            })),
+            ...page.actions.map((action) => ({
+              id: action.id,
+              name: action.label,
+              type: "action" as const,
+              component: "Button",
+              description: `${action.label}按钮`,
+            })),
+          ],
+          interactions: prototype.transitions.filter((t) => t.sourcePageId === page.id),
+        }));
+        artifact = {
+          data: {
+            schemaVersion: "0.2",
+            product: prototype.product,
+            tokens: {
+              color: prototype.designTokens.colors,
+              spacing: prototype.designTokens.spacing,
+              radius: prototype.designTokens.radius,
+            },
+            screens,
+          },
+          result: {
+            schemaVersion: "0.2",
+            createdPages: screens.map((screen) => ({
+              pageId: screen.id,
+              pageName: screen.name,
+              nodeId: `mg-${screen.id}`,
+            })),
+            createdAt: new Date().toISOString(),
+            status: "pending",
+          },
+        };
+        break;
+      }
+      case "prototype-confirmation": {
+        artifact = {
+          status: "confirmed",
+          confirmedAt: new Date().toISOString(),
+          confirmedBy: "System (Mock)",
+          comments: ["Mock 环境自动确认", "MasterGo 原型已生成"],
+        };
+        break;
+      }
       case "prd": {
         const prototype = context.artifacts.prototype;
+        const mastergo = context.artifacts.mastergo;
+        const confirmation = context.artifacts["prototype-confirmation"];
         if (!prototype) throw new Error("PRD 阶段必须依赖 Prototype DSL");
+        if (!mastergo) throw new Error("PRD 阶段必须依赖 MasterGo 原型");
+        if (!confirmation || confirmation.status !== "confirmed") {
+          throw new Error("PRD 阶段必须在原型确认后执行");
+        }
         const pages = prototype.pages.map((page) => `### ${page.name}\n\n- 路由：\`${page.route}\`\n- 页面模式：${page.pattern}\n- 字段：${page.fields.map((field) => `${field.label}${field.required ? "（必填）" : ""}`).join("、") || "无"}\n- 操作：${page.actions.map((action) => action.label).join("、")}`).join("\n\n");
         const rules = prototype.rules.map((rule, index) => `${index + 1}. ${rule.description}`).join("\n");
-        artifact = md("产品需求文档（PRD）", `> 本文档由 Prototype DSL 派生，原型模型为产品定义的单一事实来源。\n> 原型目录约定为 \`06-prototype/\`，其中 \`prototype.html\` 可用于交互预览，\`mastergo-data.json\` 可用于后续设计工具适配。\n\n## 产品目标\n\n${prototype.product.description}\n\n## 页面需求\n\n${pages}\n\n## 业务规则\n\n${rules}`);
+        artifact = md("产品需求文档（PRD）", `> 本文档由 Prototype DSL 和 MasterGo 原型派生，原型模型为产品定义的单一事实来源。\n> 原型目录约定为 \`06-prototype/\`，MasterGo 原型目录为 \`07-mastergo/\`。\n\n## 产品目标\n\n${prototype.product.description}\n\n## 页面需求\n\n${pages}\n\n## 业务规则\n\n${rules}`);
         break;
       }
       case "review": {
         const prototype = context.artifacts.prototype;
+        const mastergo = context.artifacts.mastergo;
+        const confirmation = context.artifacts["prototype-confirmation"];
         if (!prototype) throw new Error("Review 阶段必须依赖 Prototype DSL");
-        const issues = runReviewChecks(prototype);
+        const issues = runReviewChecks(prototype, mastergo, confirmation);
         const conclusion = issues.length === 0
           ? "通过全部自动检查，可进入人工评审。"
           : `发现 ${issues.length} 个问题，请修复后再进入人工评审。`;
         const issuesBody = issues.length === 0
           ? "无"
           : issues.map((issue, idx) => `### 问题 ${idx + 1}\n\n- **问题类型**：${issue.type}\n- **问题位置**：${issue.location}\n- **严重程度**：${issue.severity === "error" ? "错误" : "警告"}\n- **对应原始需求**：${issue.relatedRequirement}\n- **修复建议**：${issue.suggestion}`).join("\n\n");
-        artifact = md("设计评审", `## 结论\n\n${conclusion}\n\n## 自动检查发现的问题\n\n${issuesBody}\n\n## 已检查规则\n\n${B2B_RULES.map((rule) => `- ${rule.name}：${rule.description}`).join("\n")}\n\n## 人工评审项\n\n- 角色权限是否符合实际组织规则。\n- 审批状态与异常分支是否完整。\n- Prototype DSL 与 PRD 是否一致。`);
+        artifact = md("设计评审", `## 结论\n\n${conclusion}\n\n## 自动检查发现的问题\n\n${issuesBody}\n\n## 已检查规则\n\n${B2B_RULES.map((rule) => `- ${rule.name}：${rule.description}`).join("\n")}\n\n## 人工评审项\n\n- 角色权限是否符合实际组织规则。\n- 审批状态与异常分支是否完整。\n- Prototype DSL、MasterGo 原型与 PRD 是否一致。\n- MasterGo 交互与 DSL 跳转是否一致。`);
         break;
       }
     }

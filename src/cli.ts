@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   const workflow = new ProductDesignWorkflow(new MockStageExecutor());
   const context = await workflow.run({ sourcePath, content, title: getTitle(content, sourcePath) }, outputDirectory);
 
-  console.log(`PAE 已完成 8 个阶段。`);
+  console.log(`PAE 已完成 10 个阶段。`);
   console.log(`Run ID: ${context.runId}`);
   console.log(`产品设计包: ${outputDirectory}`);
 }

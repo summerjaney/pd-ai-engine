@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { STAGE_IDS, type StageExecutor, type StageId, type WorkflowContext } from "../domain/types.js";
+import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type StageExecutor, type StageId, type WorkflowContext } from "../domain/types.js";
 import {
   buildMasterGoData,
   buildPrototypeManifest,
@@ -16,8 +16,10 @@ const OUTPUT_FILES: Record<StageId, string> = {
   "core-flow": "04-core-flow.md",
   "page-structure": "05-page-structure.md",
   prototype: "06-prototype",
-  prd: "07-prd.md",
-  review: "08-review.md",
+  mastergo: "07-mastergo",
+  "prototype-confirmation": "08-prototype-confirmation.json",
+  prd: "09-prd.md",
+  review: "10-review.md",
 };
 
 const MANAGED_OUTPUT_PATHS = [
@@ -28,8 +30,10 @@ const MANAGED_OUTPUT_PATHS = [
   "05-page-structure.md",
   "06-prototype",
   "06-prototype.json",
-  "07-prd.md",
-  "08-review.md",
+  "07-mastergo",
+  "08-prototype-confirmation.json",
+  "09-prd.md",
+  "10-review.md",
   "manifest.json",
 ] as const;
 
@@ -45,7 +49,6 @@ export class ProductDesignWorkflow {
     };
 
     await mkdir(outputDirectory, { recursive: true });
-    // Clear previously generated artifacts so reruns keep the output directory self-consistent.
     await Promise.all(MANAGED_OUTPUT_PATHS.map((target) =>
       rm(path.join(outputDirectory, target), { recursive: true, force: true })
     ));
@@ -59,8 +62,7 @@ export class ProductDesignWorkflow {
       if (stage === "prototype") {
         const bundleDirectory = path.join(outputDirectory, file);
         const previewDirectory = path.join(bundleDirectory, "preview");
-        const prototype = result.artifact;
-        if (typeof prototype === "string") throw new Error("Prototype 阶段必须产出 Prototype DSL");
+        const prototype = result.artifact as PrototypeDsl;
 
         const prototypeManifest = buildPrototypeManifest(prototype);
         const masterGoData = buildMasterGoData(prototype);
@@ -88,6 +90,25 @@ export class ProductDesignWorkflow {
         continue;
       }
 
+      if (stage === "mastergo") {
+        const mastergoDirectory = path.join(outputDirectory, file);
+        const mastergoArtifact = result.artifact as { data: MasterGoData; result?: MasterGoResult };
+
+        await mkdir(mastergoDirectory, { recursive: true });
+        await writeFile(path.join(mastergoDirectory, "mastergo-data.json"), `${JSON.stringify(mastergoArtifact.data, null, 2)}\n`, "utf8");
+        if (mastergoArtifact.result) {
+          await writeFile(path.join(mastergoDirectory, "mastergo-result.json"), `${JSON.stringify(mastergoArtifact.result, null, 2)}\n`, "utf8");
+        }
+
+        stages.push({
+          id: stage,
+          status: "completed",
+          file: file,
+          warnings: result.warnings,
+        });
+        continue;
+      }
+
       const body = typeof result.artifact === "string"
         ? result.artifact
         : `${JSON.stringify(result.artifact, null, 2)}\n`;
@@ -95,14 +116,15 @@ export class ProductDesignWorkflow {
       stages.push({ id: stage, status: "completed", file, warnings: result.warnings });
     }
 
-    await writeFile(path.join(outputDirectory, "manifest.json"), `${JSON.stringify({
+    const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
       version: "0.2.0",
       runId: context.runId,
       startedAt: context.startedAt,
       input: { sourcePath: input.sourcePath, title: input.title },
-      stages: stages.map((stage) => stage.id === "prototype"
-        ? {
+      stages: stages.map((stage) => {
+        if (stage.id === "prototype") {
+          return {
             ...stage,
             type: "directory",
             files: [
@@ -112,12 +134,26 @@ export class ProductDesignWorkflow {
               "06-prototype/mastergo-data.json",
               "06-prototype/preview/",
             ],
-          }
-        : {
+          };
+        }
+        if (stage.id === "mastergo") {
+          return {
             ...stage,
-            type: "file",
-          }),
-    }, null, 2)}\n`, "utf8");
+            type: "directory",
+            files: [
+              "07-mastergo/mastergo-data.json",
+              "07-mastergo/mastergo-result.json",
+            ],
+          };
+        }
+        return {
+          ...stage,
+          type: "file",
+        };
+      }),
+    }, null, 2);
+
+    await writeFile(path.join(outputDirectory, "manifest.json"), `${manifestContent}\n`, "utf8");
 
     return context;
   }

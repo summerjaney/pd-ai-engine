@@ -159,32 +159,15 @@ function masterGoNodeForAction(page: PrototypePage, actionIndex: number): Master
 }
 
 export function buildMasterGoData(prototype: PrototypeDsl): MasterGoData {
-  const transitions = buildPrototypeTransitions(prototype);
+  const transitions = prototype.transitions.length > 0 ? prototype.transitions : buildPrototypeTransitions(prototype);
 
   return {
     schemaVersion: "0.2",
     product: prototype.product,
     tokens: {
-      color: {
-        background: "#f7f5ef",
-        surface: "#fffdf8",
-        accent: "#1f5eff",
-        text: "#1d1b16",
-        muted: "#6c675d",
-        border: "#d8d0c2",
-      },
-      spacing: {
-        xs: 8,
-        sm: 12,
-        md: 16,
-        lg: 24,
-        xl: 32,
-      },
-      radius: {
-        sm: 8,
-        md: 16,
-        lg: 24,
-      },
+      color: prototype.designTokens.colors,
+      spacing: prototype.designTokens.spacing,
+      radius: prototype.designTokens.radius,
     },
     screens: prototype.pages.map((page) => ({
       id: page.id,

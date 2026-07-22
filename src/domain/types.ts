@@ -5,6 +5,8 @@ export const STAGE_IDS = [
   "core-flow",
   "page-structure",
   "prototype",
+  "mastergo",
+  "prototype-confirmation",
   "prd",
   "review",
 ] as const;
@@ -39,12 +41,25 @@ export interface PrototypePage {
   actions: PrototypeAction[];
 }
 
+export interface DesignTokens {
+  colors: Record<string, string>;
+  spacing: Record<string, number>;
+  radius: Record<string, number>;
+  typography: {
+    fontSize: Record<string, number>;
+    fontWeight: Record<string, number>;
+    lineHeight: Record<string, number>;
+  };
+}
+
 export interface PrototypeDsl {
   schemaVersion: "0.2";
   product: { name: string; description: string };
   navigation: Array<{ label: string; pageId: string; roles?: string[] }>;
   pages: PrototypePage[];
   rules: Array<{ id: string; description: string; appliesTo: string[] }>;
+  transitions: PrototypeTransition[];
+  designTokens: DesignTokens;
 }
 
 export interface PrototypeTransition {
@@ -107,6 +122,22 @@ export interface MasterGoData {
   screens: MasterGoScreen[];
 }
 
+export interface MasterGoResult {
+  schemaVersion: "0.2";
+  fileId?: string;
+  pageId?: string;
+  nodeId?: string;
+  createdPages: Array<{
+    pageId: string;
+    pageName: string;
+    nodeId: string;
+  }>;
+  createdAt: string;
+  status: "pending" | "confirmed" | "rejected";
+  confirmedAt?: string;
+  confirmedBy?: string;
+}
+
 export interface WorkflowArtifacts {
   "requirement-analysis"?: string;
   "product-outline"?: string;
@@ -114,6 +145,16 @@ export interface WorkflowArtifacts {
   "core-flow"?: string;
   "page-structure"?: string;
   prototype?: PrototypeDsl;
+  mastergo?: {
+    data: MasterGoData;
+    result?: MasterGoResult;
+  };
+  "prototype-confirmation"?: {
+    status: "pending" | "confirmed" | "rejected";
+    confirmedAt?: string;
+    confirmedBy?: string;
+    comments?: string[];
+  };
   prd?: string;
   review?: string;
 }
@@ -127,7 +168,15 @@ export interface WorkflowContext {
 
 export interface StageResult {
   stage: StageId;
-  artifact: string | PrototypeDsl;
+  artifact: string | PrototypeDsl | {
+    data: MasterGoData;
+    result?: MasterGoResult;
+  } | {
+    status: "pending" | "confirmed" | "rejected";
+    confirmedAt?: string;
+    confirmedBy?: string;
+    comments?: string[];
+  };
   warnings: string[];
 }
 
