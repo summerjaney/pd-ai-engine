@@ -22,6 +22,36 @@ async function writeIfMissing(filePath: string, content: string): Promise<void> 
   }
 }
 
+async function updateRequirementIndex(
+  indexPath: string,
+  requirement: {
+    id: string;
+    name: string;
+    productVersion: string;
+    status: string;
+  },
+): Promise<void> {
+  let content: string;
+  try {
+    content = await readFile(indexPath, "utf8");
+  } catch {
+    content = `# 需求索引\n\n| 需求编号 | 需求名称 | 产品版本 | 状态 |\n|---|---|---|---|\n`;
+  }
+
+  const lines = content.split("\n");
+  const existingIndex = lines.findIndex(line => line.startsWith(`| ${requirement.id} `));
+
+  const newRow = `| ${requirement.id} | ${requirement.name} | ${requirement.productVersion} | ${requirement.status} |`;
+
+  if (existingIndex >= 0) {
+    lines[existingIndex] = newRow;
+  } else {
+    lines.push(newRow);
+  }
+
+  await writeFile(indexPath, lines.join("\n") + "\n", "utf8");
+}
+
 export async function prepareRequirementOutput(
   options: RequirementOutputOptions,
   input: RequirementInput,
@@ -69,6 +99,13 @@ export async function prepareRequirementOutput(
     updatedAt: new Date().toISOString(),
   }, null, 2)}\n`, "utf8");
   await writeFile(path.join(requirementDirectory, "00-requirement-input.md"), input.content, "utf8");
+
+  await updateRequirementIndex(path.join(productDirectory, "requirement-index.md"), {
+    id: requirementId,
+    name: requirementName,
+    productVersion: options.productVersion,
+    status: "created",
+  });
 
   return { projectDirectory, requirementDirectory, context };
 }

@@ -419,3 +419,78 @@ test("Review 检查 MasterGo 屏幕数量与 DSL 页面数量一致", () => {
   const screenCountIssue = issues.find((i) => i.type === "MasterGo 屏幕数量不一致");
   assert.ok(screenCountIssue, "应发现 MasterGo 屏幕数量不一致");
 });
+
+test("连续创建 REQ-001、REQ-002 后，索引同时包含两条记录", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-index-test-"));
+  const input = { sourcePath: "requirement.md", title: "请假管理", content: "# 请假管理\n" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "人力资源管理系统",
+    productVersion: "1.0.0",
+    revision: 1,
+  };
+
+  await prepareRequirementOutput({ ...base, requirementId: "REQ-001", requirementName: "leave-request" }, input);
+  await prepareRequirementOutput({ ...base, requirementId: "REQ-002", requirementName: "overtime-request" }, input);
+
+  const indexPath = path.join(outputRoot, "hr-system", "product", "requirement-index.md");
+  const indexContent = await readFile(indexPath, "utf8");
+
+  assert.ok(indexContent.includes("REQ-001"), "索引应包含 REQ-001");
+  assert.ok(indexContent.includes("leave-request"), "索引应包含 leave-request");
+  assert.ok(indexContent.includes("REQ-002"), "索引应包含 REQ-002");
+  assert.ok(indexContent.includes("overtime-request"), "索引应包含 overtime-request");
+
+  const req001Count = (indexContent.match(/\| REQ-001 \|/g) ?? []).length;
+  const req002Count = (indexContent.match(/\| REQ-002 \|/g) ?? []).length;
+  assert.equal(req001Count, 1, "REQ-001 应只出现一次");
+  assert.equal(req002Count, 1, "REQ-002 应只出现一次");
+});
+
+test("同一需求重复运行后，索引中仍只有一条记录", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-index-dup-"));
+  const input = { sourcePath: "requirement.md", title: "请假管理", content: "# 请假管理\n" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "人力资源管理系统",
+    productVersion: "1.0.0",
+    revision: 1,
+  };
+
+  await prepareRequirementOutput({ ...base, requirementId: "REQ-001", requirementName: "leave-request" }, input);
+  await prepareRequirementOutput({ ...base, requirementId: "REQ-001", requirementName: "leave-request" }, input);
+
+  const indexPath = path.join(outputRoot, "hr-system", "product", "requirement-index.md");
+  const indexContent = await readFile(indexPath, "utf8");
+
+  const req001Count = (indexContent.match(/\| REQ-001 \|/g) ?? []).length;
+  assert.equal(req001Count, 1, "同一需求在索引中应只有一行");
+});
+
+test("索引包含需求编号、名称、产品版本和状态", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-index-fields-"));
+  const input = { sourcePath: "requirement.md", title: "请假管理", content: "# 请假管理\n" };
+
+  await prepareRequirementOutput({
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "人力资源管理系统",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+    requirementName: "leave-request",
+    revision: 1,
+  }, input);
+
+  const indexPath = path.join(outputRoot, "hr-system", "product", "requirement-index.md");
+  const indexContent = await readFile(indexPath, "utf8");
+
+  assert.ok(indexContent.includes("| 需求编号 |"), "索引表头应包含需求编号");
+  assert.ok(indexContent.includes("| 需求名称 |"), "索引表头应包含需求名称");
+  assert.ok(indexContent.includes("| 产品版本 |"), "索引表头应包含产品版本");
+  assert.ok(indexContent.includes("| 状态 |"), "索引表头应包含状态");
+
+  assert.ok(/\| REQ-001 \| leave-request \| 1\.0\.0 \| created \|/.test(indexContent),
+    "索引行应包含需求编号、名称、产品版本和状态");
+});
