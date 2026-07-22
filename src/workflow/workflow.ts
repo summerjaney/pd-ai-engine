@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type StageExecutor, type StageId, type WorkflowContext } from "../domain/types.js";
+import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type WorkflowContext } from "../domain/types.js";
 import {
   buildMasterGoData,
   buildPrototypeManifest,
@@ -40,12 +40,13 @@ const MANAGED_OUTPUT_PATHS = [
 export class ProductDesignWorkflow {
   constructor(private readonly executor: StageExecutor) {}
 
-  async run(input: WorkflowContext["input"], outputDirectory: string): Promise<WorkflowContext> {
+  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext): Promise<WorkflowContext> {
     const context: WorkflowContext = {
       runId: randomUUID(),
       startedAt: new Date().toISOString(),
       input,
       artifacts: {},
+      requirement,
     };
 
     await mkdir(outputDirectory, { recursive: true });
@@ -118,10 +119,11 @@ export class ProductDesignWorkflow {
 
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
-      version: "0.2.0",
+      version: "0.3.0",
       runId: context.runId,
       startedAt: context.startedAt,
       input: { sourcePath: input.sourcePath, title: input.title },
+      requirement,
       stages: stages.map((stage) => {
         if (stage.id === "prototype") {
           return {

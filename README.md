@@ -4,7 +4,32 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前 `v0.2.0 MVP` 聚焦 B 端产品设计交付链路，并坚持 **Prototype First**：原型模型是产品定义的单一事实来源，PRD 从原型及前序设计结果派生。
+当前 `v0.3.0 MVP` 聚焦 B 端产品设计交付链路，并坚持 **Prototype First**。v0.3.0 新增 **Requirement-centric Output Model（以需求为中心的成果物模型）**：项目是长期容器，需求是核心迭代单元。
+
+## 成果物组织模型
+
+```text
+output/
+└── {project}/
+    ├── project.json
+    ├── product/
+    │   ├── product-overview.md
+    │   ├── product-architecture.md
+    │   ├── product-roadmap.md
+    │   └── requirement-index.md
+    └── requirements/
+        └── {requirement-id}-{requirement-name}/
+            ├── requirement.json
+            ├── 00-requirement-input.md
+            ├── 01-requirement-analysis.md
+            ├── ...
+            └── manifest.json
+```
+
+- `product/` 维护产品当前全貌，属于项目级成果物。
+- `requirements/` 保存每次需求迭代的完整上下文和成果物。
+- 同一项目下的不同需求使用独立目录，运行新需求不会覆盖旧需求。
+- PAE 引擎版本、产品版本、需求修订版本分别记录，不再共用一个版本字段。
 
 ## MVP 工作流
 
@@ -13,7 +38,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
         → 页面结构设计 → Prototype Bundle → PRD → Review
 ```
 
-运行后会生成一个产品设计包：
+每个需求运行后会生成一个需求设计包：
 
 - `01-requirement-analysis.md`：需求分析
 - `02-product-outline.md`：产品概要设计
@@ -26,8 +51,10 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
   - `prototype-manifest.json`：页面、组件与跳转关系索引
   - `mastergo-data.json`：MasterGo / 设计工具适配数据
   - `preview/*.svg`：页面预览图
-- `07-prd.md`：由原型派生的 PRD
-- `08-review.md`：设计评审结果
+- `07-mastergo/`：MasterGo 适配数据与生成结果
+- `08-prototype-confirmation.json`：原型确认状态
+- `09-prd.md`：由原型派生的 PRD
+- `10-review.md`：设计评审结果
 - `manifest.json`：本次运行的阶段状态与产物清单
 
 ## 快速开始
@@ -39,12 +66,17 @@ npm install
 npm run example
 ```
 
-产物位于 `output/example/`。
+产物位于 `output/example-product/requirements/REQ-001-leave-request/`。
 
 也可以使用自己的需求文件：
 
 ```bash
-npm run dev -- run path/to/requirement.md --out output/my-product
+npm run dev -- requirement create path/to/requirement.md \
+  --project hr-management-system \
+  --project-name 人力资源管理系统 \
+  --id REQ-003 \
+  --name employee-entry \
+  --product-version 1.2.0
 ```
 
 查看帮助：
@@ -53,7 +85,13 @@ npm run dev -- run path/to/requirement.md --out output/my-product
 npm run dev -- --help
 ```
 
-生成完成后，可直接用浏览器打开 `output/example/06-prototype/prototype.html` 查看交互式原型。
+为兼容 v0.2.0，旧命令仍可使用：
+
+```bash
+npm run dev -- run path/to/requirement.md --out output/legacy-example
+```
+
+兼容模式不会创建项目级和需求级上下文，建议新需求统一使用 `requirement create`。
 
 ## MVP 架构
 
@@ -74,7 +112,7 @@ Rule constrains Component
 
 ## 当前边界
 
-MVP 暂不包含：多 Agent、MCP、插件市场、企业知识库、开放 API、自动开发与部署、多人协作。它们不会进入 `v0.2` 的实现范围。
+MVP 暂不包含：多 Agent、MCP、插件市场、企业知识库、开放 API、自动开发与部署、多人协作。
 
 ## 原型产物说明
 

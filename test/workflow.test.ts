@@ -1,15 +1,40 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import type { MasterGoData, PrototypeBundleManifest, PrototypeDsl } from "../src/domain/types.js";
 import { MockStageExecutor, runReviewChecks } from "../src/execution/mock-executor.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
+import { prepareRequirementOutput } from "../src/output/requirement-output.js";
 
 async function readJson<T>(filePath: string): Promise<T> {
   return JSON.parse(await readFile(filePath, "utf8")) as T;
 }
+
+test("按项目和需求创建成果物目录且不同需求互不覆盖", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-output-"));
+  const input = { sourcePath: "requirement.md", title: "请假管理", content: "# 请假管理\n" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "人力资源管理系统",
+    productVersion: "1.0.0",
+    revision: 1,
+  };
+  const first = await prepareRequirementOutput({ ...base, requirementId: "REQ-001", requirementName: "leave-request" }, input);
+  const second = await prepareRequirementOutput({ ...base, requirementId: "REQ-002", requirementName: "role-permission" }, input);
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  await workflow.run(input, first.requirementDirectory, first.context);
+  await workflow.run(input, second.requirementDirectory, second.context);
+
+  assert.notEqual(first.requirementDirectory, second.requirementDirectory);
+  assert.equal((await readJson<{ projectId: string }>(path.join(outputRoot, "hr-system", "project.json"))).projectId, "hr-system");
+  assert.equal((await readJson<{ requirementId: string }>(path.join(first.requirementDirectory, "requirement.json"))).requirementId, "REQ-001");
+  assert.equal((await readJson<{ requirement?: { requirementId: string } }>(path.join(first.requirementDirectory, "manifest.json"))).requirement?.requirementId, "REQ-001");
+  await access(path.join(first.requirementDirectory, "09-prd.md"));
+  await access(path.join(second.requirementDirectory, "09-prd.md"));
+});
 
 test("完整运行 MVP 工作流并由 Prototype DSL 派生 PRD", async () => {
   const output = await mkdtemp(path.join(os.tmpdir(), "pae-"));

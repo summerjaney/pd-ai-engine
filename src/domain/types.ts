@@ -19,6 +19,15 @@ export interface RequirementInput {
   title: string;
 }
 
+export interface RequirementContext {
+  projectId: string;
+  projectName: string;
+  productVersion: string;
+  requirementId: string;
+  requirementName: string;
+  revision: number;
+}
+
 export interface PrototypeField {
   id: string;
   label: string;
@@ -164,6 +173,7 @@ export interface WorkflowContext {
   startedAt: string;
   input: RequirementInput;
   artifacts: WorkflowArtifacts;
+  requirement?: RequirementContext;
 }
 
 export interface StageResult {
