@@ -63,7 +63,7 @@ export interface DesignTokens {
 
 export interface PrototypeDsl {
   schemaVersion: "0.2";
-  product: { name: string; description: string };
+  product: { name: string; description: string; sourceAttribution?: string };
   navigation: Array<{ label: string; pageId: string; roles?: string[] }>;
   pages: PrototypePage[];
   rules: Array<{ id: string; description: string; appliesTo: string[] }>;
@@ -168,12 +168,21 @@ export interface WorkflowArtifacts {
   review?: string;
 }
 
+export interface StageResultWithStatus {
+  id: StageId;
+  status: "completed" | "failed" | "skipped";
+  file?: string;
+  warnings?: string[];
+  error?: string;
+}
+
 export interface WorkflowContext {
   runId: string;
   startedAt: string;
   input: RequirementInput;
   artifacts: WorkflowArtifacts;
   requirement?: RequirementContext;
+  stageResults?: StageResultWithStatus[];
 }
 
 export interface StageResult {

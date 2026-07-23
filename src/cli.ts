@@ -34,6 +34,37 @@ function getTitle(content: string, sourcePath: string): string {
   return heading || path.basename(sourcePath, path.extname(sourcePath));
 }
 
+function validateRequirementContent(content: string, sourcePath: string): void {
+  const trimmed = content.trim();
+  if (!trimmed) throw new Error(`需求文件内容无效：${path.basename(sourcePath)}\n请至少提供非空的一级标题和需求正文。`);
+  
+  const heading = content.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  if (!heading) throw new Error(`需求文件缺少有效标题：${path.basename(sourcePath)}\n请提供以 "# " 开头的一级标题。`);
+  
+  const body = content.replace(/^#\s+.+$/m, "").trim();
+  if (!body) throw new Error(`需求文件缺少正文内容：${path.basename(sourcePath)}\n请在标题下方提供需求正文。`);
+}
+
+const VALID_OPTIONS = new Set([
+  "--project", "--project-name", "--id", "--name",
+  "--product-version", "--revision", "--output-root",
+  "--help", "-h",
+]);
+
+function validateArgs(args: string[]): void {
+  const positionalArgs = ["requirement", "create", "run"];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith("--") || arg.startsWith("-")) {
+      if (!VALID_OPTIONS.has(arg)) {
+        throw new Error(`未知参数：${arg}\n请执行 requirement create --help 查看支持的参数。`);
+      }
+    } else if (!positionalArgs.includes(arg)) {
+      continue;
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
@@ -47,6 +78,10 @@ async function main(): Promise<void> {
   const sourceArgument = isRequirementCreate ? args[2] : args[1];
   const sourcePath = path.resolve(sourceArgument);
   const content = await readFile(sourcePath, "utf8");
+
+  validateRequirementContent(content, sourcePath);
+  validateArgs(args);
+
   const input = { sourcePath, content, title: getTitle(content, sourcePath) };
 
   const workflow = new ProductDesignWorkflow(new MockStageExecutor());
@@ -75,9 +110,18 @@ async function main(): Promise<void> {
     context = await workflow.run(input, outputDirectory);
   }
 
-  console.log(`PAE 已完成 10 个阶段。`);
-  console.log(`Run ID: ${context.runId}`);
-  console.log(`需求设计包: ${outputDirectory}`);
+  const failedStages = context.stageResults?.filter(s => s.status === "failed") || [];
+  if (failedStages.length > 0) {
+    console.log(`PAE 执行完成，但有 ${failedStages.length} 个阶段失败。`);
+    console.log(`失败阶段：${failedStages.map(s => s.id).join("、")}`);
+    console.log(`Run ID: ${context.runId}`);
+    console.log(`需求设计包: ${outputDirectory}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`PAE 已完成 10 个阶段。`);
+    console.log(`Run ID: ${context.runId}`);
+    console.log(`需求设计包: ${outputDirectory}`);
+  }
 }
 
 main().catch((error: unknown) => {

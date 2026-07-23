@@ -9,154 +9,221 @@ import type {
 
 const md = (title: string, body: string) => `# ${title}\n\n${body.trim()}\n`;
 
+function buildDerivedNote(derived: boolean, sectionName: string, sourceLabel: string = "根据需求正文推导"): string {
+  if (!derived) return "";
+  return `\n> *来源：${sourceLabel}（未在${sectionName}章节显式定义）*`;
+}
+
+interface ParsedRole {
+  name: string;
+  description: string;
+  original: string;
+}
+
+interface ParsedRequirement {
+  title: string;
+  roles: ParsedRole[];
+  coreRequirements: string[];
+  states: string[];
+  pages: string[];
+  excludedScope: string[];
+  rolesAreDerived: boolean;
+  statesAreDerived: boolean;
+  pagesAreDerived: boolean;
+  excludedScopeAreDerived: boolean;
+}
+
+function parseRequirement(content: string): ParsedRequirement {
+  const titleMatch = content.match(/^#\s+(.+)$/m);
+  const title = titleMatch ? titleMatch[1].trim() : "未命名需求";
+
+  const rolesMatch = content.match(/^##\s*(用户角色|用户)\s*\n((?:-\s+.+\n?)+)/m);
+  let roles: ParsedRole[];
+  let rolesAreDerived: boolean;
+  
+  if (rolesMatch) {
+    roles = rolesMatch[2].trim().split("\n").map(line => {
+      const original = line.replace(/^-\s*/, "").trim();
+      const colonIndex = original.search(/[：:]/);
+      if (colonIndex !== -1) {
+        return {
+          name: original.substring(0, colonIndex).trim(),
+          description: original.substring(colonIndex + 1).trim(),
+          original
+        };
+      }
+      return { name: original, description: "", original };
+    }).filter(r => r.name);
+    rolesAreDerived = false;
+  } else {
+    roles = [{ name: "员工", description: "", original: "员工" }, { name: "审批人", description: "", original: "审批人" }];
+    rolesAreDerived = true;
+  }
+
+  const coreReqMatch = content.match(/^##\s*核心需求\s*\n((?:\d+\.\s+.+\n?)+)/m);
+  const coreRequirements = coreReqMatch ? coreReqMatch[1].trim().split("\n").map(line => line.replace(/^\d+\.\s*/, "").trim()).filter(Boolean) : [];
+
+  const statesMatch = content.match(/^##\s*(主要状态|状态)\s*\n((?:-\s+.+\n?)+)/m);
+  let states: string[];
+  let statesAreDerived: boolean;
+  
+  if (statesMatch) {
+    states = statesMatch[2].trim().split("\n").map(line => line.replace(/^-\s*/, "").trim()).filter(Boolean);
+    statesAreDerived = false;
+  } else {
+    states = ["草稿", "审批中", "已通过", "已驳回"];
+    statesAreDerived = true;
+  }
+
+  const pagesMatch = content.match(/^##\s*(主要页面|页面)\s*\n((?:-\s+.+\n?)+)/m);
+  let pages: string[];
+  let pagesAreDerived: boolean;
+  
+  if (pagesMatch) {
+    pages = pagesMatch[2].trim().split("\n").map(line => line.replace(/^-\s*/, "").trim()).filter(Boolean);
+    pagesAreDerived = false;
+  } else {
+    pages = ["申请列表", "新建申请", "申请详情", "待办列表", "审批详情", "类型管理"];
+    pagesAreDerived = true;
+  }
+
+  const excludedMatch = content.match(/^##\s*(暂不考虑范围|非目标)\s*\n((?:-\s+.+\n?)+)/m);
+  let excludedScope: string[];
+  let excludedScopeAreDerived: boolean;
+  
+  if (excludedMatch) {
+    excludedScope = excludedMatch[2].trim().split("\n").map(line => line.replace(/^-\s*/, "").trim()).filter(Boolean);
+    excludedScopeAreDerived = false;
+  } else {
+    excludedScope = ["数据迁移脚本", "基础信息维护", "外部系统集成"];
+    excludedScopeAreDerived = true;
+  }
+
+  return { title, roles, coreRequirements, states, pages, excludedScope, rolesAreDerived, statesAreDerived, pagesAreDerived, excludedScopeAreDerived };
+}
+
+function generatePageId(name: string, index: number): string {
+  const cleaned = name.toLowerCase().replace(/[\s\/\-]/g, "-").replace(/[^\w\u4e00-\u9fa5\-]/g, "");
+  if (cleaned) return cleaned;
+  return `page-${index}`;
+}
+
 function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
+  const parsed = parseRequirement(context.input.content);
+  const title = parsed.title;
+
+  const navLabels = new Set<string>();
+  const pageIdToNavLabel = new Map<string, string>();
+
+  const pageList: PrototypeDsl["pages"] = [];
+  const pageNames = parsed.pages.length > 0 ? parsed.pages : ["申请列表", "新建申请", "申请详情", "待办列表", "审批详情", "类型管理"];
+
+  for (const [index, pageName] of pageNames.entries()) {
+    const pageId = generatePageId(pageName, index);
+    let pattern: "list" | "form" | "detail" = "list";
+    
+    if (pageName.includes("新建") || pageName.includes("编辑")) {
+      pattern = "form";
+    } else if (pageName.includes("详情")) {
+      pattern = "detail";
+    }
+
+    let navLabel = "申请管理";
+    if (pageName.includes("审批")) {
+      navLabel = "审批工作台";
+      navLabels.add(navLabel);
+    } else if (pageName.includes("管理") || pageName.includes("设置")) {
+      navLabel = "基础设置";
+      navLabels.add(navLabel);
+    } else {
+      navLabel = "申请管理";
+      navLabels.add(navLabel);
+    }
+    pageIdToNavLabel.set(pageId, navLabel);
+
+    const fields = pattern === "form" 
+      ? [
+          { id: "type", label: "申请类型", type: "select" as const, required: true },
+          { id: "reason", label: "申请理由", type: "textarea" as const, required: true },
+        ]
+      : [
+          { id: "requestNo", label: "申请编号", type: "text" as const, required: false },
+          { id: "applicant", label: "申请人", type: "text" as const, required: false },
+          { id: "status", label: "状态", type: "select" as const, required: false },
+        ];
+
+    const actions = pattern === "form"
+      ? [
+          { id: "submit", label: "提交", kind: "primary" as const },
+          { id: "save-draft", label: "保存草稿", kind: "secondary" as const },
+          { id: "cancel", label: "取消", kind: "secondary" as const },
+        ]
+      : pattern === "detail"
+      ? [
+          { id: "withdraw", label: "撤回", kind: "danger" as const },
+        ]
+      : [
+          { id: "create", label: "新建", kind: "primary" as const },
+          { id: "view", label: "查看", kind: "secondary" as const },
+        ];
+
+    pageList.push({
+      id: pageId,
+      name: pageName,
+      route: `/${pageId}`,
+      pattern,
+      fields,
+      actions,
+    });
+  }
+
+  const navigation = Array.from(navLabels).map(label => ({
+    label,
+    pageId: pageList.find(p => pageIdToNavLabel.get(p.id) === label)?.id || pageList[0].id,
+    roles: parsed.roles.map(r => r.name),
+  }));
+
+  const transitions: PrototypeDsl["transitions"] = [];
+  const listPage = pageList.find(p => p.pattern === "list");
+  const formPage = pageList.find(p => p.pattern === "form");
+  const detailPage = pageList.find(p => p.pattern === "detail");
+
+  if (listPage && formPage) {
+    transitions.push(
+      { sourcePageId: listPage.id, triggerType: "action", triggerId: "create", triggerLabel: "新建", targetPageId: formPage.id },
+    );
+  }
+  if (listPage && detailPage) {
+    transitions.push(
+      { sourcePageId: listPage.id, triggerType: "action", triggerId: "view", triggerLabel: "查看", targetPageId: detailPage.id },
+    );
+  }
+  if (formPage && listPage) {
+    transitions.push(
+      { sourcePageId: formPage.id, triggerType: "action", triggerId: "submit", triggerLabel: "提交", targetPageId: listPage.id },
+      { sourcePageId: formPage.id, triggerType: "action", triggerId: "cancel", triggerLabel: "取消", targetPageId: listPage.id },
+    );
+  }
+  if (detailPage && listPage) {
+    transitions.push(
+      { sourcePageId: detailPage.id, triggerType: "action", triggerId: "withdraw", triggerLabel: "撤回", targetPageId: listPage.id },
+    );
+  }
+
   return {
     schemaVersion: "0.2",
     product: {
-      name: context.input.title,
-      description: "依据原始需求生成的 B 端产品原型模型。",
+      name: title,
+      description: `依据"${title}"原始需求生成的 B 端产品原型模型。`,
+      sourceAttribution: parsed.pagesAreDerived ? "主要页面来源于系统通用推导（未在主要页面章节显式定义）" : undefined,
     },
-    navigation: [
-      { label: "申请管理", pageId: "request-list", roles: ["员工", "部门负责人", "人事管理员"] },
-      { label: "审批工作台", pageId: "approval-todo", roles: ["部门负责人"] },
-      { label: "基础设置", pageId: "leave-type-list", roles: ["人事管理员"] },
-    ],
-    pages: [
-      {
-        id: "request-list",
-        name: "申请列表",
-        route: "/requests",
-        pattern: "list",
-        fields: [
-          { id: "requestNo", label: "申请编号", type: "text", required: false },
-          { id: "applicant", label: "申请人", type: "text", required: false },
-          { id: "department", label: "所属部门", type: "text", required: false },
-          { id: "type", label: "请假类型", type: "select", required: false },
-          { id: "startAt", label: "开始时间", type: "datetime", required: false },
-          { id: "endAt", label: "结束时间", type: "datetime", required: false },
-          { id: "duration", label: "请假时长", type: "text", required: false },
-          { id: "status", label: "审批状态", type: "select", required: false },
-        ],
-        actions: [
-          { id: "create", label: "新建申请", kind: "primary" },
-          { id: "view", label: "查看", kind: "secondary" },
-          { id: "withdraw", label: "撤回", kind: "danger" },
-        ],
-      },
-      {
-        id: "request-create",
-        name: "新建申请",
-        route: "/requests/new",
-        pattern: "form",
-        fields: [
-          { id: "type", label: "请假类型", type: "select", required: true },
-          { id: "startAt", label: "开始时间", type: "datetime", required: true },
-          { id: "endAt", label: "结束时间", type: "datetime", required: true },
-          { id: "reason", label: "请假原因", type: "textarea", required: true },
-        ],
-        actions: [
-          { id: "submit", label: "提交", kind: "primary" },
-          { id: "save-draft", label: "保存草稿", kind: "secondary" },
-          { id: "cancel", label: "取消", kind: "secondary" },
-        ],
-      },
-      {
-        id: "request-detail",
-        name: "申请详情",
-        route: "/requests/:id",
-        pattern: "detail",
-        fields: [
-          { id: "requestNo", label: "申请编号", type: "text", required: false },
-          { id: "applicant", label: "申请人", type: "text", required: false },
-          { id: "department", label: "所属部门", type: "text", required: false },
-          { id: "type", label: "请假类型", type: "select", required: false },
-          { id: "startAt", label: "开始时间", type: "datetime", required: false },
-          { id: "endAt", label: "结束时间", type: "datetime", required: false },
-          { id: "duration", label: "请假时长", type: "text", required: false },
-          { id: "reason", label: "请假原因", type: "textarea", required: false },
-          { id: "status", label: "当前审批状态", type: "select", required: false },
-          { id: "approvalHistory", label: "审批记录", type: "textarea", required: false },
-        ],
-        actions: [
-          { id: "withdraw", label: "撤回", kind: "danger" },
-        ],
-      },
-      {
-        id: "approval-todo",
-        name: "待办列表",
-        route: "/approvals",
-        pattern: "list",
-        fields: [
-          { id: "requestNo", label: "申请编号", type: "text", required: false },
-          { id: "applicant", label: "申请人", type: "text", required: false },
-          { id: "department", label: "所属部门", type: "text", required: false },
-          { id: "type", label: "请假类型", type: "select", required: false },
-          { id: "startAt", label: "开始时间", type: "datetime", required: false },
-          { id: "endAt", label: "结束时间", type: "datetime", required: false },
-          { id: "status", label: "审批状态", type: "select", required: false },
-        ],
-        actions: [
-          { id: "view", label: "查看", kind: "secondary" },
-          { id: "approve", label: "通过", kind: "primary" },
-          { id: "reject", label: "驳回", kind: "danger" },
-        ],
-      },
-      {
-        id: "approval-detail",
-        name: "审批详情",
-        route: "/approvals/:id",
-        pattern: "detail",
-        fields: [
-          { id: "requestNo", label: "申请编号", type: "text", required: false },
-          { id: "applicant", label: "申请人", type: "text", required: false },
-          { id: "department", label: "所属部门", type: "text", required: false },
-          { id: "type", label: "请假类型", type: "select", required: false },
-          { id: "startAt", label: "开始时间", type: "datetime", required: false },
-          { id: "endAt", label: "结束时间", type: "datetime", required: false },
-          { id: "duration", label: "请假时长", type: "text", required: false },
-          { id: "reason", label: "请假原因", type: "textarea", required: false },
-          { id: "status", label: "当前审批状态", type: "select", required: false },
-          { id: "approvalHistory", label: "审批记录", type: "textarea", required: false },
-          { id: "comment", label: "审批意见", type: "textarea", required: false },
-        ],
-        actions: [
-          { id: "approve", label: "审批通过", kind: "primary" },
-          { id: "reject", label: "审批驳回", kind: "danger" },
-        ],
-      },
-      {
-        id: "leave-type-list",
-        name: "请假类型管理",
-        route: "/settings/leave-types",
-        pattern: "list",
-        fields: [
-          { id: "name", label: "类型名称", type: "text", required: false },
-          { id: "enabled", label: "是否启用", type: "select", required: false },
-        ],
-        actions: [
-          { id: "create", label: "新增请假类型", kind: "primary" },
-          { id: "edit", label: "编辑", kind: "secondary" },
-          { id: "toggle", label: "启用/停用", kind: "secondary" },
-        ],
-      },
-    ],
+    navigation,
+    pages: pageList,
     rules: [
-      { id: "start-before-end", description: "开始时间必须早于结束时间。", appliesTo: ["startAt", "endAt"] },
       { id: "reject-comment-required", description: "驳回时审批意见必填。", appliesTo: ["reject"] },
       { id: "withdraw-pending-only", description: "仅待审批申请允许撤回。", appliesTo: ["withdraw"] },
     ],
-    transitions: [
-      { sourcePageId: "request-list", triggerType: "action", triggerId: "create", triggerLabel: "新建申请", targetPageId: "request-create" },
-      { sourcePageId: "request-list", triggerType: "action", triggerId: "view", triggerLabel: "查看", targetPageId: "request-detail" },
-      { sourcePageId: "request-create", triggerType: "action", triggerId: "submit", triggerLabel: "提交", targetPageId: "request-list" },
-      { sourcePageId: "request-create", triggerType: "action", triggerId: "cancel", triggerLabel: "取消", targetPageId: "request-list" },
-      { sourcePageId: "request-detail", triggerType: "action", triggerId: "withdraw", triggerLabel: "撤回", targetPageId: "request-list" },
-      { sourcePageId: "approval-todo", triggerType: "action", triggerId: "view", triggerLabel: "查看", targetPageId: "approval-detail" },
-      { sourcePageId: "approval-detail", triggerType: "action", triggerId: "approve", triggerLabel: "审批通过", targetPageId: "approval-todo" },
-      { sourcePageId: "approval-detail", triggerType: "action", triggerId: "reject", triggerLabel: "审批驳回", targetPageId: "approval-todo" },
-      { sourcePageId: "leave-type-list", triggerType: "action", triggerId: "create", triggerLabel: "新增", targetPageId: "request-create" },
-      { sourcePageId: "leave-type-list", triggerType: "action", triggerId: "edit", triggerLabel: "编辑", targetPageId: "request-create" },
-    ],
+    transitions,
     designTokens: {
       colors: {
         primary: "#3B82F6",
@@ -213,71 +280,7 @@ export function runReviewChecks(
   const pageNames = prototype.pages.map((p) => p.name);
   const navLabels = prototype.navigation.map((n) => n.label);
 
-  // 检查 1: 核心模块是否都有对应页面
-  const expectedModulePages: Record<string, string[]> = {
-    "申请管理": ["request-list", "request-create", "request-detail"],
-    "审批工作台": ["approval-todo", "approval-detail"],
-    "基础设置": ["leave-type-list"],
-  };
-  for (const [moduleName, expectedIds] of Object.entries(expectedModulePages)) {
-    const missing = expectedIds.filter((id) => !pageIds.includes(id));
-    if (missing.length > 0) {
-      issues.push({
-        type: "核心模块页面缺失",
-        location: `Prototype DSL pages（${moduleName}）`,
-        severity: "error",
-        relatedRequirement: `核心需求：${moduleName}功能`,
-        suggestion: `补充以下页面：${missing.join("、")}`,
-      });
-    }
-  }
-
-  // 检查 2: 每个角色的核心操作是否都有可访问页面
-  const roleOperations: Record<string, { pageId: string; operation: string }[]> = {
-    "员工": [
-      { pageId: "request-list", operation: "查看自己的申请" },
-      { pageId: "request-create", operation: "创建申请" },
-      { pageId: "request-detail", operation: "查看申请详情并撤回" },
-    ],
-    "部门负责人": [
-      { pageId: "approval-todo", operation: "查看待办" },
-      { pageId: "approval-detail", operation: "审批申请" },
-    ],
-    "人事管理员": [
-      { pageId: "leave-type-list", operation: "维护请假类型" },
-    ],
-  };
-  for (const [role, operations] of Object.entries(roleOperations)) {
-    for (const { pageId, operation } of operations) {
-      if (!pageIds.includes(pageId)) {
-        issues.push({
-          type: "角色操作页面缺失",
-          location: `角色：${role}，操作：${operation}`,
-          severity: "error",
-          relatedRequirement: `原始需求：${role}的核心功能`,
-          suggestion: `添加页面 ${pageId} 以支持${operation}`,
-        });
-      }
-    }
-  }
-
-  // 检查 3: 页面结构中的页面是否都存在于 Prototype DSL
-  const expectedPageIds = [
-    "request-list", "request-create", "request-detail",
-    "approval-todo", "approval-detail", "leave-type-list",
-  ];
-  const missingPages = expectedPageIds.filter((id) => !pageIds.includes(id));
-  if (missingPages.length > 0) {
-    issues.push({
-      type: "页面结构缺失",
-      location: `Prototype DSL pages`,
-      severity: "error",
-      relatedRequirement: "页面结构设计阶段定义的页面",
-      suggestion: `补充以下页面：${missingPages.join("、")}`,
-    });
-  }
-
-  // 检查 4: 详情页面是否定义了必要字段
+  // 检查 1: 详情页面是否定义了必要字段
   const detailPages = prototype.pages.filter((p) => p.pattern === "detail");
   for (const page of detailPages) {
     if (page.fields.length === 0) {
@@ -285,37 +288,24 @@ export function runReviewChecks(
         type: "详情页字段缺失",
         location: `页面：${page.name}（${page.id}）`,
         severity: "error",
-        relatedRequirement: "申请详情和审批详情需要展示完整信息",
-        suggestion: `为 ${page.name} 添加必要的展示字段，如申请编号、申请人、请假类型、时间等`,
+        relatedRequirement: "详情页需要展示完整信息",
+        suggestion: `为 ${page.name} 添加必要的展示字段`,
       });
     }
   }
 
-  // 检查 5: 导航是否覆盖全部核心模块
-  const expectedNavLabels = ["申请管理", "审批工作台", "基础设置"];
-  const missingNav = expectedNavLabels.filter((label) => !navLabels.includes(label));
-  if (missingNav.length > 0) {
+  // 检查 2: 导航是否覆盖全部核心模块
+  if (navLabels.length === 0) {
     issues.push({
       type: "导航缺失",
       location: `Prototype DSL navigation`,
       severity: "error",
       relatedRequirement: "用户需要访问全部核心模块",
-      suggestion: `在导航中添加：${missingNav.join("、")}`,
+      suggestion: "在导航中添加核心模块",
     });
   }
 
-  // 检查 6: PRD 页面是否与 Prototype DSL pages 一致（PRD 由 DSL 派生，这里检查 DSL 完整性）
-  if (prototype.pages.length !== expectedPageIds.length) {
-    issues.push({
-      type: "页面数量不一致",
-      location: `Prototype DSL pages（${prototype.pages.length} 个）vs 预期（${expectedPageIds.length} 个）`,
-      severity: "warning",
-      relatedRequirement: "PRD 必须与 Prototype DSL 保持一致",
-      suggestion: "检查是否有遗漏或多余的页面定义",
-    });
-  }
-
-  // 检查 7: 状态与流程图中的状态是否一致
+  // 检查 3: 状态字段是否存在
   const hasStatusField = prototype.pages.some((page) =>
     page.fields.some((field) => field.id === "status")
   );
@@ -324,12 +314,23 @@ export function runReviewChecks(
       type: "状态字段缺失",
       location: `Prototype DSL pages fields`,
       severity: "error",
-      relatedRequirement: "核心流程图包含待审批、已通过、已驳回等状态",
-      suggestion: "在列表页或详情页中添加审批状态字段",
+      relatedRequirement: "流程型业务需要展示状态",
+      suggestion: "在列表页或详情页中添加状态字段",
     });
   }
 
-  // 检查 8: MasterGo 原型生成状态
+  // 检查 4: 页面数量是否合理
+  if (prototype.pages.length === 0) {
+    issues.push({
+      type: "页面数量为零",
+      location: `Prototype DSL pages`,
+      severity: "error",
+      relatedRequirement: "至少需要一个页面",
+      suggestion: "添加必要的页面",
+    });
+  }
+
+  // 检查 5: MasterGo 原型生成状态
   if (!mastergo || !mastergo.data) {
     issues.push({
       type: "MasterGo 原型数据缺失",
@@ -339,7 +340,7 @@ export function runReviewChecks(
       suggestion: "执行 mastergo 阶段生成 mastergo-data.json",
     });
   } else {
-    // 检查 9: MasterGo 屏幕数量与 DSL 页面数量一致
+    // 检查 6: MasterGo 屏幕数量与 DSL 页面数量一致
     const screenIds = mastergo.data.screens.map((s) => s.id);
     if (mastergo.data.screens.length !== prototype.pages.length) {
       issues.push({
@@ -351,7 +352,7 @@ export function runReviewChecks(
       });
     }
 
-    // 检查 10: MasterGo 交互与 DSL 跳转一致
+    // 检查 7: MasterGo 交互与 DSL 跳转一致
     for (const page of prototype.pages) {
       const dslTransitions = prototype.transitions.filter((t) => t.sourcePageId === page.id);
       const mgScreen = mastergo.data.screens.find((s) => s.id === page.id);
@@ -367,7 +368,7 @@ export function runReviewChecks(
     }
   }
 
-  // 检查 11: 原型确认状态
+  // 检查 8: 原型确认状态
   if (!confirmation || confirmation.status !== "confirmed") {
     issues.push({
       type: "原型未确认",
@@ -378,7 +379,7 @@ export function runReviewChecks(
     });
   }
 
-  // 检查 12: 过渡定义完整性
+  // 检查 9: 过渡定义完整性
   if (!prototype.transitions || prototype.transitions.length === 0) {
     issues.push({
       type: "页面过渡定义缺失",
@@ -394,25 +395,112 @@ export function runReviewChecks(
 
 export class MockStageExecutor implements StageExecutor {
   async execute(stage: StageId, context: Readonly<WorkflowContext>): Promise<StageResult> {
-    const title = context.input.title;
+    const parsed = parseRequirement(context.input.content);
+    const title = parsed.title;
     let artifact: StageResult["artifact"];
 
     switch (stage) {
-      case "requirement-analysis":
-        artifact = md("需求分析", `## 产品目标\n\n围绕"${title}"建立可追踪、可校验的核心业务闭环。\n\n## 用户与任务\n\n- 员工：创建、查看和撤回自己的请假申请。\n- 部门负责人：审批本部门员工的请假申请，记录审批意见。\n- 人事管理员：查看全部申请，维护请假类型。\n\n## MVP 范围\n\n覆盖创建、提交、审批、驳回、查看进度和条件撤回。\n\n## 非目标\n\n以原始需求中的"暂不考虑"项为准，本轮不扩展外部集成和复杂审批。`);
+      case "requirement-analysis": {
+        const rolesText = parsed.roles.length > 0
+          ? parsed.roles.map(role => `- ${role.original}`).join("\n")
+          : "- 员工\n- 审批人";
+        const rolesDerivedNote = buildDerivedNote(parsed.rolesAreDerived, "用户角色");
+        const coreReqText = parsed.coreRequirements.length > 0
+          ? parsed.coreRequirements.map((req, idx) => `${idx + 1}. ${req}`).join("\n")
+          : "1. 用户可以创建申请并提交审批。";
+        const excludedText = parsed.excludedScope.length > 0
+          ? parsed.excludedScope.map(item => `- ${item}`).join("\n")
+          : "- 外部系统集成";
+        const excludedDerivedNote = buildDerivedNote(parsed.excludedScopeAreDerived, "暂不考虑范围", "系统默认非目标项");
+        artifact = md("需求分析", `## 产品目标\n\n围绕"${title}"建立可追踪、可校验的核心业务闭环。\n\n## 用户与任务\n\n${rolesText}${rolesDerivedNote}\n\n## MVP 范围\n\n${coreReqText}\n\n## 非目标\n\n${excludedText}${excludedDerivedNote}`);
         break;
-      case "product-outline":
-        artifact = md("产品概要设计", `## 产品定位\n\n${title}是一套面向企业内部流程管理的 B 端产品能力。\n\n## 业务边界\n\n系统负责申请数据、状态流转与操作留痕；不负责薪资和考勤核算。\n\n## 核心模块\n\n1. 申请管理\n2. 审批工作台\n3. 基础设置\n\n## 核心状态\n\n草稿 → 待审批 → 已通过 / 已驳回；待审批可撤回。`);
+      }
+      case "product-outline": {
+        const statesText = parsed.states.length > 0 ? parsed.states.join(" → ") : "草稿 → 审批中 → 已通过 / 已驳回";
+        const statesDerivedNote = buildDerivedNote(parsed.statesAreDerived, "主要状态");
+        const modulesDerivedNote = buildDerivedNote(true, "用户输入", "系统通用推导，待用户确认");
+        artifact = md("产品概要设计", `## 产品定位\n\n${title}是一套面向企业内部流程管理的 B 端产品能力。\n\n## 业务边界\n\n系统负责申请数据、状态流转与操作留痕。\n\n## 核心模块\n\n1. 申请管理\n2. 审批工作台\n3. 基础设置${modulesDerivedNote}\n\n## 核心状态\n\n${statesText}${statesDerivedNote}`);
         break;
-      case "product-architecture":
-        artifact = md("产品架构图", "```mermaid\nflowchart TB\n  U[用户层] --> E[员工端]\n  U --> A[审批端]\n  U --> H[人事管理端]\n  E --> R[申请管理]\n  A --> W[审批工作台]\n  H --> S[基础设置]\n  R --> D[(业务数据)]\n  W --> D\n  S --> D\n```");
+      }
+      case "product-architecture": {
+        const roleNames = parsed.roles.map(r => r.name);
+        const roleEndpoints = roleNames.slice(0, 3).map((role, idx) => {
+          const endpointId = String.fromCharCode(69 + idx);
+          return `U --> ${endpointId}[${role}]`;
+        }).join("\n  ");
+
+        const modules: Record<string, string[]> = {};
+        parsed.pages.forEach(page => {
+          let module = "业务功能";
+          if (page.includes("审批") || page.includes("审核")) module = "审批/审核";
+          else if (page.includes("管理") || page.includes("设置")) module = "管理设置";
+          else if (page.includes("列表") || page.includes("查询")) module = "数据查询";
+          else if (page.includes("新建") || page.includes("申请")) module = "申请提交";
+          if (!modules[module]) modules[module] = [];
+          modules[module].push(page);
+        });
+
+        const moduleNodes = Object.entries(modules).map(([module, pages], idx) => {
+          const nodeId = `M${idx + 1}`;
+          const pagesText = pages.join(", ");
+          return `${nodeId}[${module}：${pagesText}]`;
+        }).join("\n  ");
+
+        const endpointToModule = roleNames.slice(0, 3).flatMap((role, roleIdx) => {
+          const endpointId = String.fromCharCode(69 + roleIdx);
+          const moduleKeys = Object.keys(modules);
+          if (roleIdx === 0) return moduleKeys.filter(m => m.includes("申请") || m.includes("查询")).map((_, midx) => `${endpointId} --> M${midx + 1}`);
+          if (roleIdx === 1) return moduleKeys.filter(m => m.includes("审批")).map((_, midx) => `${endpointId} --> M${midx + 1}`);
+          return moduleKeys.filter(m => m.includes("管理")).map((_, midx) => `${endpointId} --> M${midx + 1}`);
+        }).join("\n  ");
+
+        const moduleToData = Object.keys(modules).map((_, idx) => `M${idx + 1} --> D`).join("\n  ");
+
+        const pagesDerivedNote = buildDerivedNote(parsed.pagesAreDerived, "主要页面");
+        artifact = md("产品架构图", `\`\`\`mermaid
+flowchart TB
+  U[用户层]
+  ${roleEndpoints}
+  ${moduleNodes}
+  ${endpointToModule}
+  ${moduleToData}
+  D[(业务数据)]
+\`\`\`${pagesDerivedNote}`);
         break;
-      case "core-flow":
-        artifact = md("核心业务流程图", "```mermaid\nflowchart LR\n  A[填写申请] --> B{校验通过?}\n  B -- 否 --> A\n  B -- 是 --> C[提交审批]\n  C --> D[待审批]\n  D --> E{审批决定}\n  E -- 通过 --> F[已通过]\n  E -- 驳回 --> G[已驳回]\n  D --> H[撤回]\n  H --> I[草稿]\n```");
+      }
+      case "core-flow": {
+        const states = parsed.states.length > 0 ? parsed.states : ["草稿", "审批中", "已通过", "已驳回"];
+        const firstState = states[0];
+        const middleState = states.find(s => s.includes("审批") || s.includes("处理")) || states[1] || "审批中";
+        const approvedState = states.find(s => s.includes("通过") || s.includes("完成")) || "已通过";
+        const rejectedState = states.find(s => s.includes("驳回") || s.includes("拒绝")) || "已驳回";
+        const statesDerivedNote = buildDerivedNote(parsed.statesAreDerived, "主要状态");
+        artifact = md("核心业务流程图", `\`\`\`mermaid\nflowchart LR\n  A[填写申请] --> B{校验通过?}\n  B -- 否 --> A\n  B -- 是 --> C[提交审批]\n  C --> D[${middleState}]\n  D --> E{审批决定}\n  E -- 通过 --> F[${approvedState}]\n  E -- 驳回 --> G[${rejectedState}]\n  D --> H[撤回]\n  H --> I[${firstState}]\n\`\`\`${statesDerivedNote}`);
         break;
-      case "page-structure":
-        artifact = md("页面结构设计", `## 信息架构\n\n- 申请管理\n  - 申请列表\n  - 新建申请\n  - 申请详情\n- 审批工作台\n  - 待办列表\n  - 审批详情\n- 基础设置\n  - 请假类型\n\n## 页面模式\n\n列表页负责检索与进入业务；表单页负责创建；详情页承载状态、业务数据与可用操作。`);
+      }
+      case "page-structure": {
+        const pagesByModule: Record<string, string[]> = {};
+        parsed.pages.forEach(page => {
+          let module: string;
+          if (page.includes("审批")) module = "审批工作台";
+          else if (page.includes("审核")) module = "审核工作台";
+          else if (page.includes("管理") || page.includes("设置")) module = "基础设置";
+          else if (page.includes("列表") || page.includes("查询")) module = "数据查询";
+          else if (page.includes("新建") || page.includes("创建")) module = "申请提交";
+          else if (page.includes("详情")) module = "详情查看";
+          else if (page.includes("日历")) module = "日历视图";
+          else if (page.includes("待办")) module = "待办处理";
+          else module = "其他业务功能";
+          if (!pagesByModule[module]) pagesByModule[module] = [];
+          pagesByModule[module].push(page);
+        });
+        const infoArch = Object.entries(pagesByModule).map(([module, pages]) => {
+          return `- ${module}\n  ${pages.map(p => `- ${p}`).join("\n  ")}`;
+        }).join("\n");
+        const pagesDerivedNote = buildDerivedNote(parsed.pagesAreDerived, "主要页面");
+        artifact = md("页面结构设计", `## 信息架构\n\n${infoArch}${pagesDerivedNote}\n\n## 页面模式\n\n列表页负责检索与进入业务；表单页负责创建；详情页承载状态、业务数据与可用操作。`);
         break;
+      }
       case "prototype":
         artifact = createPrototype(context);
         break;
@@ -488,7 +576,8 @@ export class MockStageExecutor implements StageExecutor {
         }
         const pages = prototype.pages.map((page) => `### ${page.name}\n\n- 路由：\`${page.route}\`\n- 页面模式：${page.pattern}\n- 字段：${page.fields.map((field) => `${field.label}${field.required ? "（必填）" : ""}`).join("、") || "无"}\n- 操作：${page.actions.map((action) => action.label).join("、")}`).join("\n\n");
         const rules = prototype.rules.map((rule, index) => `${index + 1}. ${rule.description}`).join("\n");
-        artifact = md("产品需求文档（PRD）", `> 本文档由 Prototype DSL 和 MasterGo 原型派生，原型模型为产品定义的单一事实来源。\n> 原型目录约定为 \`06-prototype/\`，MasterGo 原型目录为 \`07-mastergo/\`。\n\n## 产品目标\n\n${prototype.product.description}\n\n## 页面需求\n\n${pages}\n\n## 业务规则\n\n${rules}`);
+        const pagesDerivedNote = buildDerivedNote(parsed.pagesAreDerived, "主要页面");
+        artifact = md("产品需求文档（PRD）", `> 本文档由 Prototype DSL 和 MasterGo 原型派生，原型模型为产品定义的单一事实来源。\n> 原型目录约定为 \`06-prototype/\`，MasterGo 原型目录为 \`07-mastergo/\`。\n\n## 产品目标\n\n${prototype.product.description}\n\n## 页面需求\n\n${pages}${pagesDerivedNote}\n\n## 业务规则\n\n${rules}`);
         break;
       }
       case "review": {

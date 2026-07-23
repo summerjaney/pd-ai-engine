@@ -41,12 +41,15 @@ export class ProductDesignWorkflow {
   constructor(private readonly executor: StageExecutor) {}
 
   async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext): Promise<WorkflowContext> {
+    this.validateInput(input);
+    
     const context: WorkflowContext = {
       runId: randomUUID(),
       startedAt: new Date().toISOString(),
       input,
       artifacts: {},
       requirement,
+      stageResults: [],
     };
 
     await mkdir(outputDirectory, { recursive: true });
@@ -54,77 +57,111 @@ export class ProductDesignWorkflow {
       rm(path.join(outputDirectory, target), { recursive: true, force: true })
     ));
 
-    const stages: Array<{ id: StageId; status: "completed"; file: string; warnings: string[] }> = [];
+    const stages: Array<{ id: StageId; status: "completed" | "failed" | "skipped"; file?: string; warnings?: string[]; error?: string }> = [];
+    let hasFailed = false;
+
     for (const stage of STAGE_IDS) {
-      const result = await this.executor.execute(stage, context);
+      if (hasFailed) {
+        stages.push({ id: stage, status: "skipped" });
+        context.stageResults!.push({ id: stage, status: "skipped" });
+        continue;
+      }
+
+      let result;
+      try {
+        result = await this.executor.execute(stage, context);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        stages.push({ id: stage, status: "failed", error: errorMessage });
+        context.stageResults!.push({ id: stage, status: "failed", error: errorMessage });
+        hasFailed = true;
+        continue;
+      }
+
       context.artifacts[stage] = result.artifact as never;
       const file = OUTPUT_FILES[stage];
 
-      if (stage === "prototype") {
-        const bundleDirectory = path.join(outputDirectory, file);
-        const previewDirectory = path.join(bundleDirectory, "preview");
-        const prototype = result.artifact as PrototypeDsl;
+      try {
+        if (stage === "prototype") {
+          const bundleDirectory = path.join(outputDirectory, file);
+          const previewDirectory = path.join(bundleDirectory, "preview");
+          const prototype = result.artifact as PrototypeDsl;
 
-        const prototypeManifest = buildPrototypeManifest(prototype);
-        const masterGoData = buildMasterGoData(prototype);
+          const prototypeManifest = buildPrototypeManifest(prototype);
+          const masterGoData = buildMasterGoData(prototype);
 
-        await mkdir(previewDirectory, { recursive: true });
-        await writeFile(path.join(bundleDirectory, "prototype.json"), `${JSON.stringify(prototype, null, 2)}\n`, "utf8");
-        await writeFile(
-          path.join(bundleDirectory, "prototype-manifest.json"),
-          `${JSON.stringify(prototypeManifest, null, 2)}\n`,
-          "utf8",
-        );
-        await writeFile(path.join(bundleDirectory, "mastergo-data.json"), `${JSON.stringify(masterGoData, null, 2)}\n`, "utf8");
-        await writeFile(path.join(bundleDirectory, "prototype.html"), renderInteractivePrototypeHtml(prototype, prototypeManifest), "utf8");
+          await mkdir(previewDirectory, { recursive: true });
+          await writeFile(path.join(bundleDirectory, "prototype.json"), `${JSON.stringify(prototype, null, 2)}\n`, "utf8");
+          await writeFile(
+            path.join(bundleDirectory, "prototype-manifest.json"),
+            `${JSON.stringify(prototypeManifest, null, 2)}\n`,
+            "utf8",
+          );
+          await writeFile(path.join(bundleDirectory, "mastergo-data.json"), `${JSON.stringify(masterGoData, null, 2)}\n`, "utf8");
+          await writeFile(path.join(bundleDirectory, "prototype.html"), renderInteractivePrototypeHtml(prototype, prototypeManifest), "utf8");
 
-        for (const page of prototype.pages) {
-          await writeFile(path.join(previewDirectory, `${page.id}.svg`), renderPreviewSvg(page, prototype.product.name), "utf8");
+          for (const page of prototype.pages) {
+            await writeFile(path.join(previewDirectory, `${page.id}.svg`), renderPreviewSvg(page, prototype.product.name), "utf8");
+          }
+
+          stages.push({
+            id: stage,
+            status: "completed",
+            file: file,
+            warnings: result.warnings,
+          });
+          context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
+          continue;
         }
 
-        stages.push({
-          id: stage,
-          status: "completed",
-          file: file,
-          warnings: result.warnings,
-        });
-        continue;
-      }
+        if (stage === "mastergo") {
+          const mastergoDirectory = path.join(outputDirectory, file);
+          const mastergoArtifact = result.artifact as { data: MasterGoData; result?: MasterGoResult };
 
-      if (stage === "mastergo") {
-        const mastergoDirectory = path.join(outputDirectory, file);
-        const mastergoArtifact = result.artifact as { data: MasterGoData; result?: MasterGoResult };
+          await mkdir(mastergoDirectory, { recursive: true });
+          await writeFile(path.join(mastergoDirectory, "mastergo-data.json"), `${JSON.stringify(mastergoArtifact.data, null, 2)}\n`, "utf8");
+          if (mastergoArtifact.result) {
+            await writeFile(path.join(mastergoDirectory, "mastergo-result.json"), `${JSON.stringify(mastergoArtifact.result, null, 2)}\n`, "utf8");
+          }
 
-        await mkdir(mastergoDirectory, { recursive: true });
-        await writeFile(path.join(mastergoDirectory, "mastergo-data.json"), `${JSON.stringify(mastergoArtifact.data, null, 2)}\n`, "utf8");
-        if (mastergoArtifact.result) {
-          await writeFile(path.join(mastergoDirectory, "mastergo-result.json"), `${JSON.stringify(mastergoArtifact.result, null, 2)}\n`, "utf8");
+          stages.push({
+            id: stage,
+            status: "completed",
+            file: file,
+            warnings: result.warnings,
+          });
+          context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
+          continue;
         }
 
-        stages.push({
-          id: stage,
-          status: "completed",
-          file: file,
-          warnings: result.warnings,
-        });
-        continue;
+        const body = typeof result.artifact === "string"
+          ? result.artifact
+          : `${JSON.stringify(result.artifact, null, 2)}\n`;
+        await writeFile(path.join(outputDirectory, file), body, "utf8");
+        stages.push({ id: stage, status: "completed", file, warnings: result.warnings });
+        context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        stages.push({ id: stage, status: "failed", file, error: errorMessage });
+        context.stageResults!.push({ id: stage, status: "failed", file, error: errorMessage });
+        hasFailed = true;
       }
-
-      const body = typeof result.artifact === "string"
-        ? result.artifact
-        : `${JSON.stringify(result.artifact, null, 2)}\n`;
-      await writeFile(path.join(outputDirectory, file), body, "utf8");
-      stages.push({ id: stage, status: "completed", file, warnings: result.warnings });
     }
 
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
-      version: "0.3.0",
+      version: "0.3.1",
       runId: context.runId,
       startedAt: context.startedAt,
       input: { sourcePath: input.sourcePath, title: input.title },
       requirement,
       stages: stages.map((stage) => {
+        if (stage.status === "skipped") {
+          return { id: stage.id, status: "skipped" };
+        }
+        if (stage.status === "failed") {
+          return { id: stage.id, status: "failed", error: stage.error };
+        }
         if (stage.id === "prototype") {
           return {
             ...stage,
@@ -157,6 +194,27 @@ export class ProductDesignWorkflow {
 
     await writeFile(path.join(outputDirectory, "manifest.json"), `${manifestContent}\n`, "utf8");
 
+    if (hasFailed) {
+      throw new Error("工作流执行失败，部分阶段未能完成");
+    }
+
     return context;
+  }
+
+  private validateInput(input: WorkflowContext["input"]): void {
+    const trimmed = input.content.trim();
+    if (!trimmed) {
+      throw new Error(`需求文件内容无效：${path.basename(input.sourcePath)}\n请至少提供非空的一级标题和需求正文。`);
+    }
+
+    const heading = input.content.match(/^#\s+(.+)$/m)?.[1]?.trim();
+    if (!heading) {
+      throw new Error(`需求文件缺少有效标题：${path.basename(input.sourcePath)}\n请提供以 "# " 开头的一级标题。`);
+    }
+
+    const body = input.content.replace(/^#\s+.+$/m, "").trim();
+    if (!body) {
+      throw new Error(`需求文件缺少正文内容：${path.basename(input.sourcePath)}\n请在标题下方提供需求正文。`);
+    }
   }
 }
