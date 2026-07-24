@@ -1,0 +1,632 @@
+{
+  "schemaVersion": "0.2",
+  "product": {
+    "name": "员工请假管理",
+    "description": "依据原始需求生成的 B 端产品原型模型。"
+  },
+  "tokens": {
+    "color": {
+      "primary": "#3B82F6",
+      "success": "#10B981",
+      "danger": "#EF4444",
+      "warning": "#F59E0B",
+      "bgPage": "#F6F7FB",
+      "bgCard": "#FFFFFF",
+      "textPrimary": "#111827",
+      "textSecondary": "#6B7280",
+      "border": "#E5E7EB"
+    },
+    "spacing": {
+      "s8": 8,
+      "s12": 12,
+      "s16": 16,
+      "s20": 20,
+      "s24": 24,
+      "s32": 32,
+      "s40": 40
+    },
+    "radius": {
+      "r8": 8,
+      "r12": 12,
+      "r16": 16,
+      "r24": 24
+    }
+  },
+  "screens": [
+    {
+      "id": "request-list",
+      "name": "申请列表",
+      "route": "/requests",
+      "pattern": "list",
+      "frame": {
+        "width": 1440,
+        "height": 900
+      },
+      "nodes": [
+        {
+          "id": "requestNo",
+          "name": "申请编号",
+          "type": "field",
+          "component": "Input",
+          "description": "申请编号",
+          "required": false
+        },
+        {
+          "id": "applicant",
+          "name": "申请人",
+          "type": "field",
+          "component": "Input",
+          "description": "申请人",
+          "required": false
+        },
+        {
+          "id": "department",
+          "name": "所属部门",
+          "type": "field",
+          "component": "Input",
+          "description": "所属部门",
+          "required": false
+        },
+        {
+          "id": "type",
+          "name": "请假类型",
+          "type": "field",
+          "component": "Select",
+          "description": "请假类型",
+          "required": false
+        },
+        {
+          "id": "startAt",
+          "name": "开始时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "开始时间",
+          "required": false
+        },
+        {
+          "id": "endAt",
+          "name": "结束时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "结束时间",
+          "required": false
+        },
+        {
+          "id": "duration",
+          "name": "请假时长",
+          "type": "field",
+          "component": "Input",
+          "description": "请假时长",
+          "required": false
+        },
+        {
+          "id": "status",
+          "name": "审批状态",
+          "type": "field",
+          "component": "Select",
+          "description": "审批状态",
+          "required": false
+        },
+        {
+          "id": "create",
+          "name": "新建申请",
+          "type": "action",
+          "component": "Button",
+          "description": "新建申请按钮"
+        },
+        {
+          "id": "view",
+          "name": "查看",
+          "type": "action",
+          "component": "Button",
+          "description": "查看按钮"
+        },
+        {
+          "id": "withdraw",
+          "name": "撤回",
+          "type": "action",
+          "component": "Button",
+          "description": "撤回按钮"
+        }
+      ],
+      "interactions": [
+        {
+          "sourcePageId": "request-list",
+          "triggerType": "action",
+          "triggerId": "create",
+          "triggerLabel": "新建申请",
+          "targetPageId": "request-create"
+        },
+        {
+          "sourcePageId": "request-list",
+          "triggerType": "action",
+          "triggerId": "view",
+          "triggerLabel": "查看",
+          "targetPageId": "request-detail"
+        }
+      ]
+    },
+    {
+      "id": "request-create",
+      "name": "新建申请",
+      "route": "/requests/new",
+      "pattern": "form",
+      "frame": {
+        "width": 1440,
+        "height": 900
+      },
+      "nodes": [
+        {
+          "id": "type",
+          "name": "请假类型",
+          "type": "field",
+          "component": "Select",
+          "description": "请假类型（必填）",
+          "required": true
+        },
+        {
+          "id": "startAt",
+          "name": "开始时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "开始时间（必填）",
+          "required": true
+        },
+        {
+          "id": "endAt",
+          "name": "结束时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "结束时间（必填）",
+          "required": true
+        },
+        {
+          "id": "reason",
+          "name": "请假原因",
+          "type": "field",
+          "component": "TextArea",
+          "description": "请假原因（必填）",
+          "required": true
+        },
+        {
+          "id": "submit",
+          "name": "提交",
+          "type": "action",
+          "component": "Button",
+          "description": "提交按钮"
+        },
+        {
+          "id": "save-draft",
+          "name": "保存草稿",
+          "type": "action",
+          "component": "Button",
+          "description": "保存草稿按钮"
+        },
+        {
+          "id": "cancel",
+          "name": "取消",
+          "type": "action",
+          "component": "Button",
+          "description": "取消按钮"
+        }
+      ],
+      "interactions": [
+        {
+          "sourcePageId": "request-create",
+          "triggerType": "action",
+          "triggerId": "submit",
+          "triggerLabel": "提交",
+          "targetPageId": "request-list"
+        },
+        {
+          "sourcePageId": "request-create",
+          "triggerType": "action",
+          "triggerId": "cancel",
+          "triggerLabel": "取消",
+          "targetPageId": "request-list"
+        }
+      ]
+    },
+    {
+      "id": "request-detail",
+      "name": "申请详情",
+      "route": "/requests/:id",
+      "pattern": "detail",
+      "frame": {
+        "width": 1440,
+        "height": 900
+      },
+      "nodes": [
+        {
+          "id": "requestNo",
+          "name": "申请编号",
+          "type": "field",
+          "component": "Input",
+          "description": "申请编号",
+          "required": false
+        },
+        {
+          "id": "applicant",
+          "name": "申请人",
+          "type": "field",
+          "component": "Input",
+          "description": "申请人",
+          "required": false
+        },
+        {
+          "id": "department",
+          "name": "所属部门",
+          "type": "field",
+          "component": "Input",
+          "description": "所属部门",
+          "required": false
+        },
+        {
+          "id": "type",
+          "name": "请假类型",
+          "type": "field",
+          "component": "Select",
+          "description": "请假类型",
+          "required": false
+        },
+        {
+          "id": "startAt",
+          "name": "开始时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "开始时间",
+          "required": false
+        },
+        {
+          "id": "endAt",
+          "name": "结束时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "结束时间",
+          "required": false
+        },
+        {
+          "id": "duration",
+          "name": "请假时长",
+          "type": "field",
+          "component": "Input",
+          "description": "请假时长",
+          "required": false
+        },
+        {
+          "id": "reason",
+          "name": "请假原因",
+          "type": "field",
+          "component": "TextArea",
+          "description": "请假原因",
+          "required": false
+        },
+        {
+          "id": "status",
+          "name": "当前审批状态",
+          "type": "field",
+          "component": "Select",
+          "description": "当前审批状态",
+          "required": false
+        },
+        {
+          "id": "approvalHistory",
+          "name": "审批记录",
+          "type": "field",
+          "component": "TextArea",
+          "description": "审批记录",
+          "required": false
+        },
+        {
+          "id": "withdraw",
+          "name": "撤回",
+          "type": "action",
+          "component": "Button",
+          "description": "撤回按钮"
+        }
+      ],
+      "interactions": [
+        {
+          "sourcePageId": "request-detail",
+          "triggerType": "action",
+          "triggerId": "withdraw",
+          "triggerLabel": "撤回",
+          "targetPageId": "request-list"
+        }
+      ]
+    },
+    {
+      "id": "approval-todo",
+      "name": "待办列表",
+      "route": "/approvals",
+      "pattern": "list",
+      "frame": {
+        "width": 1440,
+        "height": 900
+      },
+      "nodes": [
+        {
+          "id": "requestNo",
+          "name": "申请编号",
+          "type": "field",
+          "component": "Input",
+          "description": "申请编号",
+          "required": false
+        },
+        {
+          "id": "applicant",
+          "name": "申请人",
+          "type": "field",
+          "component": "Input",
+          "description": "申请人",
+          "required": false
+        },
+        {
+          "id": "department",
+          "name": "所属部门",
+          "type": "field",
+          "component": "Input",
+          "description": "所属部门",
+          "required": false
+        },
+        {
+          "id": "type",
+          "name": "请假类型",
+          "type": "field",
+          "component": "Select",
+          "description": "请假类型",
+          "required": false
+        },
+        {
+          "id": "startAt",
+          "name": "开始时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "开始时间",
+          "required": false
+        },
+        {
+          "id": "endAt",
+          "name": "结束时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "结束时间",
+          "required": false
+        },
+        {
+          "id": "status",
+          "name": "审批状态",
+          "type": "field",
+          "component": "Select",
+          "description": "审批状态",
+          "required": false
+        },
+        {
+          "id": "view",
+          "name": "查看",
+          "type": "action",
+          "component": "Button",
+          "description": "查看按钮"
+        },
+        {
+          "id": "approve",
+          "name": "通过",
+          "type": "action",
+          "component": "Button",
+          "description": "通过按钮"
+        },
+        {
+          "id": "reject",
+          "name": "驳回",
+          "type": "action",
+          "component": "Button",
+          "description": "驳回按钮"
+        }
+      ],
+      "interactions": [
+        {
+          "sourcePageId": "approval-todo",
+          "triggerType": "action",
+          "triggerId": "view",
+          "triggerLabel": "查看",
+          "targetPageId": "approval-detail"
+        }
+      ]
+    },
+    {
+      "id": "approval-detail",
+      "name": "审批详情",
+      "route": "/approvals/:id",
+      "pattern": "detail",
+      "frame": {
+        "width": 1440,
+        "height": 900
+      },
+      "nodes": [
+        {
+          "id": "requestNo",
+          "name": "申请编号",
+          "type": "field",
+          "component": "Input",
+          "description": "申请编号",
+          "required": false
+        },
+        {
+          "id": "applicant",
+          "name": "申请人",
+          "type": "field",
+          "component": "Input",
+          "description": "申请人",
+          "required": false
+        },
+        {
+          "id": "department",
+          "name": "所属部门",
+          "type": "field",
+          "component": "Input",
+          "description": "所属部门",
+          "required": false
+        },
+        {
+          "id": "type",
+          "name": "请假类型",
+          "type": "field",
+          "component": "Select",
+          "description": "请假类型",
+          "required": false
+        },
+        {
+          "id": "startAt",
+          "name": "开始时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "开始时间",
+          "required": false
+        },
+        {
+          "id": "endAt",
+          "name": "结束时间",
+          "type": "field",
+          "component": "DateTimePicker",
+          "description": "结束时间",
+          "required": false
+        },
+        {
+          "id": "duration",
+          "name": "请假时长",
+          "type": "field",
+          "component": "Input",
+          "description": "请假时长",
+          "required": false
+        },
+        {
+          "id": "reason",
+          "name": "请假原因",
+          "type": "field",
+          "component": "TextArea",
+          "description": "请假原因",
+          "required": false
+        },
+        {
+          "id": "status",
+          "name": "当前审批状态",
+          "type": "field",
+          "component": "Select",
+          "description": "当前审批状态",
+          "required": false
+        },
+        {
+          "id": "approvalHistory",
+          "name": "审批记录",
+          "type": "field",
+          "component": "TextArea",
+          "description": "审批记录",
+          "required": false
+        },
+        {
+          "id": "comment",
+          "name": "审批意见",
+          "type": "field",
+          "component": "TextArea",
+          "description": "审批意见",
+          "required": false
+        },
+        {
+          "id": "approve",
+          "name": "审批通过",
+          "type": "action",
+          "component": "Button",
+          "description": "审批通过按钮"
+        },
+        {
+          "id": "reject",
+          "name": "审批驳回",
+          "type": "action",
+          "component": "Button",
+          "description": "审批驳回按钮"
+        }
+      ],
+      "interactions": [
+        {
+          "sourcePageId": "approval-detail",
+          "triggerType": "action",
+          "triggerId": "approve",
+          "triggerLabel": "审批通过",
+          "targetPageId": "approval-todo"
+        },
+        {
+          "sourcePageId": "approval-detail",
+          "triggerType": "action",
+          "triggerId": "reject",
+          "triggerLabel": "审批驳回",
+          "targetPageId": "approval-todo"
+        }
+      ]
+    },
+    {
+      "id": "leave-type-list",
+      "name": "请假类型管理",
+      "route": "/settings/leave-types",
+      "pattern": "list",
+      "frame": {
+        "width": 1440,
+        "height": 900
+      },
+      "nodes": [
+        {
+          "id": "name",
+          "name": "类型名称",
+          "type": "field",
+          "component": "Input",
+          "description": "类型名称",
+          "required": false
+        },
+        {
+          "id": "enabled",
+          "name": "是否启用",
+          "type": "field",
+          "component": "Select",
+          "description": "是否启用",
+          "required": false
+        },
+        {
+          "id": "create",
+          "name": "新增请假类型",
+          "type": "action",
+          "component": "Button",
+          "description": "新增请假类型按钮"
+        },
+        {
+          "id": "edit",
+          "name": "编辑",
+          "type": "action",
+          "component": "Button",
+          "description": "编辑按钮"
+        },
+        {
+          "id": "toggle",
+          "name": "启用/停用",
+          "type": "action",
+          "component": "Button",
+          "description": "启用/停用按钮"
+        }
+      ],
+      "interactions": [
+        {
+          "sourcePageId": "leave-type-list",
+          "triggerType": "action",
+          "triggerId": "create",
+          "triggerLabel": "新增",
+          "targetPageId": "request-create"
+        },
+        {
+          "sourcePageId": "leave-type-list",
+          "triggerType": "action",
+          "triggerId": "edit",
+          "triggerLabel": "编辑",
+          "targetPageId": "request-create"
+        }
+      ]
+    }
+  ]
+}

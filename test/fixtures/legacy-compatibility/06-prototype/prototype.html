@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>员工请假管理 - Prototype</title>
+    <style>
+      :root {
+        --bg: linear-gradient(135deg, #f6f0e5 0%, #f5f7ff 55%, #f6fff8 100%);
+        --surface: rgba(255, 253, 248, 0.88);
+        --surface-strong: #fffdf8;
+        --text: #1d1b16;
+        --muted: #6c675d;
+        --accent: #1f5eff;
+        --accent-soft: rgba(31, 94, 255, 0.12);
+        --danger: #af3c2d;
+        --border: rgba(125, 114, 93, 0.18);
+        --shadow: 0 18px 42px rgba(52, 43, 27, 0.12);
+        --radius: 24px;
+        --radius-sm: 16px;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+
+      .shell {
+        width: min(1400px, calc(100vw - 32px));
+        margin: 24px auto;
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 20px;
+      }
+
+      .sidebar,
+      .workspace,
+      .summary-card,
+      .panel,
+      .page-panel {
+        backdrop-filter: blur(16px);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+      }
+
+      .sidebar {
+        border-radius: var(--radius);
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        position: sticky;
+        top: 24px;
+        height: fit-content;
+      }
+
+      .sidebar h1 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.15;
+      }
+
+      .sidebar p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .nav-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .nav-item {
+        width: 100%;
+        border: 0;
+        text-align: left;
+        border-radius: 18px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.6);
+        color: inherit;
+        cursor: pointer;
+        transition: transform 140ms ease, background 140ms ease, box-shadow 140ms ease;
+      }
+
+      .nav-item:hover,
+      .nav-item.active {
+        transform: translateY(-1px);
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 1px rgba(31, 94, 255, 0.18);
+      }
+
+      .nav-item strong,
+      .nav-item span {
+        display: block;
+      }
+
+      .nav-item span {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .workspace {
+        border-radius: var(--radius);
+        padding: 24px;
+      }
+
+      .hero {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: flex-end;
+        justify-content: space-between;
+      }
+
+      .hero h2,
+      .page-header h2,
+      .panel h3 {
+        margin: 0;
+      }
+
+      .hero p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        max-width: 760px;
+        line-height: 1.6;
+      }
+
+      .badge {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 13px;
+      }
+
+      .summary-grid {
+        margin-top: 24px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+
+      .summary-card {
+        border-radius: 20px;
+        padding: 18px;
+      }
+
+      .summary-card h3 {
+        margin: 8px 0;
+      }
+
+      .summary-card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .summary-kicker,
+      .eyebrow {
+        margin: 0 0 6px;
+        color: var(--accent);
+        font-size: 12px;
+        letter-spacing: 0.12em;
+      }
+
+      .page-panel {
+        display: none;
+        margin-top: 24px;
+        border-radius: var(--radius);
+        padding: 24px;
+      }
+
+      .page-panel.active {
+        display: block;
+      }
+
+      .page-header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .page-route {
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
+
+      .role-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .role-chip {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(29, 27, 22, 0.06);
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .page-grid {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+        gap: 16px;
+      }
+
+      .panel {
+        border-radius: 20px;
+        padding: 20px;
+      }
+
+      .field-list,
+      .action-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .field-card {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px;
+        background: var(--surface-strong);
+      }
+
+      .field-card p {
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
+
+      .field-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .field-top span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .action {
+        border: 0;
+        border-radius: 16px;
+        padding: 14px 16px;
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+        transition: transform 120ms ease;
+      }
+
+      .action:hover {
+        transform: translateY(-1px);
+      }
+
+      .action-primary {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .action-secondary {
+        background: rgba(29, 27, 22, 0.08);
+        color: var(--text);
+      }
+
+      .action-danger {
+        background: rgba(175, 60, 45, 0.12);
+        color: var(--danger);
+      }
+
+      .rule-list {
+        margin: 16px 0 0;
+        padding-left: 20px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .hint {
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 1040px) {
+        .shell,
+        .page-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">PROTOTYPE BUNDLE</p>
+          <h1>员工请假管理</h1>
+          <p>依据原始需求生成的 B 端产品原型模型。</p>
+        </div>
+        <div class="nav-list">
+
+            <button type="button" class="nav-item" data-target-page="request-list">
+              <strong>申请管理</strong>
+              <span>申请列表 · 员工/部门负责人/人事管理员</span>
+            </button>
+
+            <button type="button" class="nav-item" data-target-page="approval-todo">
+              <strong>审批工作台</strong>
+              <span>待办列表 · 部门负责人</span>
+            </button>
+
+            <button type="button" class="nav-item" data-target-page="leave-type-list">
+              <strong>基础设置</strong>
+              <span>请假类型管理 · 人事管理员</span>
+            </button>
+
+        </div>
+        <p class="hint">点击左侧模块或页面内按钮，可以在原型页面之间跳转。这是一个可直接打开的单文件 HTML 原型。</p>
+      </aside>
+      <main class="workspace">
+        <section class="hero">
+          <div>
+            <p class="eyebrow">SINGLE SOURCE OF TRUTH</p>
+            <h2>Prototype DSL + 可交互 HTML + MasterGo 适配数据</h2>
+            <p>当前目录同时输出 prototype.json、prototype.html、prototype-manifest.json、mastergo-data.json 与 preview/*.svg。直接设计写回 MasterGo 画布仍需要后续插件或写入能力。</p>
+          </div>
+          <span class="badge">Schema 0.2</span>
+        </section>
+        <section class="summary-grid">
+
+    <article class="summary-card">
+      <p class="summary-kicker">LIST</p>
+      <h3>申请列表</h3>
+      <p>/requests</p>
+      <p>角色：员工 / 部门负责人 / 人事管理员</p>
+      <p>字段 8 个 · 操作 3 个</p>
+    </article>
+
+    <article class="summary-card">
+      <p class="summary-kicker">FORM</p>
+      <h3>新建申请</h3>
+      <p>/requests/new</p>
+      <p>角色：员工 / 部门负责人 / 人事管理员</p>
+      <p>字段 4 个 · 操作 3 个</p>
+    </article>
+
+    <article class="summary-card">
+      <p class="summary-kicker">DETAIL</p>
+      <h3>申请详情</h3>
+      <p>/requests/:id</p>
+      <p>角色：员工 / 部门负责人 / 人事管理员</p>
+      <p>字段 10 个 · 操作 1 个</p>
+    </article>
+
+    <article class="summary-card">
+      <p class="summary-kicker">LIST</p>
+      <h3>待办列表</h3>
+      <p>/approvals</p>
+      <p>角色：部门负责人</p>
+      <p>字段 7 个 · 操作 3 个</p>
+    </article>
+
+    <article class="summary-card">
+      <p class="summary-kicker">DETAIL</p>
+      <h3>审批详情</h3>
+      <p>/approvals/:id</p>
+      <p>角色：部门负责人</p>
+      <p>字段 11 个 · 操作 2 个</p>
+    </article>
+
+    <article class="summary-card">
+      <p class="summary-kicker">LIST</p>
+      <h3>请假类型管理</h3>
+      <p>/settings/leave-types</p>
+      <p>角色：人事管理员</p>
+      <p>字段 2 个 · 操作 3 个</p>
+    </article>
+
+        </section>
+
+      <section class="page-panel" data-page-id="request-list">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">LIST</p>
+            <h2>申请列表</h2>
+            <p class="page-route">/requests</p>
+          </div>
+          <div class="role-list">
+            <span class="role-chip">员工</span><span class="role-chip">部门负责人</span><span class="role-chip">人事管理员</span>
+          </div>
+        </div>
+        <div class="page-grid">
+          <article class="panel">
+            <h3>字段定义</h3>
+            <div class="field-list">
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>申请编号</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>申请人</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>所属部门</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假类型</strong>
+                    <span>select</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>开始时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>结束时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假时长</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>审批状态</strong>
+                    <span>select</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+            </div>
+          </article>
+          <article class="panel">
+            <h3>交互操作</h3>
+            <div class="action-list">
+
+                <button type="button" class="action action-primary" data-action-page="request-list" data-action-id="create">
+                  新建申请
+                </button>
+
+                <button type="button" class="action action-secondary" data-action-page="request-list" data-action-id="view">
+                  查看
+                </button>
+
+                <button type="button" class="action action-danger" data-action-page="request-list" data-action-id="withdraw">
+                  撤回
+                </button>
+
+            </div>
+            <h3>业务规则</h3>
+            <ul class="rule-list">
+              <li>开始时间必须早于结束时间。</li><li>驳回时审批意见必填。</li><li>仅待审批申请允许撤回。</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-panel" data-page-id="request-create">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">FORM</p>
+            <h2>新建申请</h2>
+            <p class="page-route">/requests/new</p>
+          </div>
+          <div class="role-list">
+            <span class="role-chip">员工</span><span class="role-chip">部门负责人</span><span class="role-chip">人事管理员</span>
+          </div>
+        </div>
+        <div class="page-grid">
+          <article class="panel">
+            <h3>字段定义</h3>
+            <div class="field-list">
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假类型</strong>
+                    <span>select</span>
+                  </div>
+                  <p>必填字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>开始时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>必填字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>结束时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>必填字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假原因</strong>
+                    <span>textarea</span>
+                  </div>
+                  <p>必填字段</p>
+                </div>
+
+            </div>
+          </article>
+          <article class="panel">
+            <h3>交互操作</h3>
+            <div class="action-list">
+
+                <button type="button" class="action action-primary" data-action-page="request-create" data-action-id="submit">
+                  提交
+                </button>
+
+                <button type="button" class="action action-secondary" data-action-page="request-create" data-action-id="save-draft">
+                  保存草稿
+                </button>
+
+                <button type="button" class="action action-secondary" data-action-page="request-create" data-action-id="cancel">
+                  取消
+                </button>
+
+            </div>
+            <h3>业务规则</h3>
+            <ul class="rule-list">
+              <li>开始时间必须早于结束时间。</li><li>驳回时审批意见必填。</li><li>仅待审批申请允许撤回。</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-panel" data-page-id="request-detail">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">DETAIL</p>
+            <h2>申请详情</h2>
+            <p class="page-route">/requests/:id</p>
+          </div>
+          <div class="role-list">
+            <span class="role-chip">员工</span><span class="role-chip">部门负责人</span><span class="role-chip">人事管理员</span>
+          </div>
+        </div>
+        <div class="page-grid">
+          <article class="panel">
+            <h3>字段定义</h3>
+            <div class="field-list">
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>申请编号</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>申请人</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>所属部门</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假类型</strong>
+                    <span>select</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>开始时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>结束时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假时长</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假原因</strong>
+                    <span>textarea</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>当前审批状态</strong>
+                    <span>select</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>审批记录</strong>
+                    <span>textarea</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+            </div>
+          </article>
+          <article class="panel">
+            <h3>交互操作</h3>
+            <div class="action-list">
+
+                <button type="button" class="action action-danger" data-action-page="request-detail" data-action-id="withdraw">
+                  撤回
+                </button>
+
+            </div>
+            <h3>业务规则</h3>
+            <ul class="rule-list">
+              <li>开始时间必须早于结束时间。</li><li>驳回时审批意见必填。</li><li>仅待审批申请允许撤回。</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-panel" data-page-id="approval-todo">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">LIST</p>
+            <h2>待办列表</h2>
+            <p class="page-route">/approvals</p>
+          </div>
+          <div class="role-list">
+            <span class="role-chip">部门负责人</span>
+          </div>
+        </div>
+        <div class="page-grid">
+          <article class="panel">
+            <h3>字段定义</h3>
+            <div class="field-list">
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>申请编号</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>申请人</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>所属部门</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假类型</strong>
+                    <span>select</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>开始时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>结束时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>审批状态</strong>
+                    <span>select</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+            </div>
+          </article>
+          <article class="panel">
+            <h3>交互操作</h3>
+            <div class="action-list">
+
+                <button type="button" class="action action-secondary" data-action-page="approval-todo" data-action-id="view">
+                  查看
+                </button>
+
+                <button type="button" class="action action-primary" data-action-page="approval-todo" data-action-id="approve">
+                  通过
+                </button>
+
+                <button type="button" class="action action-danger" data-action-page="approval-todo" data-action-id="reject">
+                  驳回
+                </button>
+
+            </div>
+            <h3>业务规则</h3>
+            <ul class="rule-list">
+              <li>开始时间必须早于结束时间。</li><li>驳回时审批意见必填。</li><li>仅待审批申请允许撤回。</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-panel" data-page-id="approval-detail">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">DETAIL</p>
+            <h2>审批详情</h2>
+            <p class="page-route">/approvals/:id</p>
+          </div>
+          <div class="role-list">
+            <span class="role-chip">部门负责人</span>
+          </div>
+        </div>
+        <div class="page-grid">
+          <article class="panel">
+            <h3>字段定义</h3>
+            <div class="field-list">
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>申请编号</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>申请人</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>所属部门</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假类型</strong>
+                    <span>select</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>开始时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>结束时间</strong>
+                    <span>datetime</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假时长</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>请假原因</strong>
+                    <span>textarea</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>当前审批状态</strong>
+                    <span>select</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>审批记录</strong>
+                    <span>textarea</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>审批意见</strong>
+                    <span>textarea</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+            </div>
+          </article>
+          <article class="panel">
+            <h3>交互操作</h3>
+            <div class="action-list">
+
+                <button type="button" class="action action-primary" data-action-page="approval-detail" data-action-id="approve">
+                  审批通过
+                </button>
+
+                <button type="button" class="action action-danger" data-action-page="approval-detail" data-action-id="reject">
+                  审批驳回
+                </button>
+
+            </div>
+            <h3>业务规则</h3>
+            <ul class="rule-list">
+              <li>开始时间必须早于结束时间。</li><li>驳回时审批意见必填。</li><li>仅待审批申请允许撤回。</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-panel" data-page-id="leave-type-list">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">LIST</p>
+            <h2>请假类型管理</h2>
+            <p class="page-route">/settings/leave-types</p>
+          </div>
+          <div class="role-list">
+            <span class="role-chip">人事管理员</span>
+          </div>
+        </div>
+        <div class="page-grid">
+          <article class="panel">
+            <h3>字段定义</h3>
+            <div class="field-list">
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>类型名称</strong>
+                    <span>text</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+                <div class="field-card">
+                  <div class="field-top">
+                    <strong>是否启用</strong>
+                    <span>select</span>
+                  </div>
+                  <p>选填/展示字段</p>
+                </div>
+
+            </div>
+          </article>
+          <article class="panel">
+            <h3>交互操作</h3>
+            <div class="action-list">
+
+                <button type="button" class="action action-primary" data-action-page="leave-type-list" data-action-id="create">
+                  新增请假类型
+                </button>
+
+                <button type="button" class="action action-secondary" data-action-page="leave-type-list" data-action-id="edit">
+                  编辑
+                </button>
+
+                <button type="button" class="action action-secondary" data-action-page="leave-type-list" data-action-id="toggle">
+                  启用/停用
+                </button>
+
+            </div>
+            <h3>业务规则</h3>
+            <ul class="rule-list">
+              <li>开始时间必须早于结束时间。</li><li>驳回时审批意见必填。</li><li>仅待审批申请允许撤回。</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      </main>
+    </div>
+    <script type="application/json" id="prototype-manifest">{&quot;schemaVersion&quot;:&quot;0.2&quot;,&quot;entry&quot;:&quot;prototype.html&quot;,&quot;dsl&quot;:&quot;prototype.json&quot;,&quot;mastergoData&quot;:&quot;mastergo-data.json&quot;,&quot;previewDirectory&quot;:&quot;preview&quot;,&quot;navigation&quot;:[{&quot;label&quot;:&quot;申请管理&quot;,&quot;pageId&quot;:&quot;request-list&quot;,&quot;roles&quot;:[&quot;员工&quot;,&quot;部门负责人&quot;,&quot;人事管理员&quot;]},{&quot;label&quot;:&quot;审批工作台&quot;,&quot;pageId&quot;:&quot;approval-todo&quot;,&quot;roles&quot;:[&quot;部门负责人&quot;]},{&quot;label&quot;:&quot;基础设置&quot;,&quot;pageId&quot;:&quot;leave-type-list&quot;,&quot;roles&quot;:[&quot;人事管理员&quot;]}],&quot;pages&quot;:[{&quot;id&quot;:&quot;request-list&quot;,&quot;name&quot;:&quot;申请列表&quot;,&quot;route&quot;:&quot;/requests&quot;,&quot;pattern&quot;:&quot;list&quot;,&quot;roles&quot;:[&quot;员工&quot;,&quot;部门负责人&quot;,&quot;人事管理员&quot;],&quot;fieldCount&quot;:8,&quot;actionCount&quot;:3,&quot;preview&quot;:&quot;preview/request-list.svg&quot;},{&quot;id&quot;:&quot;request-create&quot;,&quot;name&quot;:&quot;新建申请&quot;,&quot;route&quot;:&quot;/requests/new&quot;,&quot;pattern&quot;:&quot;form&quot;,&quot;roles&quot;:[&quot;员工&quot;,&quot;部门负责人&quot;,&quot;人事管理员&quot;],&quot;fieldCount&quot;:4,&quot;actionCount&quot;:3,&quot;preview&quot;:&quot;preview/request-create.svg&quot;},{&quot;id&quot;:&quot;request-detail&quot;,&quot;name&quot;:&quot;申请详情&quot;,&quot;route&quot;:&quot;/requests/:id&quot;,&quot;pattern&quot;:&quot;detail&quot;,&quot;roles&quot;:[&quot;员工&quot;,&quot;部门负责人&quot;,&quot;人事管理员&quot;],&quot;fieldCount&quot;:10,&quot;actionCount&quot;:1,&quot;preview&quot;:&quot;preview/request-detail.svg&quot;},{&quot;id&quot;:&quot;approval-todo&quot;,&quot;name&quot;:&quot;待办列表&quot;,&quot;route&quot;:&quot;/approvals&quot;,&quot;pattern&quot;:&quot;list&quot;,&quot;roles&quot;:[&quot;部门负责人&quot;],&quot;fieldCount&quot;:7,&quot;actionCount&quot;:3,&quot;preview&quot;:&quot;preview/approval-todo.svg&quot;},{&quot;id&quot;:&quot;approval-detail&quot;,&quot;name&quot;:&quot;审批详情&quot;,&quot;route&quot;:&quot;/approvals/:id&quot;,&quot;pattern&quot;:&quot;detail&quot;,&quot;roles&quot;:[&quot;部门负责人&quot;],&quot;fieldCount&quot;:11,&quot;actionCount&quot;:2,&quot;preview&quot;:&quot;preview/approval-detail.svg&quot;},{&quot;id&quot;:&quot;leave-type-list&quot;,&quot;name&quot;:&quot;请假类型管理&quot;,&quot;route&quot;:&quot;/settings/leave-types&quot;,&quot;pattern&quot;:&quot;list&quot;,&quot;roles&quot;:[&quot;人事管理员&quot;],&quot;fieldCount&quot;:2,&quot;actionCount&quot;:3,&quot;preview&quot;:&quot;preview/leave-type-list.svg&quot;}],&quot;transitions&quot;:[{&quot;sourcePageId&quot;:&quot;global-navigation&quot;,&quot;triggerType&quot;:&quot;navigation&quot;,&quot;triggerId&quot;:&quot;request-list&quot;,&quot;triggerLabel&quot;:&quot;申请管理&quot;,&quot;targetPageId&quot;:&quot;request-list&quot;},{&quot;sourcePageId&quot;:&quot;global-navigation&quot;,&quot;triggerType&quot;:&quot;navigation&quot;,&quot;triggerId&quot;:&quot;approval-todo&quot;,&quot;triggerLabel&quot;:&quot;审批工作台&quot;,&quot;targetPageId&quot;:&quot;approval-todo&quot;},{&quot;sourcePageId&quot;:&quot;global-navigation&quot;,&quot;triggerType&quot;:&quot;navigation&quot;,&quot;triggerId&quot;:&quot;leave-type-list&quot;,&quot;triggerLabel&quot;:&quot;基础设置&quot;,&quot;targetPageId&quot;:&quot;leave-type-list&quot;},{&quot;sourcePageId&quot;:&quot;request-list&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;create&quot;,&quot;triggerLabel&quot;:&quot;新建申请&quot;,&quot;targetPageId&quot;:&quot;request-create&quot;},{&quot;sourcePageId&quot;:&quot;request-list&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;view&quot;,&quot;triggerLabel&quot;:&quot;查看&quot;,&quot;targetPageId&quot;:&quot;request-detail&quot;},{&quot;sourcePageId&quot;:&quot;request-create&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;submit&quot;,&quot;triggerLabel&quot;:&quot;提交&quot;,&quot;targetPageId&quot;:&quot;request-detail&quot;},{&quot;sourcePageId&quot;:&quot;request-create&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;save-draft&quot;,&quot;triggerLabel&quot;:&quot;保存草稿&quot;,&quot;targetPageId&quot;:&quot;request-detail&quot;},{&quot;sourcePageId&quot;:&quot;request-create&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;cancel&quot;,&quot;triggerLabel&quot;:&quot;取消&quot;,&quot;targetPageId&quot;:&quot;request-list&quot;},{&quot;sourcePageId&quot;:&quot;request-detail&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;withdraw&quot;,&quot;triggerLabel&quot;:&quot;撤回&quot;,&quot;targetPageId&quot;:&quot;request-list&quot;},{&quot;sourcePageId&quot;:&quot;approval-todo&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;view&quot;,&quot;triggerLabel&quot;:&quot;查看&quot;,&quot;targetPageId&quot;:&quot;approval-detail&quot;},{&quot;sourcePageId&quot;:&quot;approval-todo&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;approve&quot;,&quot;triggerLabel&quot;:&quot;通过&quot;,&quot;targetPageId&quot;:&quot;approval-detail&quot;},{&quot;sourcePageId&quot;:&quot;approval-todo&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;reject&quot;,&quot;triggerLabel&quot;:&quot;驳回&quot;,&quot;targetPageId&quot;:&quot;approval-detail&quot;},{&quot;sourcePageId&quot;:&quot;approval-detail&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;approve&quot;,&quot;triggerLabel&quot;:&quot;审批通过&quot;,&quot;targetPageId&quot;:&quot;approval-todo&quot;},{&quot;sourcePageId&quot;:&quot;approval-detail&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;reject&quot;,&quot;triggerLabel&quot;:&quot;审批驳回&quot;,&quot;targetPageId&quot;:&quot;approval-todo&quot;},{&quot;sourcePageId&quot;:&quot;leave-type-list&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;create&quot;,&quot;triggerLabel&quot;:&quot;新增请假类型&quot;,&quot;targetPageId&quot;:&quot;leave-type-list&quot;},{&quot;sourcePageId&quot;:&quot;leave-type-list&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;edit&quot;,&quot;triggerLabel&quot;:&quot;编辑&quot;,&quot;targetPageId&quot;:&quot;leave-type-list&quot;},{&quot;sourcePageId&quot;:&quot;leave-type-list&quot;,&quot;triggerType&quot;:&quot;action&quot;,&quot;triggerId&quot;:&quot;toggle&quot;,&quot;triggerLabel&quot;:&quot;启用/停用&quot;,&quot;targetPageId&quot;:&quot;leave-type-list&quot;}]}</script>
+    <script>
+      const manifest = JSON.parse(document.getElementById("prototype-manifest").textContent);
+      const actionTransitions = new Map(
+        manifest.transitions
+          .filter((transition) => transition.triggerType === "action")
+          .map((transition) => [transition.sourcePageId + ":" + transition.triggerId, transition.targetPageId])
+      );
+      const navItems = Array.from(document.querySelectorAll(".nav-item"));
+      const panels = Array.from(document.querySelectorAll(".page-panel"));
+
+      function showPage(pageId) {
+        panels.forEach((panel) => panel.classList.toggle("active", panel.dataset.pageId === pageId));
+        navItems.forEach((item) => item.classList.toggle("active", item.dataset.targetPage === pageId));
+        history.replaceState(null, "", "#" + pageId);
+      }
+
+      navItems.forEach((item) => {
+        item.addEventListener("click", () => showPage(item.dataset.targetPage));
+      });
+
+      document.querySelectorAll("[data-action-page][data-action-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const key = button.dataset.actionPage + ":" + button.dataset.actionId;
+          const nextPageId = actionTransitions.get(key);
+          if (nextPageId) showPage(nextPageId);
+        });
+      });
+
+      const initial = location.hash.slice(1) || "request-list";
+      showPage(initial);
+    </script>
+  </body>
+</html>

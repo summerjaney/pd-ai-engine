@@ -1,0 +1,90 @@
+{
+  "engine": "pd-ai-engine",
+  "version": "0.3.0",
+  "runId": "00000000-0000-4000-8000-000000000001",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "input": {
+    "sourcePath": "test/fixtures/legacy-compatibility/input/requirement.md",
+    "title": "员工请假管理"
+  },
+  "stages": [
+    {
+      "id": "requirement-analysis",
+      "status": "completed",
+      "file": "01-requirement-analysis.md",
+      "warnings": [],
+      "type": "file"
+    },
+    {
+      "id": "product-outline",
+      "status": "completed",
+      "file": "02-product-outline.md",
+      "warnings": [],
+      "type": "file"
+    },
+    {
+      "id": "product-architecture",
+      "status": "completed",
+      "file": "03-product-architecture.md",
+      "warnings": [],
+      "type": "file"
+    },
+    {
+      "id": "core-flow",
+      "status": "completed",
+      "file": "04-core-flow.md",
+      "warnings": [],
+      "type": "file"
+    },
+    {
+      "id": "page-structure",
+      "status": "completed",
+      "file": "05-page-structure.md",
+      "warnings": [],
+      "type": "file"
+    },
+    {
+      "id": "prototype",
+      "status": "completed",
+      "file": "06-prototype",
+      "warnings": [],
+      "type": "directory",
+      "files": [
+        "06-prototype/prototype.json",
+        "06-prototype/prototype.html",
+        "06-prototype/prototype-manifest.json",
+        "06-prototype/mastergo-data.json",
+        "06-prototype/preview/"
+      ]
+    },
+    {
+      "id": "mastergo",
+      "status": "completed",
+      "file": "07-mastergo",
+      "warnings": [],
+      "type": "directory",
+      "files": [
+        "07-mastergo/mastergo-data.json",
+        "07-mastergo/mastergo-result.json"
+      ]
+    },
+    {
+      "id": "prototype-confirmation",
+      "status": "completed",
+      "file": "08-prototype-confirmation.json",
+      "warnings": [],
+      "type": "file"
+    },
+    {
+      "id": "prd",
+      "status": "completed",
+      "file": "09-prd.md",
+      "warnings": [],
+      "type": "file"
+    },
+    {
+      "id": "review",
+      "status": "skipped"
+    }
+  ]
+}

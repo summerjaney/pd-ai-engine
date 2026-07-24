@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "0.2",
+  "createdPages": [
+    {
+      "pageId": "request-list",
+      "pageName": "申请列表",
+      "nodeId": "mg-request-list"
+    },
+    {
+      "pageId": "request-create",
+      "pageName": "新建申请",
+      "nodeId": "mg-request-create"
+    },
+    {
+      "pageId": "request-detail",
+      "pageName": "申请详情",
+      "nodeId": "mg-request-detail"
+    },
+    {
+      "pageId": "approval-todo",
+      "pageName": "待办列表",
+      "nodeId": "mg-approval-todo"
+    },
+    {
+      "pageId": "approval-detail",
+      "pageName": "审批详情",
+      "nodeId": "mg-approval-detail"
+    },
+    {
+      "pageId": "leave-type-list",
+      "pageName": "请假类型管理",
+      "nodeId": "mg-leave-type-list"
+    }
+  ],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "status": "pending"
+}

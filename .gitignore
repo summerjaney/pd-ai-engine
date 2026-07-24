@@ -1,8 +1,6 @@
 node_modules/
 dist/
 /output/*
-!/output/legacy-compatibility-test/
-!/output/legacy-compatibility-test/**
 tmp/
 test-output/
 test-output-*/

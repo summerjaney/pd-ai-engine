@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "0.2",
+  "projectId": "legacy-compatibility-test",
+  "projectName": "员工请假管理（旧版兼容样本）",
+  "productVersion": "0.1.0",
+  "requirementId": "REQ-001",
+  "requirementName": "leave-request",
+  "revision": 1,
+  "sourcePath": "test/fixtures/legacy-compatibility/input/requirement.md",
+  "title": "员工请假管理",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

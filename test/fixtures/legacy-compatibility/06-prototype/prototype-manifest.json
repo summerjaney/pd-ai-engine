@@ -1,0 +1,233 @@
+{
+  "schemaVersion": "0.2",
+  "entry": "prototype.html",
+  "dsl": "prototype.json",
+  "mastergoData": "mastergo-data.json",
+  "previewDirectory": "preview",
+  "navigation": [
+    {
+      "label": "申请管理",
+      "pageId": "request-list",
+      "roles": [
+        "员工",
+        "部门负责人",
+        "人事管理员"
+      ]
+    },
+    {
+      "label": "审批工作台",
+      "pageId": "approval-todo",
+      "roles": [
+        "部门负责人"
+      ]
+    },
+    {
+      "label": "基础设置",
+      "pageId": "leave-type-list",
+      "roles": [
+        "人事管理员"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "request-list",
+      "name": "申请列表",
+      "route": "/requests",
+      "pattern": "list",
+      "roles": [
+        "员工",
+        "部门负责人",
+        "人事管理员"
+      ],
+      "fieldCount": 8,
+      "actionCount": 3,
+      "preview": "preview/request-list.svg"
+    },
+    {
+      "id": "request-create",
+      "name": "新建申请",
+      "route": "/requests/new",
+      "pattern": "form",
+      "roles": [
+        "员工",
+        "部门负责人",
+        "人事管理员"
+      ],
+      "fieldCount": 4,
+      "actionCount": 3,
+      "preview": "preview/request-create.svg"
+    },
+    {
+      "id": "request-detail",
+      "name": "申请详情",
+      "route": "/requests/:id",
+      "pattern": "detail",
+      "roles": [
+        "员工",
+        "部门负责人",
+        "人事管理员"
+      ],
+      "fieldCount": 10,
+      "actionCount": 1,
+      "preview": "preview/request-detail.svg"
+    },
+    {
+      "id": "approval-todo",
+      "name": "待办列表",
+      "route": "/approvals",
+      "pattern": "list",
+      "roles": [
+        "部门负责人"
+      ],
+      "fieldCount": 7,
+      "actionCount": 3,
+      "preview": "preview/approval-todo.svg"
+    },
+    {
+      "id": "approval-detail",
+      "name": "审批详情",
+      "route": "/approvals/:id",
+      "pattern": "detail",
+      "roles": [
+        "部门负责人"
+      ],
+      "fieldCount": 11,
+      "actionCount": 2,
+      "preview": "preview/approval-detail.svg"
+    },
+    {
+      "id": "leave-type-list",
+      "name": "请假类型管理",
+      "route": "/settings/leave-types",
+      "pattern": "list",
+      "roles": [
+        "人事管理员"
+      ],
+      "fieldCount": 2,
+      "actionCount": 3,
+      "preview": "preview/leave-type-list.svg"
+    }
+  ],
+  "transitions": [
+    {
+      "sourcePageId": "global-navigation",
+      "triggerType": "navigation",
+      "triggerId": "request-list",
+      "triggerLabel": "申请管理",
+      "targetPageId": "request-list"
+    },
+    {
+      "sourcePageId": "global-navigation",
+      "triggerType": "navigation",
+      "triggerId": "approval-todo",
+      "triggerLabel": "审批工作台",
+      "targetPageId": "approval-todo"
+    },
+    {
+      "sourcePageId": "global-navigation",
+      "triggerType": "navigation",
+      "triggerId": "leave-type-list",
+      "triggerLabel": "基础设置",
+      "targetPageId": "leave-type-list"
+    },
+    {
+      "sourcePageId": "request-list",
+      "triggerType": "action",
+      "triggerId": "create",
+      "triggerLabel": "新建申请",
+      "targetPageId": "request-create"
+    },
+    {
+      "sourcePageId": "request-list",
+      "triggerType": "action",
+      "triggerId": "view",
+      "triggerLabel": "查看",
+      "targetPageId": "request-detail"
+    },
+    {
+      "sourcePageId": "request-create",
+      "triggerType": "action",
+      "triggerId": "submit",
+      "triggerLabel": "提交",
+      "targetPageId": "request-detail"
+    },
+    {
+      "sourcePageId": "request-create",
+      "triggerType": "action",
+      "triggerId": "save-draft",
+      "triggerLabel": "保存草稿",
+      "targetPageId": "request-detail"
+    },
+    {
+      "sourcePageId": "request-create",
+      "triggerType": "action",
+      "triggerId": "cancel",
+      "triggerLabel": "取消",
+      "targetPageId": "request-list"
+    },
+    {
+      "sourcePageId": "request-detail",
+      "triggerType": "action",
+      "triggerId": "withdraw",
+      "triggerLabel": "撤回",
+      "targetPageId": "request-list"
+    },
+    {
+      "sourcePageId": "approval-todo",
+      "triggerType": "action",
+      "triggerId": "view",
+      "triggerLabel": "查看",
+      "targetPageId": "approval-detail"
+    },
+    {
+      "sourcePageId": "approval-todo",
+      "triggerType": "action",
+      "triggerId": "approve",
+      "triggerLabel": "通过",
+      "targetPageId": "approval-detail"
+    },
+    {
+      "sourcePageId": "approval-todo",
+      "triggerType": "action",
+      "triggerId": "reject",
+      "triggerLabel": "驳回",
+      "targetPageId": "approval-detail"
+    },
+    {
+      "sourcePageId": "approval-detail",
+      "triggerType": "action",
+      "triggerId": "approve",
+      "triggerLabel": "审批通过",
+      "targetPageId": "approval-todo"
+    },
+    {
+      "sourcePageId": "approval-detail",
+      "triggerType": "action",
+      "triggerId": "reject",
+      "triggerLabel": "审批驳回",
+      "targetPageId": "approval-todo"
+    },
+    {
+      "sourcePageId": "leave-type-list",
+      "triggerType": "action",
+      "triggerId": "create",
+      "triggerLabel": "新增请假类型",
+      "targetPageId": "leave-type-list"
+    },
+    {
+      "sourcePageId": "leave-type-list",
+      "triggerType": "action",
+      "triggerId": "edit",
+      "triggerLabel": "编辑",
+      "targetPageId": "leave-type-list"
+    },
+    {
+      "sourcePageId": "leave-type-list",
+      "triggerType": "action",
+      "triggerId": "toggle",
+      "triggerLabel": "启用/停用",
+      "targetPageId": "leave-type-list"
+    }
+  ]
+}

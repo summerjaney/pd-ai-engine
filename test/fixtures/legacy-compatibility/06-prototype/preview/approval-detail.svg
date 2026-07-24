@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640" role="img" aria-label="审批详情 preview">
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#f6f0e5" />
+      <stop offset="55%" stop-color="#f4f7ff" />
+      <stop offset="100%" stop-color="#eefaf3" />
+    </linearGradient>
+  </defs>
+  <rect width="960" height="640" fill="url(#bg)" rx="32" />
+  <rect x="48" y="48" width="864" height="544" rx="28" fill="#fffdf8" stroke="#d8d0c2" />
+  <text x="84" y="102" fill="#1f5eff" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="14" letter-spacing="2">DETAIL</text>
+  <text x="84" y="144" fill="#1d1b16" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="34" font-weight="700">审批详情</text>
+  <text x="84" y="178" fill="#6c675d" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="18">员工请假管理 · /approvals/:id</text>
+  <rect x="84" y="218" width="520" height="296" rx="20" fill="#ffffff" stroke="#d8d0c2" />
+  <text x="108" y="252" fill="#1d1b16" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="20" font-weight="600">字段区</text>
+
+  <rect x="108" y="272" width="472" height="28" rx="14" fill="#f6f2ea" />
+  <text x="124" y="291" fill="#3f3a31" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="14">申请编号 · text</text>
+
+  <rect x="108" y="314" width="472" height="28" rx="14" fill="#f6f2ea" />
+  <text x="124" y="333" fill="#3f3a31" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="14">申请人 · text</text>
+
+  <rect x="108" y="356" width="472" height="28" rx="14" fill="#f6f2ea" />
+  <text x="124" y="375" fill="#3f3a31" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="14">所属部门 · text</text>
+
+  <rect x="108" y="398" width="472" height="28" rx="14" fill="#f6f2ea" />
+  <text x="124" y="417" fill="#3f3a31" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="14">请假类型 · select</text>
+
+  <rect x="108" y="440" width="472" height="28" rx="14" fill="#f6f2ea" />
+  <text x="124" y="459" fill="#3f3a31" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="14">开始时间 · datetime</text>
+
+  <rect x="108" y="482" width="472" height="28" rx="14" fill="#f6f2ea" />
+  <text x="124" y="501" fill="#3f3a31" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="14">结束时间 · datetime</text>
+
+  <rect x="632" y="218" width="232" height="180" rx="20" fill="#ffffff" stroke="#d8d0c2" />
+  <text x="656" y="252" fill="#1d1b16" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="20" font-weight="600">操作区</text>
+
+  <rect x="656" y="274" width="184" height="36" rx="18" fill="#1f5eff" />
+  <text x="716" y="297" fill="#ffffff" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="14">审批通过</text>
+
+  <rect x="656" y="326" width="184" height="36" rx="18" fill="#fde8e5" />
+  <text x="706" y="349" fill="#af3c2d" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="14">审批驳回</text>
+
+  <text x="84" y="560" fill="#6c675d" font-family="IBM Plex Sans, PingFang SC, sans-serif" font-size="16">Generated preview · fields 11 · actions 2</text>
+</svg>

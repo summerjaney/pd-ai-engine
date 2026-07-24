@@ -1,0 +1,569 @@
+{
+  "schemaVersion": "0.2",
+  "product": {
+    "name": "员工请假管理",
+    "description": "依据原始需求生成的 B 端产品原型模型。"
+  },
+  "navigation": [
+    {
+      "label": "申请管理",
+      "pageId": "request-list",
+      "roles": [
+        "员工",
+        "部门负责人",
+        "人事管理员"
+      ]
+    },
+    {
+      "label": "审批工作台",
+      "pageId": "approval-todo",
+      "roles": [
+        "部门负责人"
+      ]
+    },
+    {
+      "label": "基础设置",
+      "pageId": "leave-type-list",
+      "roles": [
+        "人事管理员"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "request-list",
+      "name": "申请列表",
+      "route": "/requests",
+      "pattern": "list",
+      "fields": [
+        {
+          "id": "requestNo",
+          "label": "申请编号",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "applicant",
+          "label": "申请人",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "department",
+          "label": "所属部门",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "type",
+          "label": "请假类型",
+          "type": "select",
+          "required": false
+        },
+        {
+          "id": "startAt",
+          "label": "开始时间",
+          "type": "datetime",
+          "required": false
+        },
+        {
+          "id": "endAt",
+          "label": "结束时间",
+          "type": "datetime",
+          "required": false
+        },
+        {
+          "id": "duration",
+          "label": "请假时长",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "status",
+          "label": "审批状态",
+          "type": "select",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "create",
+          "label": "新建申请",
+          "kind": "primary"
+        },
+        {
+          "id": "view",
+          "label": "查看",
+          "kind": "secondary"
+        },
+        {
+          "id": "withdraw",
+          "label": "撤回",
+          "kind": "danger"
+        }
+      ]
+    },
+    {
+      "id": "request-create",
+      "name": "新建申请",
+      "route": "/requests/new",
+      "pattern": "form",
+      "fields": [
+        {
+          "id": "type",
+          "label": "请假类型",
+          "type": "select",
+          "required": true
+        },
+        {
+          "id": "startAt",
+          "label": "开始时间",
+          "type": "datetime",
+          "required": true
+        },
+        {
+          "id": "endAt",
+          "label": "结束时间",
+          "type": "datetime",
+          "required": true
+        },
+        {
+          "id": "reason",
+          "label": "请假原因",
+          "type": "textarea",
+          "required": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "submit",
+          "label": "提交",
+          "kind": "primary"
+        },
+        {
+          "id": "save-draft",
+          "label": "保存草稿",
+          "kind": "secondary"
+        },
+        {
+          "id": "cancel",
+          "label": "取消",
+          "kind": "secondary"
+        }
+      ]
+    },
+    {
+      "id": "request-detail",
+      "name": "申请详情",
+      "route": "/requests/:id",
+      "pattern": "detail",
+      "fields": [
+        {
+          "id": "requestNo",
+          "label": "申请编号",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "applicant",
+          "label": "申请人",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "department",
+          "label": "所属部门",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "type",
+          "label": "请假类型",
+          "type": "select",
+          "required": false
+        },
+        {
+          "id": "startAt",
+          "label": "开始时间",
+          "type": "datetime",
+          "required": false
+        },
+        {
+          "id": "endAt",
+          "label": "结束时间",
+          "type": "datetime",
+          "required": false
+        },
+        {
+          "id": "duration",
+          "label": "请假时长",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "reason",
+          "label": "请假原因",
+          "type": "textarea",
+          "required": false
+        },
+        {
+          "id": "status",
+          "label": "当前审批状态",
+          "type": "select",
+          "required": false
+        },
+        {
+          "id": "approvalHistory",
+          "label": "审批记录",
+          "type": "textarea",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "withdraw",
+          "label": "撤回",
+          "kind": "danger"
+        }
+      ]
+    },
+    {
+      "id": "approval-todo",
+      "name": "待办列表",
+      "route": "/approvals",
+      "pattern": "list",
+      "fields": [
+        {
+          "id": "requestNo",
+          "label": "申请编号",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "applicant",
+          "label": "申请人",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "department",
+          "label": "所属部门",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "type",
+          "label": "请假类型",
+          "type": "select",
+          "required": false
+        },
+        {
+          "id": "startAt",
+          "label": "开始时间",
+          "type": "datetime",
+          "required": false
+        },
+        {
+          "id": "endAt",
+          "label": "结束时间",
+          "type": "datetime",
+          "required": false
+        },
+        {
+          "id": "status",
+          "label": "审批状态",
+          "type": "select",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "view",
+          "label": "查看",
+          "kind": "secondary"
+        },
+        {
+          "id": "approve",
+          "label": "通过",
+          "kind": "primary"
+        },
+        {
+          "id": "reject",
+          "label": "驳回",
+          "kind": "danger"
+        }
+      ]
+    },
+    {
+      "id": "approval-detail",
+      "name": "审批详情",
+      "route": "/approvals/:id",
+      "pattern": "detail",
+      "fields": [
+        {
+          "id": "requestNo",
+          "label": "申请编号",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "applicant",
+          "label": "申请人",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "department",
+          "label": "所属部门",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "type",
+          "label": "请假类型",
+          "type": "select",
+          "required": false
+        },
+        {
+          "id": "startAt",
+          "label": "开始时间",
+          "type": "datetime",
+          "required": false
+        },
+        {
+          "id": "endAt",
+          "label": "结束时间",
+          "type": "datetime",
+          "required": false
+        },
+        {
+          "id": "duration",
+          "label": "请假时长",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "reason",
+          "label": "请假原因",
+          "type": "textarea",
+          "required": false
+        },
+        {
+          "id": "status",
+          "label": "当前审批状态",
+          "type": "select",
+          "required": false
+        },
+        {
+          "id": "approvalHistory",
+          "label": "审批记录",
+          "type": "textarea",
+          "required": false
+        },
+        {
+          "id": "comment",
+          "label": "审批意见",
+          "type": "textarea",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "approve",
+          "label": "审批通过",
+          "kind": "primary"
+        },
+        {
+          "id": "reject",
+          "label": "审批驳回",
+          "kind": "danger"
+        }
+      ]
+    },
+    {
+      "id": "leave-type-list",
+      "name": "请假类型管理",
+      "route": "/settings/leave-types",
+      "pattern": "list",
+      "fields": [
+        {
+          "id": "name",
+          "label": "类型名称",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "enabled",
+          "label": "是否启用",
+          "type": "select",
+          "required": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "create",
+          "label": "新增请假类型",
+          "kind": "primary"
+        },
+        {
+          "id": "edit",
+          "label": "编辑",
+          "kind": "secondary"
+        },
+        {
+          "id": "toggle",
+          "label": "启用/停用",
+          "kind": "secondary"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "start-before-end",
+      "description": "开始时间必须早于结束时间。",
+      "appliesTo": [
+        "startAt",
+        "endAt"
+      ]
+    },
+    {
+      "id": "reject-comment-required",
+      "description": "驳回时审批意见必填。",
+      "appliesTo": [
+        "reject"
+      ]
+    },
+    {
+      "id": "withdraw-pending-only",
+      "description": "仅待审批申请允许撤回。",
+      "appliesTo": [
+        "withdraw"
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "sourcePageId": "request-list",
+      "triggerType": "action",
+      "triggerId": "create",
+      "triggerLabel": "新建申请",
+      "targetPageId": "request-create"
+    },
+    {
+      "sourcePageId": "request-list",
+      "triggerType": "action",
+      "triggerId": "view",
+      "triggerLabel": "查看",
+      "targetPageId": "request-detail"
+    },
+    {
+      "sourcePageId": "request-create",
+      "triggerType": "action",
+      "triggerId": "submit",
+      "triggerLabel": "提交",
+      "targetPageId": "request-list"
+    },
+    {
+      "sourcePageId": "request-create",
+      "triggerType": "action",
+      "triggerId": "cancel",
+      "triggerLabel": "取消",
+      "targetPageId": "request-list"
+    },
+    {
+      "sourcePageId": "request-detail",
+      "triggerType": "action",
+      "triggerId": "withdraw",
+      "triggerLabel": "撤回",
+      "targetPageId": "request-list"
+    },
+    {
+      "sourcePageId": "approval-todo",
+      "triggerType": "action",
+      "triggerId": "view",
+      "triggerLabel": "查看",
+      "targetPageId": "approval-detail"
+    },
+    {
+      "sourcePageId": "approval-detail",
+      "triggerType": "action",
+      "triggerId": "approve",
+      "triggerLabel": "审批通过",
+      "targetPageId": "approval-todo"
+    },
+    {
+      "sourcePageId": "approval-detail",
+      "triggerType": "action",
+      "triggerId": "reject",
+      "triggerLabel": "审批驳回",
+      "targetPageId": "approval-todo"
+    },
+    {
+      "sourcePageId": "leave-type-list",
+      "triggerType": "action",
+      "triggerId": "create",
+      "triggerLabel": "新增",
+      "targetPageId": "request-create"
+    },
+    {
+      "sourcePageId": "leave-type-list",
+      "triggerType": "action",
+      "triggerId": "edit",
+      "triggerLabel": "编辑",
+      "targetPageId": "request-create"
+    }
+  ],
+  "designTokens": {
+    "colors": {
+      "primary": "#3B82F6",
+      "success": "#10B981",
+      "danger": "#EF4444",
+      "warning": "#F59E0B",
+      "bgPage": "#F6F7FB",
+      "bgCard": "#FFFFFF",
+      "textPrimary": "#111827",
+      "textSecondary": "#6B7280",
+      "border": "#E5E7EB"
+    },
+    "spacing": {
+      "s8": 8,
+      "s12": 12,
+      "s16": 16,
+      "s20": 20,
+      "s24": 24,
+      "s32": 32,
+      "s40": 40
+    },
+    "radius": {
+      "r8": 8,
+      "r12": 12,
+      "r16": 16,
+      "r24": 24
+    },
+    "typography": {
+      "fontSize": {
+        "xs": 12,
+        "sm": 14,
+        "md": 16,
+        "lg": 20,
+        "xl": 24,
+        "xxl": 28
+      },
+      "fontWeight": {
+        "normal": 400,
+        "medium": 500,
+        "semibold": 600,
+        "bold": 700
+      },
+      "lineHeight": {
+        "xs": 16,
+        "sm": 20,
+        "md": 24,
+        "lg": 28,
+        "xl": 32,
+        "xxl": 36
+      }
+    }
+  }
+}

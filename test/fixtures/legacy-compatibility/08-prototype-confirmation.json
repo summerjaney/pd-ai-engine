@@ -1,0 +1,9 @@
+{
+  "status": "confirmed",
+  "confirmedAt": "2026-01-01T00:00:00.000Z",
+  "confirmedBy": "System (Mock)",
+  "comments": [
+    "Mock 环境自动确认",
+    "MasterGo 原型已生成"
+  ]
+}
