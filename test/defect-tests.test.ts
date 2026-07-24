@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
+
+const test = (globalThis as any).test ?? (await import("node:test")).default;
 
 async function readJson<T>(filePath: string): Promise<T> {
   const fs = await import("node:fs/promises");
@@ -419,4 +420,536 @@ test("package.json 版本为 0.3.1", async () => {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const pkg = await readJson<{ version: string }>(path.join(__dirname, "..", "package.json"));
   assert.equal(pkg.version, "0.3.1", "package.json 版本应为 0.3.1");
+});
+
+// ===== PAE-030-011: safeSegment 路径安全测试 =====
+
+import { prepareRequirementOutput } from "../src/output/requirement-output.js";
+
+async function assertThrows(fn: () => Promise<unknown>, message: string) {
+  let errorOccurred = false;
+  try {
+    await fn();
+  } catch {
+    errorOccurred = true;
+  }
+  assert.ok(errorOccurred, message);
+}
+
+test("safeSegment 拒绝包含路径分隔符的 project-id", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-segment-"));
+  await assertThrows(
+    () => prepareRequirementOutput({
+      outputRoot: output,
+      projectId: "hr/system",
+      projectName: "HR",
+      productVersion: "0.1.0",
+      requirementId: "REQ-001",
+      requirementName: "leave-request",
+    }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" }),
+    "project-id 包含 / 应被拒绝"
+  );
+});
+
+test("safeSegment 拒绝包含路径分隔符的 requirement-id", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-segment-"));
+  await assertThrows(
+    () => prepareRequirementOutput({
+      outputRoot: output,
+      projectId: "hr-system",
+      projectName: "HR",
+      productVersion: "0.1.0",
+      requirementId: "REQ/001",
+      requirementName: "leave-request",
+    }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" }),
+    "requirement-id 包含 / 应被拒绝"
+  );
+});
+
+test("safeSegment 拒绝路径穿越序列 ..", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-segment-"));
+  await assertThrows(
+    () => prepareRequirementOutput({
+      outputRoot: output,
+      projectId: "hr-system",
+      projectName: "HR",
+      productVersion: "0.1.0",
+      requirementId: "REQ-001",
+      requirementName: "leave-request..",
+    }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" }),
+    "requirement-name 包含 .. 应被拒绝"
+  );
+});
+
+test("safeSegment 拒绝编码后的路径穿越", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-segment-"));
+  await assertThrows(
+    () => prepareRequirementOutput({
+      outputRoot: output,
+      projectId: "hr-system",
+      projectName: "HR",
+      productVersion: "0.1.0",
+      requirementId: "REQ-001",
+      requirementName: "leave%2e%2e%2frequest",
+    }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" }),
+    "编码后的路径穿越应被拒绝"
+  );
+});
+
+test("safeSegment 拒绝以特殊字符开头的输入", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-segment-"));
+  await assertThrows(
+    () => prepareRequirementOutput({
+      outputRoot: output,
+      projectId: "~home",
+      projectName: "HR",
+      productVersion: "0.1.0",
+      requirementId: "REQ-001",
+      requirementName: "leave-request",
+    }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" }),
+    "以 ~ 开头的 project-id 应被拒绝"
+  );
+});
+
+test("safeSegment 保留正常项目名称", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-segment-"));
+  const result = await prepareRequirementOutput({
+    outputRoot: output,
+    projectId: "hr-system",
+    projectName: "人力资源系统",
+    productVersion: "0.1.0",
+    requirementId: "REQ-001",
+    requirementName: "leave-request",
+  }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" });
+  assert.equal(result.context.projectId, "hr-system", "正常 project-id 应被保留");
+});
+
+// ===== PAE-030-010: revision 自动递增测试 =====
+
+test("首次创建需求 revision 默认为 1", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-revision-"));
+  const result = await prepareRequirementOutput({
+    outputRoot: output,
+    projectId: "finance-system",
+    projectName: "财务系统",
+    productVersion: "0.1.0",
+    requirementId: "REQ-001",
+    requirementName: "expense-request",
+  }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" });
+  assert.equal(result.context.revision, 1, "首次创建 revision 应为 1");
+});
+
+test("重复运行同一需求 revision 自动递增", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-revision-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+
+  const first = await prepareRequirementOutput({
+    outputRoot: output,
+    projectId: "finance-system",
+    projectName: "财务系统",
+    productVersion: "0.1.0",
+    requirementId: "REQ-001",
+    requirementName: "expense-request",
+  }, input);
+  assert.equal(first.context.revision, 1, "首次创建 revision 应为 1");
+
+  const second = await prepareRequirementOutput({
+    outputRoot: output,
+    projectId: "finance-system",
+    projectName: "财务系统",
+    productVersion: "0.1.0",
+    requirementId: "REQ-001",
+    requirementName: "expense-request",
+  }, input);
+  assert.equal(second.context.revision, 2, "第二次创建 revision 应自动递增为 2");
+
+  const third = await prepareRequirementOutput({
+    outputRoot: output,
+    projectId: "finance-system",
+    projectName: "财务系统",
+    productVersion: "0.1.0",
+    requirementId: "REQ-001",
+    requirementName: "expense-request",
+  }, input);
+  assert.equal(third.context.revision, 3, "第三次创建 revision 应自动递增为 3");
+});
+
+test("用户传入 revision 大于当前版本时生效", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-revision-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+
+  await prepareRequirementOutput({
+    outputRoot: output,
+    projectId: "finance-system",
+    projectName: "财务系统",
+    productVersion: "0.1.0",
+    requirementId: "REQ-001",
+    requirementName: "expense-request",
+  }, input);
+
+  const result = await prepareRequirementOutput({
+    outputRoot: output,
+    projectId: "finance-system",
+    projectName: "财务系统",
+    productVersion: "0.1.0",
+    requirementId: "REQ-001",
+    requirementName: "expense-request",
+    revision: 5,
+  }, input);
+  assert.equal(result.context.revision, 5, "用户传入更大的 revision 应生效");
+});
+
+test("用户传入 revision 小于当前版本时拒绝", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-revision-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+
+  await prepareRequirementOutput({
+    outputRoot: output,
+    projectId: "finance-system",
+    projectName: "财务系统",
+    productVersion: "0.1.0",
+    requirementId: "REQ-001",
+    requirementName: "expense-request",
+  }, input);
+
+  await assertThrows(
+    () => prepareRequirementOutput({
+      outputRoot: output,
+      projectId: "finance-system",
+      projectName: "财务系统",
+      productVersion: "0.1.0",
+      requirementId: "REQ-001",
+      requirementName: "expense-request",
+      revision: 1,
+    }, input),
+    "revision 小于当前版本应被拒绝"
+  );
+});
+
+test("非法 revision 值被拒绝", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-revision-"));
+  await assertThrows(
+    () => prepareRequirementOutput({
+      outputRoot: output,
+      projectId: "finance-system",
+      projectName: "财务系统",
+      productVersion: "0.1.0",
+      requirementId: "REQ-001",
+      requirementName: "expense-request",
+      revision: 0,
+    }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" }),
+    "revision = 0 应被拒绝"
+  );
+
+  await assertThrows(
+    () => prepareRequirementOutput({
+      outputRoot: output,
+      projectId: "finance-system",
+      projectName: "财务系统",
+      productVersion: "0.1.0",
+      requirementId: "REQ-001",
+      requirementName: "expense-request",
+      revision: -1,
+    }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" }),
+    "revision = -1 应被拒绝"
+  );
+
+  await assertThrows(
+    () => prepareRequirementOutput({
+      outputRoot: output,
+      projectId: "finance-system",
+      projectName: "财务系统",
+      productVersion: "0.1.0",
+      requirementId: "REQ-001",
+      requirementName: "expense-request",
+      revision: 1.5,
+    }, { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" }),
+    "revision = 1.5 应被拒绝"
+  );
+});
+
+// ===== PAE-030-009: requirement-index.md 格式测试 =====
+
+test("PAE-030-009: 索引文件表头与数据行之间无多余空行", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-009-format-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+
+  await prepareRequirementOutput({
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "HR",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+    requirementName: "leave-request",
+    revision: 1,
+  }, input);
+
+  const indexPath = path.join(outputRoot, "hr-system", "product", "requirement-index.md");
+  const indexContent = await readFile(indexPath, "utf8");
+  const lines = indexContent.split("\n");
+
+  // 预期结构：# 需求索引 / 空行 / 表头 / 分隔符 / 数据行
+  // 表头分隔符（|---|---|---|---|）后面应紧跟数据行，不应有空行
+  const separatorIndex = lines.findIndex(line => line.includes("|---|---|---|---|"));
+  assert.ok(separatorIndex >= 0, "应找到表格分隔符行");
+  assert.ok(separatorIndex + 1 < lines.length, "分隔符后应有数据行");
+  assert.ok(lines[separatorIndex + 1].startsWith("| REQ-001 |"), "分隔符后应紧跟数据行，不应有空行");
+});
+
+test("PAE-030-009: 连续添加多条记录不产生连续空行", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-009-multi-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "HR",
+    productVersion: "1.0.0",
+  };
+
+  await prepareRequirementOutput({ ...base, requirementId: "REQ-001", requirementName: "leave-request", revision: 1 }, input);
+  await prepareRequirementOutput({ ...base, requirementId: "REQ-002", requirementName: "overtime-request", revision: 1 }, input);
+  await prepareRequirementOutput({ ...base, requirementId: "REQ-003", requirementName: "travel-request", revision: 1 }, input);
+
+  const indexPath = path.join(outputRoot, "hr-system", "product", "requirement-index.md");
+  const indexContent = await readFile(indexPath, "utf8");
+
+  // 不应出现连续两个空行
+  assert.ok(!/\n\n\n/.test(indexContent), "索引不应出现连续空行");
+
+  const lines = indexContent.split("\n");
+  // 检查每两条数据行之间没有空行
+  const dataLines = lines.filter(line => line.startsWith("| REQ-"));
+  assert.equal(dataLines.length, 3, "应有 3 条数据行");
+
+  // 数据行在原文件中应连续出现（相邻行号差为 1）
+  const dataLineIndices = lines
+    .map((line, idx) => line.startsWith("| REQ-") ? idx : -1)
+    .filter(idx => idx >= 0);
+  for (let i = 1; i < dataLineIndices.length; i++) {
+    assert.equal(dataLineIndices[i] - dataLineIndices[i - 1], 1, "数据行之间不应有空行");
+  }
+});
+
+test("PAE-030-009: 文件结尾最多保留一个换行符", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-009-eol-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+
+  await prepareRequirementOutput({
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "HR",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+    requirementName: "leave-request",
+    revision: 1,
+  }, input);
+
+  const indexPath = path.join(outputRoot, "hr-system", "product", "requirement-index.md");
+  const indexContent = await readFile(indexPath, "utf8");
+
+  // 文件结尾最多一个换行符：不以 \n\n 结尾
+  assert.ok(!indexContent.endsWith("\n\n"), "文件结尾不应有多余空行");
+  // 文件应以换行符结尾
+  assert.ok(indexContent.endsWith("\n"), "文件应以单个换行符结尾");
+});
+
+test("PAE-030-009: 重复运行同一需求不产生多余空行", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-009-dup-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "HR",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+    requirementName: "leave-request",
+  };
+
+  // 连续运行 3 次
+  await prepareRequirementOutput(base, input);
+  await prepareRequirementOutput(base, input);
+  await prepareRequirementOutput(base, input);
+
+  const indexPath = path.join(outputRoot, "hr-system", "product", "requirement-index.md");
+  const indexContent = await readFile(indexPath, "utf8");
+
+  // 不应出现连续空行
+  assert.ok(!/\n\n\n/.test(indexContent), "重复运行后不应出现连续空行");
+
+  // REQ-001 应只出现一次
+  const req001Count = (indexContent.match(/\| REQ-001 \|/g) ?? []).length;
+  assert.equal(req001Count, 1, "重复运行后索引中应只有一行 REQ-001");
+});
+
+// ===== PAE-030-013: 项目身份与需求目录识别测试 =====
+
+test("PAE-030-013: 同名项目但 projectId 不同必须生成不同项目目录", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-013-samename-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+
+  // 两个同名项目但 projectId 不同
+  await prepareRequirementOutput({
+    outputRoot,
+    projectId: "hr-system-a",
+    projectName: "人力资源系统",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+    requirementName: "leave-request",
+    revision: 1,
+  }, input);
+
+  await prepareRequirementOutput({
+    outputRoot,
+    projectId: "hr-system-b",
+    projectName: "人力资源系统",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+    requirementName: "leave-request",
+    revision: 1,
+  }, input);
+
+  const projectA = await readJson<{ projectId: string; projectName: string }>(path.join(outputRoot, "hr-system-a", "project.json"));
+  const projectB = await readJson<{ projectId: string; projectName: string }>(path.join(outputRoot, "hr-system-b", "project.json"));
+
+  assert.equal(projectA.projectId, "hr-system-a", "项目 A 的 projectId 应为 hr-system-a");
+  assert.equal(projectB.projectId, "hr-system-b", "项目 B 的 projectId 应为 hr-system-b");
+  assert.equal(projectA.projectName, "人力资源系统", "项目 A 的 projectName 应一致");
+  assert.equal(projectB.projectName, "人力资源系统", "项目 B 的 projectName 应一致");
+});
+
+test("PAE-030-013: 同一 projectId 下多个不同 requirementId 生成多个需求目录", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-013-multireq-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "人力资源系统",
+    productVersion: "1.0.0",
+  };
+
+  const first = await prepareRequirementOutput({ ...base, requirementId: "REQ-001", requirementName: "leave-request", revision: 1 }, input);
+  const second = await prepareRequirementOutput({ ...base, requirementId: "REQ-002", requirementName: "overtime-request", revision: 1 }, input);
+
+  assert.notEqual(first.requirementDirectory, second.requirementDirectory, "两个需求目录路径应不同");
+
+  const req1Json = await readJson<{ requirementId: string }>(path.join(first.requirementDirectory, "requirement.json"));
+  const req2Json = await readJson<{ requirementId: string }>(path.join(second.requirementDirectory, "requirement.json"));
+  assert.equal(req1Json.requirementId, "REQ-001");
+  assert.equal(req2Json.requirementId, "REQ-002");
+
+  // 两个需求目录都在同一项目下
+  assert.ok(first.requirementDirectory.includes("hr-system/requirements/"), "需求 1 应在 hr-system 项目下");
+  assert.ok(second.requirementDirectory.includes("hr-system/requirements/"), "需求 2 应在 hr-system 项目下");
+
+  // project.json 只有一个
+  const projectJson = await readJson<{ projectId: string }>(path.join(outputRoot, "hr-system", "project.json"));
+  assert.equal(projectJson.projectId, "hr-system");
+});
+
+test("PAE-030-013: 同一 projectId + requirementId 重复运行视为更新同一需求", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-013-repeat-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "人力资源系统",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+    requirementName: "leave-request",
+  };
+
+  const first = await prepareRequirementOutput(base, input);
+  const second = await prepareRequirementOutput(base, input);
+
+  assert.equal(first.requirementDirectory, second.requirementDirectory, "重复运行应指向同一需求目录");
+  assert.equal(second.context.revision, 2, "第二次运行 revision 应递增为 2");
+
+  // requirements 目录下只有一个需求目录
+  const entries = await readdir(path.join(outputRoot, "hr-system", "requirements"));
+  assert.equal(entries.length, 1, "requirements 目录下应只有一个需求目录");
+  assert.equal(entries[0], "REQ-001-leave-request");
+});
+
+test("PAE-030-013: 同一 requirementId 修改 requirementName 时重命名目录", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-013-rename-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "人力资源系统",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+  };
+
+  // 首次创建
+  const first = await prepareRequirementOutput({ ...base, requirementName: "leave-request", revision: 1 }, input);
+  assert.ok(first.requirementDirectory.endsWith("REQ-001-leave-request"), "首次目录名应包含 leave-request");
+
+  // 修改 requirementName
+  const second = await prepareRequirementOutput({ ...base, requirementName: "vacation-request" }, input);
+  assert.ok(second.requirementDirectory.endsWith("REQ-001-vacation-request"), "修改后目录名应包含 vacation-request");
+
+  // requirements 目录下应只有一个需求目录（重命名后）
+  const entries = await readdir(path.join(outputRoot, "hr-system", "requirements"));
+  assert.equal(entries.length, 1, "修改 requirementName 后应只有一个需求目录");
+  assert.equal(entries[0], "REQ-001-vacation-request", "目录应已重命名为新名称");
+
+  // 旧目录不应存在
+  await assert.rejects(
+    access(path.join(outputRoot, "hr-system", "requirements", "REQ-001-leave-request")),
+    "旧目录不应残留"
+  );
+
+  // revision 应递增（同一需求）
+  assert.equal(second.context.revision, 2, "修改 requirementName 后 revision 应递增");
+});
+
+test("PAE-030-013: 同一 projectId 修改 projectName 时不创建第二个项目", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-013-rename-proj-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+    requirementName: "leave-request",
+  };
+
+  // 首次创建
+  await prepareRequirementOutput({ ...base, projectName: "人力资源系统", revision: 1 }, input);
+
+  // 修改 projectName，不传 revision 让其自动递增
+  await prepareRequirementOutput({ ...base, projectName: "HR 管理平台" }, input);
+
+  // 项目目录仍只有一个
+  const projectEntries = await readdir(path.join(outputRoot));
+  const hrDirs = projectEntries.filter(e => e === "hr-system");
+  assert.equal(hrDirs.length, 1, "修改 projectName 后应只有一个项目目录");
+
+  // project.json 中 projectName 应更新
+  const projectJson = await readJson<{ projectId: string; projectName: string }>(
+    path.join(outputRoot, "hr-system", "project.json")
+  );
+  assert.equal(projectJson.projectId, "hr-system", "projectId 应保持不变");
+  assert.equal(projectJson.projectName, "HR 管理平台", "projectName 应更新为新值");
+});
+
+test("PAE-030-013: 不同 requirementId 不应误匹配同一需求目录", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-013-prefix-"));
+  const input = { sourcePath: "test.md", title: "Test", content: "# Test\n\nbody" };
+  const base = {
+    outputRoot,
+    projectId: "hr-system",
+    projectName: "HR",
+    productVersion: "1.0.0",
+  };
+
+  // REQ-001 和 REQ-010 不应互相匹配
+  await prepareRequirementOutput({ ...base, requirementId: "REQ-001", requirementName: "leave", revision: 1 }, input);
+  await prepareRequirementOutput({ ...base, requirementId: "REQ-010", requirementName: "travel", revision: 1 }, input);
+
+  const entries = await readdir(path.join(outputRoot, "hr-system", "requirements"));
+  assert.equal(entries.length, 2, "REQ-001 和 REQ-010 应生成两个独立目录");
+  assert.ok(entries.includes("REQ-001-leave"), "应包含 REQ-001-leave");
+  assert.ok(entries.includes("REQ-010-travel"), "应包含 REQ-010-travel");
 });

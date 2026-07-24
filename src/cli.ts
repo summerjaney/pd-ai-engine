@@ -10,18 +10,22 @@ const HELP = `PAE — Product Design AI Engine v0.3.0
 
 用法：
   pae requirement create <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
-  pae run <需求文件> [--out <输出目录>]
+  pae run <需求文件> [--out <输出目录>] [选项]
   pae --help
 
 示例：
   pae requirement create examples/b2b-requirement.md --project hr-system --id REQ-001 --name leave-request
-  pae run examples/b2b-requirement.md --out output/legacy-example
+  pae run examples/b2b-requirement.md --out output/legacy-example --project hr-system --id REQ-001 --name leave-request
 
 选项：
+  --project <标识>            项目唯一标识（requirement create 必填，run 可选）
   --project-name <名称>       项目显示名称，默认使用项目标识
+  --id <需求编号>             需求唯一编号（requirement create 必填，run 可选）
+  --name <需求标识>           需求标识名称（requirement create 必填，run 可选）
   --product-version <版本>   被设计产品版本，默认 0.1.0
   --revision <数字>          需求修订版本，默认 1
   --output-root <目录>       输出根目录，默认 output
+  --out <目录>                输出目录（仅 run 命令，默认 output/latest）
 `;
 
 function option(args: string[], name: string): string | undefined {
@@ -48,7 +52,7 @@ function validateRequirementContent(content: string, sourcePath: string): void {
 const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
-  "--help", "-h",
+  "--out", "--help", "-h",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -92,8 +96,11 @@ async function main(): Promise<void> {
     const requirementId = option(args, "--id");
     const requirementName = option(args, "--name");
     if (!projectId || !requirementId || !requirementName) throw new Error(`缺少 --project、--id 或 --name。\n\n${HELP}`);
-    const revision = Number(option(args, "--revision") ?? "1");
-    if (!Number.isInteger(revision) || revision < 1) throw new Error("--revision 必须是大于等于 1 的整数。");
+    const revisionArg = option(args, "--revision");
+    const revision = revisionArg !== undefined ? Number(revisionArg) : undefined;
+    if (revision !== undefined && (!Number.isInteger(revision) || revision < 1)) {
+      throw new Error("--revision 必须是大于等于 1 的整数。");
+    }
     const prepared = await prepareRequirementOutput({
       outputRoot: option(args, "--output-root") ?? "output",
       projectId,
@@ -106,8 +113,32 @@ async function main(): Promise<void> {
     outputDirectory = prepared.requirementDirectory;
     context = await workflow.run(input, outputDirectory, prepared.context);
   } else {
-    outputDirectory = path.resolve(option(args, "--out") ?? "output/latest");
-    context = await workflow.run(input, outputDirectory);
+    const outputPath = option(args, "--out") ?? "output/latest";
+    const resolvedOutput = path.resolve(outputPath);
+
+    // 参数优先级：CLI 明确参数 > 已有项目元数据 > 输入文档可解析内容 > 输出路径推断
+    const explicitProjectId = option(args, "--project");
+    const explicitProjectName = option(args, "--project-name");
+    const explicitRequirementId = option(args, "--id");
+    const explicitRequirementName = option(args, "--name");
+
+    const inferredProjectId = explicitProjectId ?? path.basename(resolvedOutput);
+    const inferredRequirementName = explicitRequirementName
+      ?? path.basename(sourcePath, path.extname(sourcePath)).toLowerCase().replace(/\s+/g, "-");
+    const inferredRequirementId = explicitRequirementId
+      ?? `REQ-${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
+
+    const prepared = await prepareRequirementOutput({
+      outputRoot: path.dirname(resolvedOutput),
+      projectId: inferredProjectId || "default-project",
+      projectName: explicitProjectName ?? explicitProjectId ?? path.basename(resolvedOutput),
+      productVersion: option(args, "--product-version") ?? "0.1.0",
+      requirementId: inferredRequirementId,
+      requirementName: inferredRequirementName || "requirement",
+      revision: option(args, "--revision") !== undefined ? Number(option(args, "--revision")) : undefined,
+    }, input);
+    outputDirectory = prepared.requirementDirectory;
+    context = await workflow.run(input, outputDirectory, prepared.context);
   }
 
   const failedStages = context.stageResults?.filter(s => s.status === "failed") || [];

@@ -13,7 +13,13 @@
     "check": "tsc -p tsconfig.json --noEmit && npm test",
     "example": "npm run build && node dist/cli.js requirement create examples/b2b-requirement.md --project example-product --project-name 示例产品 --id REQ-001 --name leave-request"
   },
-  "keywords": ["product-management", "ai", "workflow", "prototype", "prd"],
+  "keywords": [
+    "product-management",
+    "ai",
+    "workflow",
+    "prototype",
+    "prd"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=20"
@@ -21,6 +27,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "tsx": "^4.20.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.10"
   }
 }

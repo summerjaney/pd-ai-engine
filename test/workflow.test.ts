@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { access, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
 import type { MasterGoData, PrototypeBundleManifest, PrototypeDsl } from "../src/domain/types.js";
 import { MockStageExecutor, runReviewChecks } from "../src/execution/mock-executor.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 import { prepareRequirementOutput } from "../src/output/requirement-output.js";
+
+const test = (globalThis as any).test ?? (await import("node:test")).default;
 
 async function readJson<T>(filePath: string): Promise<T> {
   return JSON.parse(await readFile(filePath, "utf8")) as T;
@@ -446,7 +447,6 @@ test("同一需求重复运行后，索引中仍只有一条记录", async () =>
     projectId: "hr-system",
     projectName: "人力资源管理系统",
     productVersion: "1.0.0",
-    revision: 1,
   };
 
   await prepareRequirementOutput({ ...base, requirementId: "REQ-001", requirementName: "leave-request" }, input);
