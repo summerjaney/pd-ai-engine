@@ -1,6 +1,13 @@
 node_modules/
 dist/
-/output/
+/output/*
+!/output/legacy-compatibility-test/
+!/output/legacy-compatibility-test/**
+tmp/
+test-output/
+test-output-*/
+error-test-output/
+*.tmp
 .DS_Store
 *.log
 .trae/
