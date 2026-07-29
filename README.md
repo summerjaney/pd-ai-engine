@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前 `v0.3.0 MVP` 聚焦 B 端产品设计交付链路，并坚持 **Prototype First**。v0.3.0 新增 **Requirement-centric Output Model（以需求为中心的成果物模型）**：项目是长期容器，需求是核心迭代单元。
+当前 `v0.3.1 MVP` 聚焦 B 端产品设计交付链路，并坚持 **Prototype First**。v0.3.0 新增 **Requirement-centric Output Model（以需求为中心的成果物模型）**：项目是长期容器，需求是核心迭代单元。
 
 ## 成果物组织模型
 

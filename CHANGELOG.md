@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-07-29
+
+### Changed
+
+- **版本升级**：因历史 `v0.3.0` 标签已指向旧 commit（`6e16433`），不可移动、覆盖或删除，当前正式验收通过的 main 代码改用 `v0.3.1` 发布。
+- 继承 `v0.3.0` 已验证的安全修复、验收证据和发布包范围，无新增业务功能。
+
+### Risk
+
+- **MCP-EXT-001**：唯一保留风险（MasterGo MCP 对非法 HTML 缺少明确拒绝响应）。
+
 ## [0.3.0] - 2026-07-29
 
 ### Added

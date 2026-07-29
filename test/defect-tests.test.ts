@@ -397,15 +397,15 @@ test("prototype.json 中包含 sourceAttribution", async () => {
   assert.ok(prototype.product.sourceAttribution.includes("系统通用推导"), "sourceAttribution 应说明推导来源");
 });
 
-test("package-lock.json 版本为 0.3.0", async () => {
+test("package-lock.json 版本为 0.3.1", async () => {
   const { fileURLToPath } = await import("node:url");
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const lock = await readJson<{ version: string; packages?: Record<string, { version?: string }> }>(path.join(__dirname, "..", "package-lock.json"));
-  assert.equal(lock.version, "0.3.0", "package-lock.json 顶层 version 应为 0.3.0");
-  assert.equal(lock.packages?.[""]?.version, "0.3.0", "package-lock.json packages[''] version 应为 0.3.0");
+  assert.equal(lock.version, "0.3.1", "package-lock.json 顶层 version 应为 0.3.1");
+  assert.equal(lock.packages?.[""]?.version, "0.3.1", "package-lock.json packages[''] version 应为 0.3.1");
 });
 
-test("manifest.version 为 0.3.0", async () => {
+test("manifest.version 为 0.3.1", async () => {
   const output = await mkdtemp(path.join(os.tmpdir(), "pae-version-"));
   const workflow = new ProductDesignWorkflow(new MockStageExecutor());
   
@@ -417,14 +417,14 @@ test("manifest.version 为 0.3.0", async () => {
   
   const manifest = await readJson<{ version: string }>(path.join(output, "manifest.json"));
   
-  assert.equal(manifest.version, "0.3.0", "manifest.version 应为 0.3.0");
+  assert.equal(manifest.version, "0.3.1", "manifest.version 应为 0.3.1");
 });
 
-test("package.json 版本为 0.3.0", async () => {
+test("package.json 版本为 0.3.1", async () => {
   const { fileURLToPath, pathToFileURL } = await import("node:url");
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const pkg = await readJson<{ version: string }>(path.join(__dirname, "..", "package.json"));
-  assert.equal(pkg.version, "0.3.0", "package.json 版本应为 0.3.0");
+  assert.equal(pkg.version, "0.3.1", "package.json 版本应为 0.3.1");
 });
 
 // ===== PAE-030-011: safeSegment 路径安全测试 =====

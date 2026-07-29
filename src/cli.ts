@@ -7,7 +7,7 @@ import { MockStageExecutor } from "./execution/mock-executor.js";
 import { ProductDesignWorkflow } from "./workflow/workflow.js";
 import { prepareRequirementOutput } from "./output/requirement-output.js";
 
-const HELP = `PAE — Product Design AI Engine v0.3.0
+const HELP = `PAE — Product Design AI Engine v0.3.1
 
 用法：
   pae requirement create <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
