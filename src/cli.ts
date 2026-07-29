@@ -2,6 +2,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { MockStageExecutor } from "./execution/mock-executor.js";
 import { ProductDesignWorkflow } from "./workflow/workflow.js";
 import { prepareRequirementOutput } from "./output/requirement-output.js";
@@ -69,6 +70,19 @@ function validateArgs(args: string[]): void {
   }
 }
 
+export function sanitizeSourcePath(sourceArgument: string): string {
+  // Unix/macOS/Linux absolute path
+  if (path.isAbsolute(sourceArgument)) {
+    return path.basename(sourceArgument);
+  }
+  // Windows-style absolute path (e.g., C:\Users\...)
+  if (/^[A-Za-z]:[\\/]/.test(sourceArgument)) {
+    const parts = sourceArgument.split(/[\\/]/);
+    return parts[parts.length - 1] || sourceArgument;
+  }
+  return sourceArgument;
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
@@ -82,11 +96,12 @@ async function main(): Promise<void> {
   const sourceArgument = isRequirementCreate ? args[2] : args[1];
   const sourcePath = path.resolve(sourceArgument);
   const content = await readFile(sourcePath, "utf8");
+  const storedSourcePath = sanitizeSourcePath(sourceArgument);
 
   validateRequirementContent(content, sourcePath);
   validateArgs(args);
 
-  const input = { sourcePath, content, title: getTitle(content, sourcePath) };
+  const input = { sourcePath: storedSourcePath, content, title: getTitle(content, sourcePath) };
 
   const workflow = new ProductDesignWorkflow(new MockStageExecutor());
   let outputDirectory: string;
@@ -155,7 +170,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+const isMainModule = import.meta.url.startsWith("file:")
+  && (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)
+    || path.basename(process.argv[1] ?? "") === path.basename(fileURLToPath(import.meta.url)));
+
+if (isMainModule) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

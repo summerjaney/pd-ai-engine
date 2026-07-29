@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
+import { sanitizeSourcePath } from "../src/cli.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
+
+const execFileAsync = promisify(execFile);
 
 const test = (globalThis as any).test ?? (await import("node:test")).default;
 
@@ -392,15 +397,15 @@ test("prototype.json 中包含 sourceAttribution", async () => {
   assert.ok(prototype.product.sourceAttribution.includes("系统通用推导"), "sourceAttribution 应说明推导来源");
 });
 
-test("package-lock.json 版本为 0.3.1", async () => {
+test("package-lock.json 版本为 0.3.0", async () => {
   const { fileURLToPath } = await import("node:url");
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const lock = await readJson<{ version: string; packages?: Record<string, { version?: string }> }>(path.join(__dirname, "..", "package-lock.json"));
-  assert.equal(lock.version, "0.3.1", "package-lock.json 顶层 version 应为 0.3.1");
-  assert.equal(lock.packages?.[""]?.version, "0.3.1", "package-lock.json packages[''] version 应为 0.3.1");
+  assert.equal(lock.version, "0.3.0", "package-lock.json 顶层 version 应为 0.3.0");
+  assert.equal(lock.packages?.[""]?.version, "0.3.0", "package-lock.json packages[''] version 应为 0.3.0");
 });
 
-test("manifest.version 为 0.3.1", async () => {
+test("manifest.version 为 0.3.0", async () => {
   const output = await mkdtemp(path.join(os.tmpdir(), "pae-version-"));
   const workflow = new ProductDesignWorkflow(new MockStageExecutor());
   
@@ -412,14 +417,14 @@ test("manifest.version 为 0.3.1", async () => {
   
   const manifest = await readJson<{ version: string }>(path.join(output, "manifest.json"));
   
-  assert.equal(manifest.version, "0.3.1", "manifest.version 应为 0.3.1");
+  assert.equal(manifest.version, "0.3.0", "manifest.version 应为 0.3.0");
 });
 
-test("package.json 版本为 0.3.1", async () => {
+test("package.json 版本为 0.3.0", async () => {
   const { fileURLToPath, pathToFileURL } = await import("node:url");
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const pkg = await readJson<{ version: string }>(path.join(__dirname, "..", "package.json"));
-  assert.equal(pkg.version, "0.3.1", "package.json 版本应为 0.3.1");
+  assert.equal(pkg.version, "0.3.0", "package.json 版本应为 0.3.0");
 });
 
 // ===== PAE-030-011: safeSegment 路径安全测试 =====
@@ -952,4 +957,125 @@ test("PAE-030-013: 不同 requirementId 不应误匹配同一需求目录", asyn
   assert.equal(entries.length, 2, "REQ-001 和 REQ-010 应生成两个独立目录");
   assert.ok(entries.includes("REQ-001-leave"), "应包含 REQ-001-leave");
   assert.ok(entries.includes("REQ-010-travel"), "应包含 REQ-010-travel");
+});
+
+// ===== PAE-030-015: sourcePath 个人绝对路径泄露修复测试 =====
+
+test("PAE-030-015: sanitizeSourcePath 将 Unix 绝对路径转为 basename", () => {
+  assert.equal(sanitizeSourcePath("/Users/someone/project/requirement.md"), "requirement.md");
+  assert.equal(sanitizeSourcePath("/home/user/docs/req.md"), "req.md");
+  assert.equal(sanitizeSourcePath("/tmp/test.md"), "test.md");
+});
+
+test("PAE-030-015: sanitizeSourcePath 将 Windows 绝对路径转为 basename", () => {
+  assert.equal(sanitizeSourcePath("C:\\Users\\someone\\project\\requirement.md"), "requirement.md");
+  assert.equal(sanitizeSourcePath("D:\\docs\\req.md"), "req.md");
+});
+
+test("PAE-030-015: sanitizeSourcePath 保留相对路径", () => {
+  assert.equal(sanitizeSourcePath("./requirement.md"), "./requirement.md");
+  assert.equal(sanitizeSourcePath("../docs/req.md"), "../docs/req.md");
+  assert.equal(sanitizeSourcePath("examples/b2b-requirement.md"), "examples/b2b-requirement.md");
+  assert.equal(sanitizeSourcePath("req.md"), "req.md");
+});
+
+test("PAE-030-015: sanitizeSourcePath 输出不包含用户名或用户主目录", () => {
+  const result = sanitizeSourcePath("/Users/summerjaney/Documents/project/req.md");
+  assert.ok(!result.includes("summerjaney"), "不得包含用户名");
+  assert.ok(!result.includes("/Users/"), "不得包含 /Users/");
+  assert.ok(!result.includes("/home/"), "不得包含 /home/");
+});
+
+test("PAE-030-015: requirement create 使用绝对路径时不泄露个人路径", async () => {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), "pae-015-cli-create-"));
+  const reqFile = path.join(tmpDir, "requirement.md");
+  await writeFile(reqFile, "# 测试需求\n\n这是一个测试需求正文。");
+
+  const outputRoot = path.join(tmpDir, "output");
+
+  await execFileAsync("node", [
+    "--import", "tsx",
+    "src/cli.ts",
+    "requirement", "create", reqFile,
+    "--project", "test-proj",
+    "--id", "REQ-001",
+    "--name", "test-req",
+    "--output-root", outputRoot,
+  ], { cwd: process.cwd() });
+
+  const reqJsonPath = path.join(outputRoot, "test-proj", "requirements", "REQ-001-test-req", "requirement.json");
+  const manifestJsonPath = path.join(outputRoot, "test-proj", "requirements", "REQ-001-test-req", "manifest.json");
+
+  const reqJson = await readJson<{ sourcePath: string }>(reqJsonPath);
+  const manifestJson = await readJson<{ input: { sourcePath: string } }>(manifestJsonPath);
+
+  assert.equal(reqJson.sourcePath, "requirement.md", "requirement.json sourcePath 应为 basename");
+  assert.equal(manifestJson.input.sourcePath, "requirement.md", "manifest.json sourcePath 应为 basename");
+  assert.ok(!reqJson.sourcePath.includes("/Users/"), "requirement.json 不得包含 /Users/");
+  assert.ok(!reqJson.sourcePath.includes("/home/"), "requirement.json 不得包含 /home/");
+  assert.ok(!manifestJson.input.sourcePath.includes("/Users/"), "manifest.json 不得包含 /Users/");
+  assert.ok(!manifestJson.input.sourcePath.includes("/home/"), "manifest.json 不得包含 /home/");
+
+  await rm(tmpDir, { recursive: true });
+});
+
+test("PAE-030-015: pae run 使用绝对路径时不泄露个人路径", async () => {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), "pae-015-cli-run-"));
+  const reqFile = path.join(tmpDir, "requirement.md");
+  await writeFile(reqFile, "# 测试需求\n\n这是一个测试需求正文。");
+
+  const outputDir = path.join(tmpDir, "output", "legacy-run");
+
+  await execFileAsync("node", [
+    "--import", "tsx",
+    "src/cli.ts",
+    "run", reqFile,
+    "--out", outputDir,
+    "--project", "test-proj",
+    "--id", "REQ-001",
+    "--name", "test-req",
+  ], { cwd: process.cwd() });
+
+  // run 命令的 outputRoot = path.dirname(resolvedOutput) = path.dirname(outputDir)
+  const outputRoot = path.dirname(outputDir);
+  const reqJsonPath = path.join(outputRoot, "test-proj", "requirements", "REQ-001-test-req", "requirement.json");
+  const manifestJsonPath = path.join(outputRoot, "test-proj", "requirements", "REQ-001-test-req", "manifest.json");
+
+  const reqJson = await readJson<{ sourcePath: string }>(reqJsonPath);
+  const manifestJson = await readJson<{ input: { sourcePath: string } }>(manifestJsonPath);
+
+  assert.equal(reqJson.sourcePath, "requirement.md", "requirement.json sourcePath 应为 basename");
+  assert.equal(manifestJson.input.sourcePath, "requirement.md", "manifest.json sourcePath 应为 basename");
+  assert.ok(!reqJson.sourcePath.includes("/Users/"), "requirement.json 不得包含 /Users/");
+  assert.ok(!manifestJson.input.sourcePath.includes("/Users/"), "manifest.json 不得包含 /Users/");
+
+  await rm(tmpDir, { recursive: true });
+});
+
+test("PAE-030-015: 相对路径在输出中仍正确记录", async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), "pae-015-relative-"));
+  const relativePath = "examples/b2b-requirement.md";
+  const input = { sourcePath: sanitizeSourcePath(relativePath), title: "Test", content: "# Test\n\nbody" };
+
+  await prepareRequirementOutput({
+    outputRoot,
+    projectId: "test-proj",
+    projectName: "Test",
+    productVersion: "1.0.0",
+    requirementId: "REQ-001",
+    requirementName: "test-req",
+    revision: 1,
+  }, input);
+
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  const reqDir = path.join(outputRoot, "test-proj", "requirements", "REQ-001-test-req");
+  await workflow.run(input, reqDir);
+
+  const reqJson = await readJson<{ sourcePath: string }>(path.join(reqDir, "requirement.json"));
+  const manifestJson = await readJson<{ input: { sourcePath: string } }>(path.join(reqDir, "manifest.json"));
+
+  assert.equal(reqJson.sourcePath, "examples/b2b-requirement.md", "相对路径应被保留");
+  assert.equal(manifestJson.input.sourcePath, "examples/b2b-requirement.md", "manifest.json 中相对路径应被保留");
+
+  await rm(outputRoot, { recursive: true });
 });

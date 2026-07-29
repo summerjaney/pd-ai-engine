@@ -150,7 +150,7 @@ export class ProductDesignWorkflow {
 
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
-      version: "0.3.1",
+      version: "0.3.0",
       runId: context.runId,
       startedAt: context.startedAt,
       input: { sourcePath: input.sourcePath, title: input.title },
