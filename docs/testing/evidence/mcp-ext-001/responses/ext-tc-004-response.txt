@@ -1,0 +1,14 @@
+=== EXT-TC-004: Severe Incomplete HTML ===
+Timestamp: 2026-07-30T02:00:00Z
+Tool: submit_page_to_canvas
+Input file: /tmp/mcp-ext-001-tests/inputs/ext-tc-004-severe.html
+Input content: <
+Input size: 1 byte
+Request params:
+  filePath: /tmp/mcp-ext-001-tests/inputs/ext-tc-004-severe.html
+  projectDir: /Users/summerjaney/Documents/Project/pd-ai-engine
+MCP Response:
+❌ 发送失败: CreateNodesFailed
+Expected: Should reject severely broken HTML
+Actual: Rejected with CreateNodesFailed
+Result: PASS

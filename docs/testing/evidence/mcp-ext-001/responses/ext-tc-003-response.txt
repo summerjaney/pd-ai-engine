@@ -1,0 +1,29 @@
+=== EXT-TC-003: Incomplete HTML ===
+Timestamp: 2026-07-30T02:00:00Z
+Tool: submit_page_to_canvas
+Input file: /tmp/mcp-ext-001-tests/inputs/ext-tc-003-incomplete.html
+Input content: <div><span>MCP-EXT-001-INVALID
+Input size: 30 bytes
+Request params:
+  filePath: /tmp/mcp-ext-001-tests/inputs/ext-tc-003-incomplete.html
+  projectDir: /Users/summerjaney/Documents/Project/pd-ai-engine
+MCP Response:
+✅ 设计稿生成已成功完成
+Expected: Should reject incomplete HTML
+Actual: Accepted and returned success
+Result: FAIL - Risk confirmed: MCP accepts incomplete HTML
+
+=== EXT-TC-003 (Round 2, after EXT-TC-001 canvas) ===
+Timestamp: 2026-07-30T03:34:49Z
+Tool: submit_page_to_canvas
+Input file: /Users/summerjaney/Documents/Project/pd-ai-engine/docs/testing/evidence/mcp-ext-001/inputs/ext-tc-003-incomplete.html
+Input content: <div><span>MCP-EXT-001-INVALID
+Canvas state: Contains EXT-TC-001 result (1 page)
+Request params:
+  filePath: /Users/summerjaney/Documents/Project/pd-ai-engine/docs/testing/evidence/mcp-ext-001/inputs/ext-tc-003-incomplete.html
+  projectDir: /Users/summerjaney/Documents/Project/pd-ai-engine
+MCP Response:
+✅ 设计稿生成已成功完成
+Expected: Should reject incomplete HTML
+Actual: Accepted and returned success (confirmed again)
+Result: FAIL - Risk confirmed on clean canvas

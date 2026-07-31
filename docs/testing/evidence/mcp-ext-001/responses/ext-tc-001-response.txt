@@ -1,0 +1,21 @@
+=== EXT-TC-001: Valid Complete HTML ===
+Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+Tool: submit_page_to_canvas
+Input file: /tmp/mcp-ext-001-tests/inputs/ext-tc-001-valid.html
+Input size: 443 bytes
+Request params:
+  filePath: /tmp/mcp-ext-001-tests/inputs/ext-tc-001-valid.html
+  projectDir: /Users/summerjaney/Documents/Project/pd-ai-engine
+MCP Response:
+✅ 设计稿生成已成功完成
+
+=== EXT-TC-001 (Round 2, after canvas cleared) ===
+Timestamp: 2026-07-30T03:31:11Z
+Tool: submit_page_to_canvas
+Input file: /Users/summerjaney/Documents/Project/pd-ai-engine/docs/testing/evidence/mcp-ext-001/inputs/ext-tc-001-valid.html
+Canvas state: Cleared (user confirmed all pages removed)
+Request params:
+  filePath: /Users/summerjaney/Documents/Project/pd-ai-engine/docs/testing/evidence/mcp-ext-001/inputs/ext-tc-001-valid.html
+  projectDir: /Users/summerjaney/Documents/Project/pd-ai-engine
+MCP Response:
+✅ 设计稿生成已成功完成

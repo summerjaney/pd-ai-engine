@@ -1,0 +1,13 @@
+=== EXT-TC-005: Non-existent File Path ===
+Timestamp: 2026-07-30T02:00:00Z
+Tool: submit_page_to_canvas
+Input file: /tmp/mcp-ext-001-tests/inputs/ext-tc-005-nonexistent.html
+Input size: N/A (file does not exist)
+Request params:
+  filePath: /tmp/mcp-ext-001-tests/inputs/ext-tc-005-nonexistent.html
+  projectDir: /Users/summerjaney/Documents/Project/pd-ai-engine
+MCP Response:
+❌ 读取文件失败: ENOENT: no such file or directory, open '/tmp/mcp-ext-001-tests/inputs/ext-tc-005-nonexistent.html'
+Expected: Should reject non-existent file
+Actual: Rejected with clear ENOENT error
+Result: PASS

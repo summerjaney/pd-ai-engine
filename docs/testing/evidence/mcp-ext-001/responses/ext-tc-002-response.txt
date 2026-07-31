@@ -1,0 +1,13 @@
+=== EXT-TC-002: Empty HTML (0 bytes) ===
+Timestamp: 2026-07-30T02:00:00Z
+Tool: submit_page_to_canvas
+Input file: /tmp/mcp-ext-001-tests/inputs/ext-tc-002-empty.html
+Input size: 0 bytes
+Request params:
+  filePath: /tmp/mcp-ext-001-tests/inputs/ext-tc-002-empty.html
+  projectDir: /Users/summerjaney/Documents/Project/pd-ai-engine
+MCP Response:
+参数错误: 请提供非空 code 或 filePath
+Expected: Should reject empty input
+Actual: Rejected with clear error
+Result: PASS
