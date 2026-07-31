@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- v0.4.0 开发中：新增统一 LLM Provider、OpenAI-compatible Provider 与 Mock Provider。
+- 新增按阶段 Prompt、必要上下文传递、结构化输出校验、自动重试和生成元数据。
+- 新增页面结构与 Prototype、Prototype 与 PRD 的基础一致性校验。
+- 新增工作流整体运行状态、失败阶段与后续跳过状态记录。
+- 新增“员工调动管理”真实 LLM 验收输入、执行手册和验收报告模板。
+
+### Release Gate
+
+- 在真实 LLM 端到端验收及人工评审完成前，不升级版本号、不创建 `v0.4.0` Tag 或 Release。
+
 ## [0.3.1] - 2026-07-29
 
 ### Changed

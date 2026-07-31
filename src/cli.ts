@@ -4,6 +4,10 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { MockStageExecutor } from "./execution/mock-executor.js";
+import { LlmWorkflowExecutor } from "./execution/llm-workflow-executor.js";
+import { loadLlmConfig } from "./llm/config.js";
+import { MockLlmProvider } from "./llm/mock-provider.js";
+import { OpenAiProvider } from "./llm/openai-provider.js";
 import { ProductDesignWorkflow } from "./workflow/workflow.js";
 import { prepareRequirementOutput } from "./output/requirement-output.js";
 
@@ -27,6 +31,8 @@ const HELP = `PAE — Product Design AI Engine v0.3.1
   --revision <数字>          需求修订版本，默认 1
   --output-root <目录>       输出根目录，默认 output
   --out <目录>                输出目录（仅 run 命令，默认 output/latest）
+  --provider <名称>          LLM Provider：mock（默认）或 openai
+  --model <名称>             模型名称；openai 模式必填
 `;
 
 function option(args: string[], name: string): string | undefined {
@@ -53,7 +59,7 @@ function validateRequirementContent(content: string, sourcePath: string): void {
 const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
-  "--out", "--help", "-h",
+  "--out", "--provider", "--model", "--help", "-h",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -103,7 +109,25 @@ async function main(): Promise<void> {
 
   const input = { sourcePath: storedSourcePath, content, title: getTitle(content, sourcePath) };
 
-  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  const llmConfig = loadLlmConfig(process.env, {
+    provider: option(args, "--provider"),
+    model: option(args, "--model"),
+  });
+  const fallbackExecutor = new MockStageExecutor();
+  const provider = llmConfig.provider === "openai"
+    ? new OpenAiProvider({
+      apiKey: llmConfig.apiKey!,
+      model: llmConfig.model,
+      baseUrl: llmConfig.baseUrl,
+      timeoutMs: llmConfig.timeoutMs,
+    })
+    : new MockLlmProvider(llmConfig.model);
+  const workflow = new ProductDesignWorkflow(new LlmWorkflowExecutor(
+    provider,
+    fallbackExecutor,
+    llmConfig.maxRetries,
+    llmConfig.timeoutMs,
+  ));
   let outputDirectory: string;
   let context;
   if (isRequirementCreate) {
