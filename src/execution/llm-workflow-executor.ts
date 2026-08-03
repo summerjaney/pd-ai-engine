@@ -19,7 +19,7 @@ export class LlmWorkflowExecutor implements StageExecutor {
     private readonly provider: LlmProvider,
     private readonly fallback: StageExecutor,
     private readonly maxRetries = 1,
-    private readonly timeoutMs = 60_000,
+    private readonly timeoutMs = 180_000,
     private readonly promptBuilder = new PromptBuilder(),
     private readonly validator = new OutputValidator(),
   ) {}

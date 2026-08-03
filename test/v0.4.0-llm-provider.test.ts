@@ -47,6 +47,18 @@ test("TC-040-001/004/005 Mock 默认可用，CLI 配置覆盖环境变量，真�
   );
 });
 
+test("TC-040-022 PAE-040-001 默认超时为 180 秒并支持新旧环境变量", () => {
+  assert.equal(loadLlmConfig({}).timeoutMs, 180_000);
+  assert.equal(loadLlmConfig({ PAE_LLM_TIMEOUT_MS: "240000" }).timeoutMs, 240_000);
+  assert.equal(loadLlmConfig({ PAE_LLM_TIMEOUT: "120000" }).timeoutMs, 120_000);
+  assert.equal(loadLlmConfig({
+    PAE_LLM_TIMEOUT_MS: "240000",
+    PAE_LLM_TIMEOUT: "120000",
+  }).timeoutMs, 240_000);
+  assert.throws(() => loadLlmConfig({ PAE_LLM_TIMEOUT_MS: "0" }), /PAE_LLM_TIMEOUT_MS/);
+  assert.throws(() => loadLlmConfig({ PAE_LLM_TIMEOUT_MS: "invalid" }), /PAE_LLM_TIMEOUT_MS/);
+});
+
 test("TC-040-003 OpenAI 响应转换为统一结果且请求使用配置", async () => {
   let requestBody = "";
   const provider = new OpenAiProvider({

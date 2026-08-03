@@ -19,6 +19,8 @@
 ```bash
 export PAE_LLM_API_KEY="<API Key>"
 export PAE_LLM_MODEL="<模型名称>"
+# 复杂生成阶段建议保留默认 180 秒；需要时可显式调整：
+export PAE_LLM_TIMEOUT_MS="180000"
 # 仅非默认兼容接口需要设置：
 # export PAE_LLM_BASE_URL="https://example.com/v1"
 
@@ -84,6 +86,7 @@ git diff --check
 
 ```bash
 unset PAE_LLM_API_KEY
+unset PAE_LLM_TIMEOUT_MS
 ```
 
 提交前确认输出目录未被纳入 Git，并再次搜索敏感信息。

@@ -14,11 +14,13 @@ export interface LlmConfigOverrides {
   model?: string;
 }
 
-function positiveInteger(value: string | undefined, fallback: number, name: string): number {
+const DEFAULT_LLM_TIMEOUT_MS = 180_000;
+
+function positiveInteger(value: string | undefined, fallback: number, name: string, allowZero = true): number {
   if (value === undefined) return fallback;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0 || (name === "PAE_LLM_TIMEOUT" && parsed === 0)) {
-    throw new Error(`${name} 必须是${name === "PAE_LLM_TIMEOUT" ? "大于 0" : "大于等于 0"}的整数。`);
+  if (!Number.isInteger(parsed) || parsed < 0 || (!allowZero && parsed === 0)) {
+    throw new Error(`${name} 必须是${allowZero ? "大于等于 0" : "大于 0"}的整数。`);
   }
   return parsed;
 }
@@ -45,7 +47,14 @@ export function loadLlmConfig(
     model: model.trim(),
     apiKey,
     baseUrl: (env.PAE_LLM_BASE_URL ?? "https://api.openai.com/v1").replace(/\/+$/, ""),
-    timeoutMs: positiveInteger(env.PAE_LLM_TIMEOUT, 60_000, "PAE_LLM_TIMEOUT"),
+    timeoutMs: positiveInteger(
+      env.PAE_LLM_TIMEOUT_MS ?? env.PAE_LLM_TIMEOUT,
+      DEFAULT_LLM_TIMEOUT_MS,
+      env.PAE_LLM_TIMEOUT_MS === undefined && env.PAE_LLM_TIMEOUT !== undefined
+        ? "PAE_LLM_TIMEOUT"
+        : "PAE_LLM_TIMEOUT_MS",
+      false,
+    ),
     maxRetries: positiveInteger(env.PAE_LLM_MAX_RETRIES, 1, "PAE_LLM_MAX_RETRIES"),
   };
 }
