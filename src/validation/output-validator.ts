@@ -98,7 +98,7 @@ export class OutputValidator {
       }
     }
     for (const rule of prototype.rules) {
-      const missingPages = rule.appliesTo.filter((pageId) => !pageIds.has(pageId));
+      const missingPages = (rule.appliesTo ?? []).filter((pageId) => !pageIds.has(pageId));
       if (missingPages.length > 0) {
         issues.push({
           code: "inconsistent-artifact",

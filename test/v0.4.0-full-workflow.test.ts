@@ -7,6 +7,7 @@ import type { LlmGenerationRequest, LlmGenerationResponse, LlmProvider } from ".
 import type { PrototypeDsl, StageId } from "../src/domain/types.js";
 import { LlmWorkflowExecutor } from "../src/execution/llm-workflow-executor.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
+import { OutputValidator } from "../src/validation/output-validator.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 
 const prototype: PrototypeDsl = {
@@ -34,6 +35,18 @@ const prototype: PrototypeDsl = {
     },
   },
 };
+
+test("TC-040-025 PAE-040-002 Prototype 规则缺少 appliesTo 时按空数组校验", () => {
+  const malformedPrototype = structuredClone(prototype) as PrototypeDsl & {
+    rules: Array<{ id: string; description: string; appliesTo?: string[] }>;
+  };
+  delete malformedPrototype.rules[0].appliesTo;
+
+  const result = new OutputValidator().validatePrototype(malformedPrototype as PrototypeDsl);
+
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.issues, []);
+});
 
 class RecordingProvider implements LlmProvider {
   readonly requests: LlmGenerationRequest[] = [];
