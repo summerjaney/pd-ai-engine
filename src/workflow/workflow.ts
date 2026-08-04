@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
 import {
@@ -34,8 +34,22 @@ const MANAGED_OUTPUT_PATHS = [
   "08-prototype-confirmation.json",
   "09-prd.md",
   "10-review.md",
+  "99-debug",
   "manifest.json",
 ] as const;
+
+async function collectDebugArtifacts(outputDirectory: string): Promise<string[]> {
+  const debugDirectory = path.join(outputDirectory, "99-debug");
+  try {
+    const entries = await readdir(debugDirectory);
+    return entries
+      .filter((entry) => entry.endsWith(".json"))
+      .sort()
+      .map((entry) => `99-debug/${entry}`);
+  } catch {
+    return [];
+  }
+}
 
 export class ProductDesignWorkflow {
   constructor(private readonly executor: StageExecutor) {}
@@ -50,6 +64,7 @@ export class ProductDesignWorkflow {
       artifacts: {},
       requirement,
       stageResults: [],
+      outputDirectory,
     };
 
     await mkdir(outputDirectory, { recursive: true });
@@ -207,6 +222,7 @@ export class ProductDesignWorkflow {
           type: "file",
         };
       }),
+      debugArtifacts: await collectDebugArtifacts(outputDirectory),
     }, null, 2);
 
     await writeFile(path.join(outputDirectory, "manifest.json"), `${manifestContent}\n`, "utf8");

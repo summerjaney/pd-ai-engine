@@ -183,6 +183,7 @@ export interface WorkflowContext {
   artifacts: WorkflowArtifacts;
   requirement?: RequirementContext;
   stageResults?: StageResultWithStatus[];
+  outputDirectory?: string;
 }
 
 export interface StageResult {

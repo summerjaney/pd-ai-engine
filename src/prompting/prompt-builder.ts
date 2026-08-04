@@ -42,7 +42,7 @@ const STAGE_INSTRUCTIONS: Record<StageId, string> = {
   "page-structure": "输出 Markdown，明确页面清单、页面模式、入口、主要操作及页面间关系。",
   prototype: [
     "只输出一个合法 JSON 对象，不要使用 Markdown 代码围栏或附加说明。",
-    "JSON 必须符合 PrototypeDsl：schemaVersion 固定为 0.2；包含 product、navigation、pages、rules、transitions、designTokens。",
+    "JSON 必须符合下文 PrototypeDsl JSON Schema 约束，字段名、层级和引用关系必须完全一致。",
     "页面 pattern 只能是 list、form、detail；字段 type 只能是 text、textarea、select、datetime；操作 kind 只能是 primary、secondary、danger。",
   ].join("\n"),
   mastergo: "根据 Prototype DSL 生成 MasterGo 适配数据。本阶段通常由确定性适配器执行。",
@@ -51,6 +51,64 @@ const STAGE_INSTRUCTIONS: Record<StageId, string> = {
   review: "输出 Markdown 评审报告，检查需求、Prototype DSL 与 PRD 的完整性和一致性，列出结论、问题、严重程度、位置及修复建议。",
 };
 
+const PROTOTYPE_DSL_SCHEMA = `# PrototypeDsl JSON Schema 约束（必须严格遵守）
+
+只允许使用下列字段名，不得新增、改名或使用下划线/缩写变体。
+禁止使用 roles、groups、items、target_page、page_id、source_page_id 等非标准字段。
+navigation、transitions、rules 中的页面引用字段必须与 pages[].id 完全匹配。
+
+## 顶层结构
+- schemaVersion: 字符串，固定为 "0.2"
+- product: 对象
+  - name: 字符串
+  - description: 字符串
+  - sourceAttribution: 可选字符串
+- navigation: 数组，每个元素
+  - label: 字符串
+  - pageId: 字符串（必须等于 pages 中某个页面的 id）
+  - roles: 可选字符串数组
+- pages: 非空数组，每个元素
+  - id: 字符串（页面唯一标识，被 navigation.pageId / transitions.sourcePageId / transitions.targetPageId / rules.appliesTo 引用）
+  - name: 字符串
+  - route: 字符串
+  - pattern: "list" | "form" | "detail"
+  - fields: 数组，每个元素
+    - id: 字符串
+    - label: 字符串
+    - type: "text" | "textarea" | "select" | "datetime"
+    - required: 布尔
+  - actions: 数组，每个元素
+    - id: 字符串
+    - label: 字符串
+    - kind: "primary" | "secondary" | "danger"
+- rules: 数组，每个元素
+  - id: 字符串
+  - description: 字符串
+  - appliesTo: 字符串数组（每个值必须等于 pages 中某个页面的 id）
+- transitions: 数组，每个元素
+  - sourcePageId: 字符串（必须等于 pages 中某个页面的 id）
+  - triggerType: "navigation" | "action"
+  - triggerId: 字符串
+  - triggerLabel: 字符串
+  - targetPageId: 字符串（必须等于 pages 中某个页面的 id）
+- designTokens: 对象
+  - colors: 字符串键值对
+  - spacing: 数值键值对
+  - radius: 数值键值对
+  - typography: 对象
+    - fontSize: 数值键值对
+    - fontWeight: 数值键值对
+    - lineHeight: 数值键值对
+
+## 命名规范
+- 所有字段名使用 camelCase，不得使用 snake_case（如 page_id、target_page 均非法）。
+- 不得用 roles、groups、items、children、target 等字段替代上述结构。
+- 不得在 navigation、pages、transitions、rules 之外自行新增顶层字段。
+
+## 引用一致性
+- navigation[i].pageId、transitions[i].sourcePageId、transitions[i].targetPageId、rules[i].appliesTo[] 必须在 pages[].id 中存在。
+- 不允许引用未定义的页面，也不允许出现空字符串或 null 引用。`;
+
 export class PromptBuilder {
   buildStagePrompt(stage: StageId, context: Readonly<WorkflowContext>): StagePrompt {
     const previousArtifacts = STAGE_DEPENDENCIES[stage]
@@ -58,6 +116,8 @@ export class PromptBuilder {
       .filter(([, artifact]) => artifact !== undefined)
       .map(([id, artifact]) => `## ${id}\n${this.serializeArtifact(artifact)}`)
       .join("\n\n");
+
+    const schemaBlock = stage === "prototype" ? PROTOTYPE_DSL_SCHEMA : "";
 
     return {
       version: PROMPT_VERSION,
@@ -72,8 +132,13 @@ export class PromptBuilder {
         "# 原始需求",
         context.input.content.trim(),
         previousArtifacts ? `# 前序成果物\n${previousArtifacts}` : "",
+        schemaBlock,
       ].filter(Boolean).join("\n\n"),
     };
+  }
+
+  prototypeSchemaConstraints(): string {
+    return PROTOTYPE_DSL_SCHEMA;
   }
 
   promptVersion(): string {
