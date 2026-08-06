@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前 `v0.3.1 MVP` 聚焦 B 端产品设计交付链路，并坚持 **Prototype First**。v0.3.0 新增 **Requirement-centric Output Model（以需求为中心的成果物模型）**：项目是长期容器，需求是核心迭代单元。
+当前正式版本为 `v0.4.0`，聚焦 B 端产品设计交付链路，并坚持 **Prototype First**。本版本在 Requirement-centric Output Model 基础上新增真实 LLM 执行链路、结构化输出校验、自动重试、失败诊断与统一版本元数据。
 
 ## 成果物组织模型
 
@@ -98,7 +98,7 @@ npm run dev -- run path/to/requirement.md --out output/legacy-example
 ```text
 Product Workflow   固定阶段、顺序、上下文和产物契约
 Knowledge Engine   B 端产品设计规则与模式（MVP 为轻量规则集）
-Execution Engine   阶段执行器（MVP 默认 Mock，可替换为 LLM）
+Execution Engine   阶段执行器（支持 Mock 与 OpenAI-compatible LLM Provider）
 ```
 
 核心知识关系：
@@ -128,10 +128,9 @@ MVP 暂不包含：多 Agent、MCP、插件市场、企业知识库、开放 API
 
 ## 下一步
 
-1. 增加真实 LLM 执行器与结构化输出校验。
-2. 完善 B 端 Pattern / Component / Rule 知识数据。
-3. 将 `mastergo-data.json` 对接到真实 MasterGo 插件或设计工具写入能力。
-4. 用真实产品需求回归各阶段质量。
+1. 完善 B 端 Pattern / Component / Rule 知识数据。
+2. 将 `mastergo-data.json` 对接到真实 MasterGo 插件或设计工具写入能力。
+3. 扩大真实产品需求回归范围，持续提升各阶段生成质量。
 
 ## 许可证
 
