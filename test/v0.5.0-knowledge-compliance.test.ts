@@ -74,6 +74,22 @@ test("TC-050-024: error 级知识规则失败会阻断后续阶段", async () =>
   const manifest = JSON.parse(await readFile(path.join(output, "manifest.json"), "utf8"));
   assert.equal(manifest.stages.find((stage: { id: string }) => stage.id === "prototype").status, "failed");
   assert.equal(manifest.stages.find((stage: { id: string }) => stage.id === "prd").status, "skipped");
+  assert.deepEqual(manifest.debugArtifacts, [
+    "99-debug/prototype-compliance.json",
+    "99-debug/prototype-rejected.json",
+  ]);
+
+  const rejected = JSON.parse(await readFile(path.join(output, "99-debug/prototype-rejected.json"), "utf8")) as PrototypeDsl;
+  const rejectedStatusPages = rejected.pages.filter((page) => page.pattern === "list" || page.pattern === "detail");
+  assert.ok(rejectedStatusPages.length > 0);
+  assert.ok(rejectedStatusPages.every((page) => page.fields.length === 0));
+
+  const compliance = JSON.parse(await readFile(path.join(output, "99-debug/prototype-compliance.json"), "utf8"));
+  assert.equal(compliance.valid, false);
+  assert.equal(
+    compliance.items.find((item: { knowledgeId: string }) => item.knowledgeId === "rule.status-visible").status,
+    "failed",
+  );
 });
 
 test("TC-050-025: Review 输出知识合规矩阵", async () => {
