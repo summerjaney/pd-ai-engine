@@ -1,4 +1,5 @@
 import { B2B_RULES } from "../knowledge/catalog.js";
+import { KnowledgeComplianceValidator } from "../knowledge/compliance-validator.js";
 import type {
   PrototypeDsl,
   StageExecutor,
@@ -160,7 +161,7 @@ function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
         ]
       : pattern === "detail"
       ? [
-          { id: "withdraw", label: "撤回", kind: "danger" as const },
+          { id: "withdraw", label: "撤回", kind: "danger" as const, confirmation: true },
         ]
       : [
           { id: "create", label: "新建", kind: "primary" as const },
@@ -586,13 +587,16 @@ flowchart TB
         const confirmation = context.artifacts["prototype-confirmation"];
         if (!prototype) throw new Error("Review 阶段必须依赖 Prototype DSL");
         const issues = runReviewChecks(prototype, mastergo, confirmation);
+        const complianceMatrix = context.knowledgeCompliance
+          ? new KnowledgeComplianceValidator().formatMatrix(context.knowledgeCompliance)
+          : "未启用知识合规校验。";
         const conclusion = issues.length === 0
           ? "通过全部自动检查，可进入人工评审。"
           : `发现 ${issues.length} 个问题，请修复后再进入人工评审。`;
         const issuesBody = issues.length === 0
           ? "无"
           : issues.map((issue, idx) => `### 问题 ${idx + 1}\n\n- **问题类型**：${issue.type}\n- **问题位置**：${issue.location}\n- **严重程度**：${issue.severity === "error" ? "错误" : "警告"}\n- **对应原始需求**：${issue.relatedRequirement}\n- **修复建议**：${issue.suggestion}`).join("\n\n");
-        artifact = md("设计评审", `## 结论\n\n${conclusion}\n\n## 自动检查发现的问题\n\n${issuesBody}\n\n## 已检查规则\n\n${B2B_RULES.map((rule) => `- ${rule.name}：${rule.description}`).join("\n")}\n\n## 人工评审项\n\n- 角色权限是否符合实际组织规则。\n- 审批状态与异常分支是否完整。\n- Prototype DSL、MasterGo 原型与 PRD 是否一致。\n- MasterGo 交互与 DSL 跳转是否一致。`);
+        artifact = md("设计评审", `## 结论\n\n${conclusion}\n\n## 自动检查发现的问题\n\n${issuesBody}\n\n## 知识合规矩阵\n\n${complianceMatrix}\n\n## 已检查规则\n\n${B2B_RULES.map((rule) => `- ${rule.name}：${rule.description}`).join("\n")}\n\n## 人工评审项\n\n- 角色权限是否符合实际组织规则。\n- 审批状态与异常分支是否完整。\n- Prototype DSL、MasterGo 原型与 PRD 是否一致。\n- MasterGo 交互与 DSL 跳转是否一致。`);
         break;
       }
     }

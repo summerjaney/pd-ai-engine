@@ -39,6 +39,7 @@ export interface PrototypeAction {
   id: string;
   label: string;
   kind: "primary" | "secondary" | "danger";
+  confirmation?: boolean;
 }
 
 export interface PrototypePage {
@@ -185,6 +186,7 @@ export interface WorkflowContext {
   stageResults?: StageResultWithStatus[];
   outputDirectory?: string;
   knowledge?: import("../knowledge/types.js").WorkflowKnowledgeContext;
+  knowledgeCompliance?: import("../knowledge/compliance-validator.js").KnowledgeComplianceResult;
 }
 
 export interface StageResult {

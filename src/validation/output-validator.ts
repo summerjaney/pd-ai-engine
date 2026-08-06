@@ -155,6 +155,9 @@ export class OutputValidator {
             const actual = action.kind === undefined ? "缺失" : JSON.stringify(action.kind);
             issues.push({ code: "invalid-structure", message: `${actionPath}.kind 必须为 primary/secondary/danger，实际为 ${actual}。` });
           }
+          if (action.confirmation !== undefined && typeof action.confirmation !== "boolean") {
+            issues.push({ code: "invalid-structure", message: `${actionPath}.confirmation 必须为布尔值。` });
+          }
         });
       }
     });

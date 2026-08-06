@@ -50,7 +50,7 @@ const STAGE_INSTRUCTIONS: Record<StageId, string> = {
   mastergo: "根据 Prototype DSL 生成 MasterGo 适配数据。本阶段通常由确定性适配器执行。",
   "prototype-confirmation": "记录真实原型确认状态。本阶段不得由模型代替用户作出确认。",
   prd: "输出 Markdown PRD。页面、字段、操作和跳转必须以 Prototype DSL 为准，至少包含产品目标、角色、流程、页面需求、业务规则和异常处理。",
-  review: "输出 Markdown 评审报告，检查需求、Prototype DSL 与 PRD 的完整性和一致性，列出结论、问题、严重程度、位置及修复建议。",
+  review: "输出 Markdown 评审报告，检查需求、Prototype DSL 与 PRD 的完整性和一致性，列出结论、问题、严重程度、位置及修复建议，并包含知识合规矩阵。",
 };
 
 const STAGE_KNOWLEDGE_TYPES: Record<StageId, readonly KnowledgeType[]> = {
@@ -96,6 +96,7 @@ navigation、transitions、rules 中的页面引用字段必须与 pages[].id �
     - id: 字符串
     - label: 字符串
     - kind: "primary" | "secondary" | "danger"
+    - confirmation: 可选布尔值；危险或不可逆操作必须为 true
 - rules: 数组，每个元素
   - id: 字符串
   - description: 字符串

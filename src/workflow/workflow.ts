@@ -5,6 +5,7 @@ import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, t
 import { readEngineVersion } from "../version.js";
 import { KnowledgeLoader } from "../knowledge/loader.js";
 import { KnowledgeSelector } from "../knowledge/selector.js";
+import { KnowledgeComplianceValidator } from "../knowledge/compliance-validator.js";
 import {
   buildMasterGoData,
   buildPrototypeManifest,
@@ -59,6 +60,7 @@ export class ProductDesignWorkflow {
     private readonly executor: StageExecutor,
     private readonly knowledgeLoader = new KnowledgeLoader(),
     private readonly knowledgeSelector = new KnowledgeSelector(),
+    private readonly complianceValidator = new KnowledgeComplianceValidator(),
   ) {}
 
   async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext): Promise<WorkflowContext> {
@@ -110,6 +112,19 @@ export class ProductDesignWorkflow {
       let result;
       try {
         result = await this.executor.execute(stage, context);
+        if (stage === "prototype") {
+          const compliance = this.complianceValidator.validatePrototype(
+            result.artifact as PrototypeDsl,
+            context.knowledge!.catalog,
+            context.knowledge!.selection,
+          );
+          context.knowledgeCompliance = compliance;
+          if (!compliance.valid) throw new Error(this.complianceValidator.formatErrors(compliance));
+        }
+        if (stage === "review" && context.knowledgeCompliance && typeof result.artifact === "string"
+          && !result.artifact.includes("## 知识合规矩阵")) {
+          result.artifact = `${result.artifact.trim()}\n\n## 知识合规矩阵\n\n${this.complianceValidator.formatMatrix(context.knowledgeCompliance)}\n`;
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         stages.push({ id: stage, status: "failed", error: errorMessage });
@@ -208,6 +223,7 @@ export class ProductDesignWorkflow {
       knowledge: {
         knowledgeCatalogVersion: context.knowledge.selection.catalogVersion,
         selectedKnowledge: context.knowledge.selection.selectedKnowledge,
+        compliance: context.knowledgeCompliance,
       },
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {
