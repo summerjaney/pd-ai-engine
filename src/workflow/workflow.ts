@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
+import { STAGE_IDS, type KnowledgeMode, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
 import { readEngineVersion } from "../version.js";
 import { KnowledgeLoader } from "../knowledge/loader.js";
 import { KnowledgeSelector } from "../knowledge/selector.js";
@@ -63,7 +63,7 @@ export class ProductDesignWorkflow {
     private readonly complianceValidator = new KnowledgeComplianceValidator(),
   ) {}
 
-  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext): Promise<WorkflowContext> {
+  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode } = {}): Promise<WorkflowContext> {
     this.validateInput(input);
     
     const context: WorkflowContext = {
@@ -76,9 +76,13 @@ export class ProductDesignWorkflow {
       outputDirectory,
     };
     const knowledgeCatalog = await this.knowledgeLoader.load();
+    const knowledgeMode = options.knowledgeMode ?? "auto";
     context.knowledge = {
       catalog: knowledgeCatalog,
-      selection: this.knowledgeSelector.select(knowledgeCatalog, {
+      selection: knowledgeMode === "off" ? {
+        catalogVersion: knowledgeCatalog.version,
+        selectedKnowledge: [],
+      } : this.knowledgeSelector.select(knowledgeCatalog, {
         text: input.content,
         metadata: requirement ? {
           projectName: requirement.projectName,
@@ -221,6 +225,7 @@ export class ProductDesignWorkflow {
       input: { sourcePath: input.sourcePath, title: input.title },
       requirement,
       knowledge: {
+        mode: knowledgeMode,
         knowledgeCatalogVersion: context.knowledge.selection.catalogVersion,
         selectedKnowledge: context.knowledge.selection.selectedKnowledge,
         compliance: context.knowledgeCompliance,

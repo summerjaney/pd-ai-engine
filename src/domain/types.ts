@@ -189,6 +189,8 @@ export interface WorkflowContext {
   knowledgeCompliance?: import("../knowledge/compliance-validator.js").KnowledgeComplianceResult;
 }
 
+export type KnowledgeMode = "auto" | "off";
+
 export interface StageResult {
   stage: StageId;
   artifact: string | PrototypeDsl | {

@@ -34,6 +34,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --out <目录>                输出目录（仅 run 命令，默认 output/latest）
   --provider <名称>          LLM Provider：mock（默认）或 openai
   --model <名称>             模型名称；openai 模式必填
+  --knowledge-mode <模式>   知识模式：auto（默认）或 off（A/B 对照基线）
 `;
 
 async function buildHelp(): Promise<string> {
@@ -65,7 +66,7 @@ function validateRequirementContent(content: string, sourcePath: string): void {
 const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
-  "--out", "--provider", "--model", "--help", "-h",
+  "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -114,6 +115,10 @@ async function main(): Promise<void> {
   validateArgs(args);
 
   const input = { sourcePath: storedSourcePath, content, title: getTitle(content, sourcePath) };
+  const knowledgeMode = option(args, "--knowledge-mode") ?? "auto";
+  if (knowledgeMode !== "auto" && knowledgeMode !== "off") {
+    throw new Error("--knowledge-mode 仅支持 auto 或 off。");
+  }
 
   const llmConfig = loadLlmConfig(process.env, {
     provider: option(args, "--provider"),
@@ -156,7 +161,7 @@ async function main(): Promise<void> {
       revision,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context);
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode });
   } else {
     const outputPath = option(args, "--out") ?? "output/latest";
     const resolvedOutput = path.resolve(outputPath);
@@ -183,7 +188,7 @@ async function main(): Promise<void> {
       revision: option(args, "--revision") !== undefined ? Number(option(args, "--revision")) : undefined,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context);
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode });
   }
 
   const failedStages = context.stageResults?.filter(s => s.status === "failed") || [];

@@ -43,3 +43,4 @@
 - TC-050-029、030：必须使用真实 API Key 单独执行。
 - TC-050-032：必须由产品经理人工评审。
 - TC-050-034：仅在真实验收、人工评审和阻断缺陷关闭后执行。
+- 真实验收命令与证据要求见 `real-llm-acceptance-runbook.md`；人工评分使用 `comparison-review-template.md`。
