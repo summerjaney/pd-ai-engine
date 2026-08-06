@@ -1,0 +1,1 @@
+{"id":"rule.destructive-confirmation","type":"rule","name":"危险操作确认","description":"不可逆或高影响操作必须有确认机制。","version":"1.0.0","status":"active","tags":["危险操作","删除","停用","撤回","确认"],"appliesTo":["danger-action"],"references":[],"severity":"warning","checkType":"prototype","assertion":{"operator":"requires-confirmation","path":"pages[].actions[]"}}

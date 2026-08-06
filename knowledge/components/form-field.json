@@ -1,0 +1,1 @@
+{"id":"component.form-field","type":"component","name":"表单字段","description":"展示或编辑带有标签、类型和校验要求的业务字段。","version":"1.0.0","status":"active","tags":["字段","表单","必填"],"appliesTo":["form","detail"],"references":[{"id":"rule.required-field","type":"rule"},{"id":"rule.error-feedback","type":"rule"}]}

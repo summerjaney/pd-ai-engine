@@ -1,3 +1,5 @@
+import type { RuleKnowledge } from "./types.js";
+
 export interface KnowledgeRule {
   id: string;
   name: string;
@@ -32,3 +34,7 @@ export const KNOWLEDGE_RELATIONS = [
   "Component references Rule",
   "Rule constrains Component",
 ] as const;
+
+export function toLegacyRule(rule: RuleKnowledge): KnowledgeRule {
+  return { id: rule.id, name: rule.name, description: rule.description, severity: rule.severity };
+}

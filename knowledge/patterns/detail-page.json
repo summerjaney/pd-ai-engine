@@ -1,0 +1,1 @@
+{"id":"pattern.detail-page","type":"pattern","name":"详情页","description":"展示单条业务数据、当前状态和可执行操作。","version":"1.0.0","status":"active","tags":["详情","查看"],"appliesTo":["detail"],"references":[{"id":"component.form-field","type":"component"},{"id":"component.status-tag","type":"component"},{"id":"component.action-bar","type":"component"}]}

@@ -1,0 +1,1 @@
+{"id":"rule.permission-visibility","type":"rule","name":"权限可见性","description":"页面、字段和操作应根据角色权限控制可见性。","version":"1.0.0","status":"active","tags":["权限","角色","可见"],"appliesTo":["page","action"],"references":[],"severity":"error","checkType":"manual","assertion":{"operator":"exists","path":"authorization"}}

@@ -1,0 +1,1 @@
+{"id":"rule.list-search","type":"rule","name":"列表检索","description":"管理列表应提供与高频任务匹配的查询条件和重置能力。","version":"1.0.0","status":"active","tags":["列表","查询","重置"],"appliesTo":["list"],"references":[],"severity":"warning","checkType":"manual","assertion":{"operator":"exists","path":"filter-panel"}}

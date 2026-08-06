@@ -1,0 +1,1 @@
+{"id":"pattern.batch-operation","type":"pattern","name":"批量操作","description":"对列表中多条选中数据执行统一操作。","version":"1.0.0","status":"active","tags":["批量","多选"],"appliesTo":["list"],"references":[{"id":"component.data-table","type":"component"},{"id":"component.action-bar","type":"component"},{"id":"component.confirmation-dialog","type":"component"}]}

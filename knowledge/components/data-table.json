@@ -1,0 +1,1 @@
+{"id":"component.data-table","type":"component","name":"数据表格","description":"以列结构展示业务数据并承载行级操作。","version":"1.0.0","status":"active","tags":["表格","列表","多选"],"appliesTo":["list"],"references":[{"id":"rule.status-visible","type":"rule"},{"id":"rule.empty-state","type":"rule"},{"id":"rule.permission-visibility","type":"rule"}]}

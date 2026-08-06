@@ -1,0 +1,1 @@
+{"id":"component.confirmation-dialog","type":"component","name":"确认弹窗","description":"在高影响或不可逆操作执行前要求用户确认。","version":"1.0.0","status":"active","tags":["确认","弹窗","删除","停用","撤回"],"appliesTo":["action"],"references":[{"id":"rule.destructive-confirmation","type":"rule"}]}

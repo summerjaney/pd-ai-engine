@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "0.5",
+  "version": "0.5.0",
+  "entries": [
+    "businesses/base-data-management.json",
+    "businesses/workflow-business.json",
+    "patterns/list-page.json",
+    "patterns/form-page.json",
+    "patterns/detail-page.json",
+    "patterns/status-transition.json",
+    "patterns/batch-operation.json",
+    "components/filter-panel.json",
+    "components/data-table.json",
+    "components/pagination.json",
+    "components/form-field.json",
+    "components/status-tag.json",
+    "components/confirmation-dialog.json",
+    "components/action-bar.json",
+    "rules/required-field.json",
+    "rules/destructive-confirmation.json",
+    "rules/status-visible.json",
+    "rules/permission-visibility.json",
+    "rules/list-search.json",
+    "rules/empty-state.json",
+    "rules/error-feedback.json"
+  ]
+}
