@@ -69,3 +69,25 @@ export interface KnowledgeCatalog {
   entities: KnowledgeEntity[];
   byId: ReadonlyMap<string, KnowledgeEntity>;
 }
+
+export type KnowledgeSelectionSource = "automatic" | "explicit";
+
+export interface SelectedKnowledge {
+  knowledgeId: string;
+  version: string;
+  type: KnowledgeType;
+  source: KnowledgeSelectionSource;
+  reason: string;
+  score: number;
+}
+
+export interface KnowledgeSelectionInput {
+  text: string;
+  metadata?: Record<string, string | string[]>;
+  explicitKnowledgeIds?: string[];
+}
+
+export interface KnowledgeSelectionResult {
+  catalogVersion: string;
+  selectedKnowledge: SelectedKnowledge[];
+}
