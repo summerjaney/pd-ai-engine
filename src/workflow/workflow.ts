@@ -123,7 +123,23 @@ export class ProductDesignWorkflow {
             context.knowledge!.selection,
           );
           context.knowledgeCompliance = compliance;
-          if (!compliance.valid) throw new Error(this.complianceValidator.formatErrors(compliance));
+          if (!compliance.valid) {
+            const debugDirectory = path.join(outputDirectory, "99-debug");
+            await mkdir(debugDirectory, { recursive: true });
+            await Promise.all([
+              writeFile(
+                path.join(debugDirectory, "prototype-rejected.json"),
+                `${JSON.stringify(result.artifact, null, 2)}\n`,
+                "utf8",
+              ),
+              writeFile(
+                path.join(debugDirectory, "prototype-compliance.json"),
+                `${JSON.stringify(compliance, null, 2)}\n`,
+                "utf8",
+              ),
+            ]);
+            throw new Error(this.complianceValidator.formatErrors(compliance));
+          }
         }
         if (stage === "review" && context.knowledgeCompliance && typeof result.artifact === "string"
           && !result.artifact.includes("## 知识合规矩阵")) {
