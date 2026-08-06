@@ -184,6 +184,7 @@ export interface WorkflowContext {
   requirement?: RequirementContext;
   stageResults?: StageResultWithStatus[];
   outputDirectory?: string;
+  knowledge?: import("../knowledge/types.js").WorkflowKnowledgeContext;
 }
 
 export interface StageResult {
@@ -206,6 +207,7 @@ export interface StageResult {
     generatedAt: string;
     attempts: number;
     validationStatus: "passed" | "failed";
+    knowledge?: import("../knowledge/trace.js").KnowledgeTrace;
   };
 }
 

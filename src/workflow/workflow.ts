@@ -3,6 +3,8 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
 import { readEngineVersion } from "../version.js";
+import { KnowledgeLoader } from "../knowledge/loader.js";
+import { KnowledgeSelector } from "../knowledge/selector.js";
 import {
   buildMasterGoData,
   buildPrototypeManifest,
@@ -53,7 +55,11 @@ async function collectDebugArtifacts(outputDirectory: string): Promise<string[]>
 }
 
 export class ProductDesignWorkflow {
-  constructor(private readonly executor: StageExecutor) {}
+  constructor(
+    private readonly executor: StageExecutor,
+    private readonly knowledgeLoader = new KnowledgeLoader(),
+    private readonly knowledgeSelector = new KnowledgeSelector(),
+  ) {}
 
   async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext): Promise<WorkflowContext> {
     this.validateInput(input);
@@ -66,6 +72,17 @@ export class ProductDesignWorkflow {
       requirement,
       stageResults: [],
       outputDirectory,
+    };
+    const knowledgeCatalog = await this.knowledgeLoader.load();
+    context.knowledge = {
+      catalog: knowledgeCatalog,
+      selection: this.knowledgeSelector.select(knowledgeCatalog, {
+        text: input.content,
+        metadata: requirement ? {
+          projectName: requirement.projectName,
+          requirementName: requirement.requirementName,
+        } : undefined,
+      }),
     };
 
     await mkdir(outputDirectory, { recursive: true });
@@ -188,6 +205,10 @@ export class ProductDesignWorkflow {
       status: hasFailed ? "failed" : "completed",
       input: { sourcePath: input.sourcePath, title: input.title },
       requirement,
+      knowledge: {
+        knowledgeCatalogVersion: context.knowledge.selection.catalogVersion,
+        selectedKnowledge: context.knowledge.selection.selectedKnowledge,
+      },
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {
           return { id: stage.id, status: "skipped" };

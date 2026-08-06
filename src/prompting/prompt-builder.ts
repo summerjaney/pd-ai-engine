@@ -1,6 +1,8 @@
 import type { StageId, WorkflowContext } from "../domain/types.js";
+import { createStageKnowledgeTrace, type KnowledgeTrace } from "../knowledge/trace.js";
+import type { KnowledgeEntity, KnowledgeType } from "../knowledge/types.js";
 
-export const PROMPT_VERSION = "0.4.0";
+export const PROMPT_VERSION = "0.5.0";
 
 export interface StagePrompt {
   version: string;
@@ -49,6 +51,19 @@ const STAGE_INSTRUCTIONS: Record<StageId, string> = {
   "prototype-confirmation": "记录真实原型确认状态。本阶段不得由模型代替用户作出确认。",
   prd: "输出 Markdown PRD。页面、字段、操作和跳转必须以 Prototype DSL 为准，至少包含产品目标、角色、流程、页面需求、业务规则和异常处理。",
   review: "输出 Markdown 评审报告，检查需求、Prototype DSL 与 PRD 的完整性和一致性，列出结论、问题、严重程度、位置及修复建议。",
+};
+
+const STAGE_KNOWLEDGE_TYPES: Record<StageId, readonly KnowledgeType[]> = {
+  "requirement-analysis": ["business", "rule"],
+  "product-outline": ["business", "rule"],
+  "product-architecture": ["business", "pattern"],
+  "core-flow": ["business", "pattern", "rule"],
+  "page-structure": ["pattern", "component", "rule"],
+  prototype: ["component", "rule"],
+  mastergo: ["component", "rule"],
+  "prototype-confirmation": [],
+  prd: ["business", "pattern", "component", "rule"],
+  review: ["business", "pattern", "component", "rule"],
 };
 
 const PROTOTYPE_DSL_SCHEMA = `# PrototypeDsl JSON Schema 约束（必须严格遵守）
@@ -118,6 +133,7 @@ export class PromptBuilder {
       .join("\n\n");
 
     const schemaBlock = stage === "prototype" ? PROTOTYPE_DSL_SCHEMA : "";
+    const knowledgeBlock = this.buildKnowledgeBlock(stage, context);
 
     return {
       version: PROMPT_VERSION,
@@ -132,6 +148,7 @@ export class PromptBuilder {
         "# 原始需求",
         context.input.content.trim(),
         previousArtifacts ? `# 前序成果物\n${previousArtifacts}` : "",
+        knowledgeBlock,
         schemaBlock,
       ].filter(Boolean).join("\n\n"),
     };
@@ -143,6 +160,35 @@ export class PromptBuilder {
 
   promptVersion(): string {
     return PROMPT_VERSION;
+  }
+
+  stageKnowledgeTrace(stage: StageId, context: Readonly<WorkflowContext>): KnowledgeTrace | undefined {
+    if (!context.knowledge) return undefined;
+    return createStageKnowledgeTrace(
+      context.knowledge.selection,
+      new Set(STAGE_KNOWLEDGE_TYPES[stage]),
+    );
+  }
+
+  private buildKnowledgeBlock(stage: StageId, context: Readonly<WorkflowContext>): string {
+    const trace = this.stageKnowledgeTrace(stage, context);
+    if (!trace?.selectedKnowledge.length || !context.knowledge) return "";
+    const lines = trace.selectedKnowledge.map((selected) => {
+      const entity = context.knowledge!.catalog.byId.get(selected.knowledgeId)!;
+      return this.serializeKnowledge(entity);
+    });
+    return [
+      `# 阶段知识约束（Catalog ${trace.knowledgeCatalogVersion}）`,
+      "仅使用下列与当前阶段相关的知识；知识 ID 与版本必须保留用于追踪。",
+      ...lines,
+    ].join("\n");
+  }
+
+  private serializeKnowledge(entity: KnowledgeEntity): string {
+    const base = `- [${entity.id}@${entity.version}] (${entity.type}) ${entity.name}：${entity.description}`;
+    if (entity.type !== "rule") return base;
+    const value = entity.assertion.value === undefined ? "" : `，值=${JSON.stringify(entity.assertion.value)}`;
+    return `${base}；约束=${entity.assertion.operator} ${entity.assertion.path}${value}；严重度=${entity.severity}`;
   }
 
   private serializeArtifact(artifact: unknown): string {

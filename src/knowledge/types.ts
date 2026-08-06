@@ -91,3 +91,8 @@ export interface KnowledgeSelectionResult {
   catalogVersion: string;
   selectedKnowledge: SelectedKnowledge[];
 }
+
+export interface WorkflowKnowledgeContext {
+  catalog: KnowledgeCatalog;
+  selection: KnowledgeSelectionResult;
+}
