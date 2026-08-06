@@ -3,6 +3,10 @@ import { access, cp, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { MockStageExecutor } from "../src/execution/mock-executor.js";
+import { LlmWorkflowExecutor } from "../src/execution/llm-workflow-executor.js";
+import { MockLlmProvider } from "../src/llm/mock-provider.js";
+import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 
 const test = (globalThis as any).test ?? (await import("node:test")).default;
 
@@ -43,7 +47,7 @@ test("legacy-compatibility: 固定夹具目录存在且可读", async () => {
 test("legacy-compatibility: 旧版目录结构完整可识别", async () => {
   const manifest = await readJson<LegacyManifest>(path.join(FIXTURE_ROOT, "manifest.json"));
   assert.equal(manifest.engine, "pd-ai-engine");
-  assert.equal(manifest.version, "0.3.0");
+  assert.ok(/^\d+\.\d+\.\d+/.test(manifest.version), "旧夹具 version 应为合法语义化版本");
 
   const completedStages = manifest.stages.filter(s => s.status === "completed");
   assert.ok(completedStages.length >= 9, "至少应包含 9 个已完成阶段");
@@ -62,6 +66,37 @@ test("legacy-compatibility: 旧版目录结构完整可识别", async () => {
   ];
   for (const stageId of expectedStages) {
     assert.ok(stageIds.includes(stageId), `阶段 ${stageId} 应存在`);
+  }
+});
+
+test("legacy-compatibility: 新生成的 manifest.version 与根 package.json.version 完全一致", async () => {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const rootPackageJson = await readJson<{ version: string }>(
+    path.resolve(__dirname, "..", "package.json"),
+  );
+  assert.equal(rootPackageJson.version, "0.4.0", "根 package.json 当前版本应为 0.4.0");
+
+  const tempOut = await mkdtemp(path.join(os.tmpdir(), "pae-legacy-newmanifest-"));
+  try {
+    const workflow = new ProductDesignWorkflow(new LlmWorkflowExecutor(
+      new MockLlmProvider(),
+      new MockStageExecutor(),
+      1,
+    ));
+    await workflow.run({
+      sourcePath: "legacy-test.md",
+      title: "Legacy 版本测试",
+      content: "# Legacy 版本测试\n\n这是一个 legacy 模式测试。",
+    }, tempOut);
+
+    const newManifest = await readJson<LegacyManifest>(path.join(tempOut, "manifest.json"));
+    assert.equal(
+      newManifest.version,
+      rootPackageJson.version,
+      "新生成的 manifest.version 必须等于根 package.json.version",
+    );
+  } finally {
+    await rm(tempOut, { recursive: true, force: true });
   }
 });
 

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type WorkflowContext } from "../domain/types.js";
+import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
+import { readEngineVersion } from "../version.js";
 import {
   buildMasterGoData,
   buildPrototypeManifest,
@@ -34,8 +35,22 @@ const MANAGED_OUTPUT_PATHS = [
   "08-prototype-confirmation.json",
   "09-prd.md",
   "10-review.md",
+  "99-debug",
   "manifest.json",
 ] as const;
+
+async function collectDebugArtifacts(outputDirectory: string): Promise<string[]> {
+  const debugDirectory = path.join(outputDirectory, "99-debug");
+  try {
+    const entries = await readdir(debugDirectory);
+    return entries
+      .filter((entry) => entry.endsWith(".json"))
+      .sort()
+      .map((entry) => `99-debug/${entry}`);
+  } catch {
+    return [];
+  }
+}
 
 export class ProductDesignWorkflow {
   constructor(private readonly executor: StageExecutor) {}
@@ -50,6 +65,7 @@ export class ProductDesignWorkflow {
       artifacts: {},
       requirement,
       stageResults: [],
+      outputDirectory,
     };
 
     await mkdir(outputDirectory, { recursive: true });
@@ -57,7 +73,14 @@ export class ProductDesignWorkflow {
       rm(path.join(outputDirectory, target), { recursive: true, force: true })
     ));
 
-    const stages: Array<{ id: StageId; status: "completed" | "failed" | "skipped"; file?: string; warnings?: string[]; error?: string }> = [];
+    const stages: Array<{
+      id: StageId;
+      status: "completed" | "failed" | "skipped";
+      file?: string;
+      warnings?: string[];
+      error?: string;
+      generation?: StageResult["generationMetadata"];
+    }> = [];
     let hasFailed = false;
 
     for (const stage of STAGE_IDS) {
@@ -109,6 +132,7 @@ export class ProductDesignWorkflow {
             status: "completed",
             file: file,
             warnings: result.warnings,
+            generation: result.generationMetadata,
           });
           context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
           continue;
@@ -129,6 +153,7 @@ export class ProductDesignWorkflow {
             status: "completed",
             file: file,
             warnings: result.warnings,
+            generation: result.generationMetadata,
           });
           context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
           continue;
@@ -138,7 +163,13 @@ export class ProductDesignWorkflow {
           ? result.artifact
           : `${JSON.stringify(result.artifact, null, 2)}\n`;
         await writeFile(path.join(outputDirectory, file), body, "utf8");
-        stages.push({ id: stage, status: "completed", file, warnings: result.warnings });
+        stages.push({
+          id: stage,
+          status: "completed",
+          file,
+          warnings: result.warnings,
+          generation: result.generationMetadata,
+        });
         context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -150,9 +181,11 @@ export class ProductDesignWorkflow {
 
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
-      version: "0.3.1",
+      version: await readEngineVersion(),
       runId: context.runId,
       startedAt: context.startedAt,
+      finishedAt: new Date().toISOString(),
+      status: hasFailed ? "failed" : "completed",
       input: { sourcePath: input.sourcePath, title: input.title },
       requirement,
       stages: stages.map((stage) => {
@@ -190,6 +223,7 @@ export class ProductDesignWorkflow {
           type: "file",
         };
       }),
+      debugArtifacts: await collectDebugArtifacts(outputDirectory),
     }, null, 2);
 
     await writeFile(path.join(outputDirectory, "manifest.json"), `${manifestContent}\n`, "utf8");

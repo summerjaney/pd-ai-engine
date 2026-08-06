@@ -183,6 +183,7 @@ export interface WorkflowContext {
   artifacts: WorkflowArtifacts;
   requirement?: RequirementContext;
   stageResults?: StageResultWithStatus[];
+  outputDirectory?: string;
 }
 
 export interface StageResult {
@@ -197,6 +198,15 @@ export interface StageResult {
     comments?: string[];
   };
   warnings: string[];
+  generationMetadata?: {
+    generationMode: "mock" | "llm";
+    provider: "mock" | "openai";
+    model: string;
+    promptVersion: string;
+    generatedAt: string;
+    attempts: number;
+    validationStatus: "passed" | "failed";
+  };
 }
 
 export interface StageExecutor {
