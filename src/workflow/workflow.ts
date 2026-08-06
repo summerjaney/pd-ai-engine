@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
+import { readEngineVersion } from "../version.js";
 import {
   buildMasterGoData,
   buildPrototypeManifest,
@@ -180,7 +181,7 @@ export class ProductDesignWorkflow {
 
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
-      version: "0.3.1",
+      version: await readEngineVersion(),
       runId: context.runId,
       startedAt: context.startedAt,
       finishedAt: new Date().toISOString(),

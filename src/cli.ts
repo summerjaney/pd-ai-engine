@@ -10,8 +10,9 @@ import { MockLlmProvider } from "./llm/mock-provider.js";
 import { OpenAiProvider } from "./llm/openai-provider.js";
 import { ProductDesignWorkflow } from "./workflow/workflow.js";
 import { prepareRequirementOutput } from "./output/requirement-output.js";
+import { readEngineVersion } from "./version.js";
 
-const HELP = `PAE — Product Design AI Engine v0.3.1
+const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
 用法：
   pae requirement create <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
@@ -34,6 +35,11 @@ const HELP = `PAE — Product Design AI Engine v0.3.1
   --provider <名称>          LLM Provider：mock（默认）或 openai
   --model <名称>             模型名称；openai 模式必填
 `;
+
+async function buildHelp(): Promise<string> {
+  const version = await readEngineVersion();
+  return HELP_TEMPLATE.replace("{VERSION}", version);
+}
 
 function option(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -92,13 +98,13 @@ export function sanitizeSourcePath(sourceArgument: string): string {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
-    console.log(HELP);
+    console.log(await buildHelp());
     return;
   }
 
   const isRequirementCreate = args[0] === "requirement" && args[1] === "create" && Boolean(args[2]);
   const isLegacyRun = args[0] === "run" && Boolean(args[1]);
-  if (!isRequirementCreate && !isLegacyRun) throw new Error(`命令格式错误。\n\n${HELP}`);
+  if (!isRequirementCreate && !isLegacyRun) throw new Error(`命令格式错误。\n\n${await buildHelp()}`);
   const sourceArgument = isRequirementCreate ? args[2] : args[1];
   const sourcePath = path.resolve(sourceArgument);
   const content = await readFile(sourcePath, "utf8");
@@ -134,7 +140,7 @@ async function main(): Promise<void> {
     const projectId = option(args, "--project");
     const requirementId = option(args, "--id");
     const requirementName = option(args, "--name");
-    if (!projectId || !requirementId || !requirementName) throw new Error(`缺少 --project、--id 或 --name。\n\n${HELP}`);
+    if (!projectId || !requirementId || !requirementName) throw new Error(`缺少 --project、--id 或 --name。\n\n${await buildHelp()}`);
     const revisionArg = option(args, "--revision");
     const revision = revisionArg !== undefined ? Number(revisionArg) : undefined;
     if (revision !== undefined && (!Number.isInteger(revision) || revision < 1)) {

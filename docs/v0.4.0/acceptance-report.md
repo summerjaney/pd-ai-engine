@@ -35,6 +35,7 @@
 | PAE-040-001 | TC-040-022 | Prototype DSL 在固定 60000ms 后超时 | 默认超时改为 180000ms；支持 `PAE_LLM_TIMEOUT_MS`，兼容旧 `PAE_LLM_TIMEOUT` | 待真实模型复测 |
 | PAE-040-002 | TC-040-025 | 真实模型生成的规则缺少 `appliesTo` 时，对 `undefined` 调用 `.filter()` | 缺失字段按空数组处理，避免 Prototype 校验阶段异常退出 | 待真实模型复测 |
 | PAE-040-003 | TC-040-026、TC-040-027 | 真实 LLM 阶段解析或校验失败时无法保留原始响应，且模型使用非标准字段（roles/groups/items/target_page/applies_to）导致校验器输出 "undefined 引用了 undefined" 误导信息 | 1. 阶段最终失败时将每次尝试的原始响应、解析结果和校验问题写入 `99-debug/<stage>-attempt-<attempt>.json`，manifest 登记 `debugArtifacts`；2. Prototype 阶段提示词附带严格字段级 JSON Schema 约束，重试时重新附带约束；3. 校验器改为报告具体字段路径（如 `navigation[0].pageId 缺失`），检测 snake_case 非标准字段；4. 不放宽 schemaVersion="0.2"、pages 非空及页面引用一致性校验 | 已由自动化测试覆盖 |
+| PAE-040-004 | TC-040-028 | package.json 已升级为 0.4.0，但新生成的 manifest.version 仍为硬编码的 0.3.1 | 删除 workflow.ts 与 cli.ts 中的 0.3.1 硬编码，新增 `src/version.ts` 在运行时从根 package.json 读取 version 作为唯一来源，manifest.version 与 CLI 帮助文本均使用该值 | 已由自动化测试覆盖 |
 
 ## 5. 发布判定
 

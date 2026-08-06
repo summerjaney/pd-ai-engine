@@ -372,3 +372,26 @@ test("TC-040-027 PAE-040-003 非标准字段被拒绝，重试携带字段约束
   assert.ok(directValidation.issues.some((i) => /applies_to/.test(i.message)));
   assert.ok(!directValidation.issues.some((i) => /undefined/.test(i.message)));
 });
+
+test("TC-040-028 PAE-040-004 manifest.version 与根 package.json.version 完全一致", async () => {
+  const rootPackageJson = JSON.parse(
+    await readFile(path.resolve(process.cwd(), "package.json"), "utf8"),
+  ) as { version: string };
+
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v040-version-"));
+  await new ProductDesignWorkflow(new LlmWorkflowExecutor(
+    new RecordingProvider(),
+    new MockStageExecutor(),
+    1,
+  )).run({
+    sourcePath: "employee-transfer.md",
+    title: "员工调动管理",
+    content: "# 员工调动管理\n\n支持跨部门调动。",
+  }, output);
+
+  const manifest = JSON.parse(await readFile(path.join(output, "manifest.json"), "utf8")) as {
+    version: string;
+  };
+  assert.equal(manifest.version, rootPackageJson.version);
+  assert.notEqual(manifest.version, "0.3.1");
+});

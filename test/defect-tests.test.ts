@@ -397,34 +397,39 @@ test("prototype.json 中包含 sourceAttribution", async () => {
   assert.ok(prototype.product.sourceAttribution.includes("系统通用推导"), "sourceAttribution 应说明推导来源");
 });
 
-test("package-lock.json 版本为 0.3.1", async () => {
+test("package-lock.json 版本与 package.json 一致", async () => {
   const { fileURLToPath } = await import("node:url");
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const pkg = await readJson<{ version: string }>(path.join(__dirname, "..", "package.json"));
   const lock = await readJson<{ version: string; packages?: Record<string, { version?: string }> }>(path.join(__dirname, "..", "package-lock.json"));
-  assert.equal(lock.version, "0.3.1", "package-lock.json 顶层 version 应为 0.3.1");
-  assert.equal(lock.packages?.[""]?.version, "0.3.1", "package-lock.json packages[''] version 应为 0.3.1");
+  assert.equal(lock.version, pkg.version, "package-lock.json 顶层 version 应与 package.json 一致");
+  assert.equal(lock.packages?.[""]?.version, pkg.version, "package-lock.json packages[''] version 应与 package.json 一致");
 });
 
-test("manifest.version 为 0.3.1", async () => {
+test("manifest.version 与 package.json 一致", async () => {
+  const { fileURLToPath } = await import("node:url");
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const pkg = await readJson<{ version: string }>(path.join(__dirname, "..", "package.json"));
   const output = await mkdtemp(path.join(os.tmpdir(), "pae-version-"));
   const workflow = new ProductDesignWorkflow(new MockStageExecutor());
-  
+
   await workflow.run({
     sourcePath: "test.md",
     title: "测试",
     content: "# 测试\n\n测试内容",
   }, output);
-  
+
   const manifest = await readJson<{ version: string }>(path.join(output, "manifest.json"));
-  
-  assert.equal(manifest.version, "0.3.1", "manifest.version 应为 0.3.1");
+
+  assert.equal(manifest.version, pkg.version, "manifest.version 应与 package.json 一致");
 });
 
-test("package.json 版本为 0.3.1", async () => {
+test("package.json 版本可读", async () => {
   const { fileURLToPath, pathToFileURL } = await import("node:url");
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const pkg = await readJson<{ version: string }>(path.join(__dirname, "..", "package.json"));
-  assert.equal(pkg.version, "0.3.1", "package.json 版本应为 0.3.1");
+  assert.ok(pkg.version, "package.json 应包含 version 字段");
+  assert.ok(/^\d+\.\d+\.\d+/.test(pkg.version), "package.json version 应为语义化版本");
 });
 
 // ===== PAE-030-011: safeSegment 路径安全测试 =====
