@@ -1,0 +1,1 @@
+{"id":"component.status-tag","type":"component","name":"状态标签","description":"清晰展示数据或流程的当前状态。","version":"1.0.0","status":"active","tags":["状态","标签"],"appliesTo":["list","detail"],"references":[{"id":"rule.status-visible","type":"rule"}]}

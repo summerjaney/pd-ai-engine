@@ -1,0 +1,1 @@
+{"id":"pattern.status-transition","type":"pattern","name":"状态流转","description":"根据业务状态控制可见信息和可执行动作。","version":"1.0.0","status":"active","tags":["状态","流转","审批","启用","停用"],"appliesTo":["workflow","status"],"references":[{"id":"component.status-tag","type":"component"},{"id":"component.action-bar","type":"component"},{"id":"component.confirmation-dialog","type":"component"}]}

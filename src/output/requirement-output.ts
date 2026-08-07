@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { RequirementContext, RequirementInput } from "../domain/types.js";
 
@@ -159,6 +159,20 @@ export async function prepareRequirementOutput(
     requirementName,
     revision,
   };
+
+  // 重跑前保存上一 revision 的完整设计包，避免成果物和知识追踪被覆盖。
+  if (existingRevision > 0) {
+    const archiveDirectory = path.join(requirementDirectory, "revisions", `revision-${existingRevision}`);
+    await mkdir(archiveDirectory, { recursive: true });
+    const entries = await readdir(requirementDirectory);
+    await Promise.all(entries
+      .filter((entry) => entry !== "revisions")
+      .map((entry) => cp(path.join(requirementDirectory, entry), path.join(archiveDirectory, entry), {
+        recursive: true,
+        force: false,
+        errorOnExist: true,
+      })));
+  }
 
   await mkdir(productDirectory, { recursive: true });
   await mkdir(requirementDirectory, { recursive: true });

@@ -1,0 +1,1 @@
+{"id":"rule.empty-state","type":"rule","name":"空状态","description":"无数据或无查询结果时提供明确说明和下一步引导。","version":"1.0.0","status":"active","tags":["空状态","无数据"],"appliesTo":["list"],"references":[],"severity":"warning","checkType":"prototype","assertion":{"operator":"exists","path":"pages[pattern=list].emptyState"}}

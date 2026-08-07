@@ -1,0 +1,1 @@
+{"id":"pattern.form-page","type":"pattern","name":"创建与编辑表单","description":"用于新增或修改业务数据的结构化表单。","version":"1.0.0","status":"active","tags":["新增","创建","编辑","表单"],"appliesTo":["form"],"references":[{"id":"component.form-field","type":"component"},{"id":"component.action-bar","type":"component"}]}

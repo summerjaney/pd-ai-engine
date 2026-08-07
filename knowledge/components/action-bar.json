@@ -1,0 +1,1 @@
+{"id":"component.action-bar","type":"component","name":"操作栏","description":"组织页面级、批量和记录级业务操作。","version":"1.0.0","status":"active","tags":["操作","按钮","批量"],"appliesTo":["list","form","detail"],"references":[{"id":"rule.permission-visibility","type":"rule"},{"id":"rule.error-feedback","type":"rule"}]}

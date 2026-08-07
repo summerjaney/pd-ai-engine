@@ -131,5 +131,5 @@ test("TC-040-006/021 manifest 记录生成信息但不包含 API Key", async () 
   const manifest = await readFile(path.join(output, "manifest.json"), "utf8");
   assert.doesNotMatch(manifest, new RegExp(secret));
   assert.match(manifest, /"provider": "openai"/);
-  assert.match(manifest, /"promptVersion": "0.4.0"/);
+  assert.match(manifest, /"promptVersion": "0.5.0"/);
 });

@@ -1,0 +1,1 @@
+{"id":"component.filter-panel","type":"component","name":"筛选区","description":"承载常用检索条件、查询和重置操作。","version":"1.0.0","status":"active","tags":["筛选","查询","检索"],"appliesTo":["list"],"references":[{"id":"rule.list-search","type":"rule"}]}

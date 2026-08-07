@@ -1,0 +1,1 @@
+{"id":"rule.required-field","type":"rule","name":"必填字段","description":"关键业务字段必须声明 required，并提供明确标签。","version":"1.0.0","status":"active","tags":["必填","字段","校验"],"appliesTo":["form-field"],"references":[],"severity":"error","checkType":"prototype","assertion":{"operator":"equals","path":"pages[].fields[].required","value":true}}

@@ -1,0 +1,1 @@
+{"id":"rule.status-visible","type":"rule","name":"状态可见","description":"流程型业务的列表和详情必须展示当前状态。","version":"1.0.0","status":"active","tags":["状态","流程"],"appliesTo":["list","detail"],"references":[],"severity":"error","checkType":"prototype","assertion":{"operator":"exists","path":"pages[].fields[status]"}}

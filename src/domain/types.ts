@@ -33,12 +33,16 @@ export interface PrototypeField {
   label: string;
   type: "text" | "textarea" | "select" | "datetime";
   required: boolean;
+  optionsSource?: string;
 }
 
 export interface PrototypeAction {
   id: string;
   label: string;
   kind: "primary" | "secondary" | "danger";
+  confirmation?: boolean;
+  confirmationMessage?: string;
+  roles?: string[];
 }
 
 export interface PrototypePage {
@@ -48,6 +52,9 @@ export interface PrototypePage {
   pattern: "list" | "form" | "detail";
   fields: PrototypeField[];
   actions: PrototypeAction[];
+  tableColumns?: string[];
+  pagination?: { enabled: boolean; pageSize: number };
+  emptyState?: { description: string; actionId?: string };
 }
 
 export interface DesignTokens {
@@ -68,6 +75,11 @@ export interface PrototypeDsl {
   pages: PrototypePage[];
   rules: Array<{ id: string; description: string; appliesTo: string[] }>;
   transitions: PrototypeTransition[];
+  errorFeedback?: {
+    validationMessage: string;
+    operationFailureMessage: string;
+    recoveryAction: string;
+  };
   designTokens: DesignTokens;
 }
 
@@ -184,7 +196,11 @@ export interface WorkflowContext {
   requirement?: RequirementContext;
   stageResults?: StageResultWithStatus[];
   outputDirectory?: string;
+  knowledge?: import("../knowledge/types.js").WorkflowKnowledgeContext;
+  knowledgeCompliance?: import("../knowledge/compliance-validator.js").KnowledgeComplianceResult;
 }
+
+export type KnowledgeMode = "auto" | "off";
 
 export interface StageResult {
   stage: StageId;
@@ -206,6 +222,7 @@ export interface StageResult {
     generatedAt: string;
     attempts: number;
     validationStatus: "passed" | "failed";
+    knowledge?: import("../knowledge/trace.js").KnowledgeTrace;
   };
 }
 

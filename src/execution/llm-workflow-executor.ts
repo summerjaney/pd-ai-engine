@@ -46,6 +46,7 @@ export class LlmWorkflowExecutor implements StageExecutor {
     }
 
     const providerInfo = this.provider.modelInfo();
+    const knowledge = this.promptBuilder.stageKnowledgeTrace(stage, context);
     if (providerInfo.id === "mock" || DETERMINISTIC_STAGES.has(stage)) {
       const result = await this.fallback.execute(stage, context);
       return {
@@ -58,6 +59,7 @@ export class LlmWorkflowExecutor implements StageExecutor {
           generatedAt: new Date().toISOString(),
           attempts: 1,
           validationStatus: "passed",
+          knowledge,
         },
       };
     }
@@ -123,6 +125,7 @@ export class LlmWorkflowExecutor implements StageExecutor {
             generatedAt: new Date().toISOString(),
             attempts: attempt,
             validationStatus: "passed",
+            knowledge,
           },
         };
       }

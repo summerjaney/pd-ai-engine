@@ -1,4 +1,5 @@
 import { B2B_RULES } from "../knowledge/catalog.js";
+import { KnowledgeComplianceValidator } from "../knowledge/compliance-validator.js";
 import type {
   PrototypeDsl,
   StageExecutor,
@@ -111,6 +112,8 @@ function generatePageId(name: string, index: number): string {
 function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
   const parsed = parseRequirement(context.input.content);
   const title = parsed.title;
+  const actionRoles = parsed.roles.map((role) => role.name);
+  if (actionRoles.length === 0) actionRoles.push("管理员");
 
   const navLabels = new Set<string>();
   const pageIdToNavLabel = new Map<string, string>();
@@ -154,17 +157,19 @@ function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
 
     const actions = pattern === "form"
       ? [
-          { id: "submit", label: "提交", kind: "primary" as const },
-          { id: "save-draft", label: "保存草稿", kind: "secondary" as const },
-          { id: "cancel", label: "取消", kind: "secondary" as const },
+          { id: "submit", label: "提交", kind: "primary" as const, roles: actionRoles },
+          { id: "save-draft", label: "保存草稿", kind: "secondary" as const, roles: actionRoles },
+          { id: "cancel", label: "取消", kind: "secondary" as const, roles: actionRoles },
         ]
       : pattern === "detail"
       ? [
-          { id: "withdraw", label: "撤回", kind: "danger" as const },
+          { id: "withdraw", label: "撤回", kind: "danger" as const, confirmation: true, confirmationMessage: "撤回后当前流程将终止，请确认业务影响。", roles: actionRoles },
         ]
       : [
-          { id: "create", label: "新建", kind: "primary" as const },
-          { id: "view", label: "查看", kind: "secondary" as const },
+          { id: "search", label: "查询", kind: "primary" as const, roles: actionRoles },
+          { id: "reset", label: "重置", kind: "secondary" as const, roles: actionRoles },
+          { id: "create", label: "新建", kind: "primary" as const, roles: actionRoles },
+          { id: "view", label: "查看", kind: "secondary" as const, roles: actionRoles },
         ];
 
     pageList.push({
@@ -174,6 +179,11 @@ function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
       pattern,
       fields,
       actions,
+      ...(pattern === "list" ? {
+        tableColumns: fields.map((field) => field.id),
+        pagination: { enabled: true, pageSize: 20 },
+        emptyState: { description: "暂无数据，请调整查询条件或新建记录。", actionId: "create" },
+      } : {}),
     });
   }
 
@@ -224,6 +234,11 @@ function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
       { id: "withdraw-pending-only", description: "仅待审批申请允许撤回。", appliesTo: ["withdraw"] },
     ],
     transitions,
+    errorFeedback: {
+      validationMessage: "校验失败时在字段旁说明具体原因，并保留已填写内容。",
+      operationFailureMessage: "操作失败时说明失败原因，不产生脏数据。",
+      recoveryAction: "允许用户修正后重试，网络异常时可重新提交。",
+    },
     designTokens: {
       colors: {
         primary: "#3B82F6",
@@ -586,13 +601,16 @@ flowchart TB
         const confirmation = context.artifacts["prototype-confirmation"];
         if (!prototype) throw new Error("Review 阶段必须依赖 Prototype DSL");
         const issues = runReviewChecks(prototype, mastergo, confirmation);
+        const complianceMatrix = context.knowledgeCompliance
+          ? new KnowledgeComplianceValidator().formatMatrix(context.knowledgeCompliance)
+          : "未启用知识合规校验。";
         const conclusion = issues.length === 0
           ? "通过全部自动检查，可进入人工评审。"
           : `发现 ${issues.length} 个问题，请修复后再进入人工评审。`;
         const issuesBody = issues.length === 0
           ? "无"
           : issues.map((issue, idx) => `### 问题 ${idx + 1}\n\n- **问题类型**：${issue.type}\n- **问题位置**：${issue.location}\n- **严重程度**：${issue.severity === "error" ? "错误" : "警告"}\n- **对应原始需求**：${issue.relatedRequirement}\n- **修复建议**：${issue.suggestion}`).join("\n\n");
-        artifact = md("设计评审", `## 结论\n\n${conclusion}\n\n## 自动检查发现的问题\n\n${issuesBody}\n\n## 已检查规则\n\n${B2B_RULES.map((rule) => `- ${rule.name}：${rule.description}`).join("\n")}\n\n## 人工评审项\n\n- 角色权限是否符合实际组织规则。\n- 审批状态与异常分支是否完整。\n- Prototype DSL、MasterGo 原型与 PRD 是否一致。\n- MasterGo 交互与 DSL 跳转是否一致。`);
+        artifact = md("设计评审", `## 结论\n\n${conclusion}\n\n## 自动检查发现的问题\n\n${issuesBody}\n\n## 知识合规矩阵\n\n${complianceMatrix}\n\n## 已检查规则\n\n${B2B_RULES.map((rule) => `- ${rule.name}：${rule.description}`).join("\n")}\n\n## 人工评审项\n\n- 角色权限是否符合实际组织规则。\n- 审批状态与异常分支是否完整。\n- Prototype DSL、MasterGo 原型与 PRD 是否一致。\n- MasterGo 交互与 DSL 跳转是否一致。`);
         break;
       }
     }

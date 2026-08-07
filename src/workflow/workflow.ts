@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { STAGE_IDS, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
+import { STAGE_IDS, type KnowledgeMode, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
 import { readEngineVersion } from "../version.js";
+import { KnowledgeLoader } from "../knowledge/loader.js";
+import { KnowledgeSelector } from "../knowledge/selector.js";
+import { KnowledgeComplianceValidator } from "../knowledge/compliance-validator.js";
 import {
   buildMasterGoData,
   buildPrototypeManifest,
@@ -53,9 +56,14 @@ async function collectDebugArtifacts(outputDirectory: string): Promise<string[]>
 }
 
 export class ProductDesignWorkflow {
-  constructor(private readonly executor: StageExecutor) {}
+  constructor(
+    private readonly executor: StageExecutor,
+    private readonly knowledgeLoader = new KnowledgeLoader(),
+    private readonly knowledgeSelector = new KnowledgeSelector(),
+    private readonly complianceValidator = new KnowledgeComplianceValidator(),
+  ) {}
 
-  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext): Promise<WorkflowContext> {
+  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode } = {}): Promise<WorkflowContext> {
     this.validateInput(input);
     
     const context: WorkflowContext = {
@@ -66,6 +74,21 @@ export class ProductDesignWorkflow {
       requirement,
       stageResults: [],
       outputDirectory,
+    };
+    const knowledgeCatalog = await this.knowledgeLoader.load();
+    const knowledgeMode = options.knowledgeMode ?? "auto";
+    context.knowledge = {
+      catalog: knowledgeCatalog,
+      selection: knowledgeMode === "off" ? {
+        catalogVersion: knowledgeCatalog.version,
+        selectedKnowledge: [],
+      } : this.knowledgeSelector.select(knowledgeCatalog, {
+        text: input.content,
+        metadata: requirement ? {
+          projectName: requirement.projectName,
+          requirementName: requirement.requirementName,
+        } : undefined,
+      }),
     };
 
     await mkdir(outputDirectory, { recursive: true });
@@ -93,6 +116,35 @@ export class ProductDesignWorkflow {
       let result;
       try {
         result = await this.executor.execute(stage, context);
+        if (stage === "prototype") {
+          const compliance = this.complianceValidator.validatePrototype(
+            result.artifact as PrototypeDsl,
+            context.knowledge!.catalog,
+            context.knowledge!.selection,
+          );
+          context.knowledgeCompliance = compliance;
+          if (!compliance.valid) {
+            const debugDirectory = path.join(outputDirectory, "99-debug");
+            await mkdir(debugDirectory, { recursive: true });
+            await Promise.all([
+              writeFile(
+                path.join(debugDirectory, "prototype-rejected.json"),
+                `${JSON.stringify(result.artifact, null, 2)}\n`,
+                "utf8",
+              ),
+              writeFile(
+                path.join(debugDirectory, "prototype-compliance.json"),
+                `${JSON.stringify(compliance, null, 2)}\n`,
+                "utf8",
+              ),
+            ]);
+            throw new Error(this.complianceValidator.formatErrors(compliance));
+          }
+        }
+        if (stage === "review" && context.knowledgeCompliance && typeof result.artifact === "string"
+          && !result.artifact.includes("## 知识合规矩阵")) {
+          result.artifact = `${result.artifact.trim()}\n\n## 知识合规矩阵\n\n${this.complianceValidator.formatMatrix(context.knowledgeCompliance)}\n`;
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         stages.push({ id: stage, status: "failed", error: errorMessage });
@@ -188,6 +240,12 @@ export class ProductDesignWorkflow {
       status: hasFailed ? "failed" : "completed",
       input: { sourcePath: input.sourcePath, title: input.title },
       requirement,
+      knowledge: {
+        mode: knowledgeMode,
+        knowledgeCatalogVersion: context.knowledge.selection.catalogVersion,
+        selectedKnowledge: context.knowledge.selection.selectedKnowledge,
+        compliance: context.knowledgeCompliance,
+      },
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {
           return { id: stage.id, status: "skipped" };

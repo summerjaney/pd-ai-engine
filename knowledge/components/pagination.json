@@ -1,0 +1,1 @@
+{"id":"component.pagination","type":"component","name":"分页器","description":"控制列表数据的分页浏览。","version":"1.0.0","status":"active","tags":["分页","列表"],"appliesTo":["list"],"references":[]}

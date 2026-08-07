@@ -98,6 +98,18 @@ export class OutputValidator {
     if (!prototype.designTokens || typeof prototype.designTokens !== "object") {
       issues.push({ code: "invalid-structure", message: "designTokens 缺失或不是对象。" });
     }
+    if (prototype.errorFeedback !== undefined) {
+      const feedback = prototype.errorFeedback;
+      if (!feedback || typeof feedback !== "object"
+        || !feedback.validationMessage?.trim()
+        || !feedback.operationFailureMessage?.trim()
+        || !feedback.recoveryAction?.trim()) {
+        issues.push({
+          code: "invalid-structure",
+          message: "errorFeedback 必须包含非空 validationMessage、operationFailureMessage 和 recoveryAction。",
+        });
+      }
+    }
 
     const pageIds = new Set<string>();
     prototype.pages.forEach((page, index) => {
@@ -138,6 +150,9 @@ export class OutputValidator {
             const actual = field.required === undefined ? "缺失" : JSON.stringify(field.required);
             issues.push({ code: "invalid-structure", message: `${fieldPath}.required 必须为布尔值，实际为 ${actual}。` });
           }
+          if (field.optionsSource !== undefined && (typeof field.optionsSource !== "string" || !field.optionsSource.trim())) {
+            issues.push({ code: "invalid-structure", message: `${fieldPath}.optionsSource 必须为非空字符串。` });
+          }
         });
       }
       if (!Array.isArray(page.actions)) {
@@ -155,7 +170,28 @@ export class OutputValidator {
             const actual = action.kind === undefined ? "缺失" : JSON.stringify(action.kind);
             issues.push({ code: "invalid-structure", message: `${actionPath}.kind 必须为 primary/secondary/danger，实际为 ${actual}。` });
           }
+          if (action.confirmation !== undefined && typeof action.confirmation !== "boolean") {
+            issues.push({ code: "invalid-structure", message: `${actionPath}.confirmation 必须为布尔值。` });
+          }
+          if (action.confirmationMessage !== undefined && (typeof action.confirmationMessage !== "string" || !action.confirmationMessage.trim())) {
+            issues.push({ code: "invalid-structure", message: `${actionPath}.confirmationMessage 必须为非空字符串。` });
+          }
+          if (action.roles !== undefined && (!Array.isArray(action.roles) || action.roles.length === 0 || action.roles.some((role) => typeof role !== "string" || !role.trim()))) {
+            issues.push({ code: "invalid-structure", message: `${actionPath}.roles 必须为非空字符串数组。` });
+          }
         });
+      }
+      if (page.tableColumns !== undefined && (!Array.isArray(page.tableColumns) || page.tableColumns.some((id) => typeof id !== "string" || !page.fields.some((field) => field.id === id)))) {
+        issues.push({ code: "inconsistent-artifact", message: `${path}.tableColumns 必须引用本页 fields 中的字段 id。` });
+      }
+      if (page.pagination !== undefined && (typeof page.pagination.enabled !== "boolean" || !Number.isInteger(page.pagination.pageSize) || page.pagination.pageSize <= 0)) {
+        issues.push({ code: "invalid-structure", message: `${path}.pagination 必须包含 enabled 布尔值和正整数 pageSize。` });
+      }
+      if (page.emptyState !== undefined) {
+        if (!page.emptyState.description?.trim()) issues.push({ code: "invalid-structure", message: `${path}.emptyState.description 缺失或为空。` });
+        if (page.emptyState.actionId && !page.actions.some((action) => action.id === page.emptyState!.actionId)) {
+          issues.push({ code: "inconsistent-artifact", message: `${path}.emptyState.actionId 引用了不存在的操作：${page.emptyState.actionId}` });
+        }
       }
     });
 
