@@ -157,3 +157,13 @@
 - 自动化验证：`npm run check` 通过，129/129 项测试通过；TypeScript 无类型错误。
 
 在真实 LLM 回归的 `10-review.md` 不再包含待确认项 Error，且 Prototype 包含 `errorFeedback` 后，可关闭 `PAE-050-004` 并进入 `TC-050-034`。
+
+### 最终回归复核（2026-08-07）
+
+- Run ID：`2eb00c84-9d68-497a-9ff4-f9cb804850cb`。
+- 工作流 10/10 阶段完成，7 条 Prototype 自动知识门禁全部通过。
+- `PAE-050-001～003` 保持关闭。
+- `PAE-050-004` **仍未关闭**：需求分析将“手机号校验规则”列为 TBD，但 Prototype `errorFeedback.validationMessage` 写入“手机号格式是否正确”，PRD 随后继承该确定性表述；Review 输出 1 个 Error，结论为 `Conditionally Approved`。
+- 根因：上一轮只约束 PRD 保留 TBD 清单，没有阻止 Prototype 的异常反馈、危险操作影响或规则描述提前固化未确认事实。
+- 修复补强：Prototype Prompt 新增待确认项污染检查；生成 `errorFeedback` 前逐项对照 TBD，未确认的校验格式、唯一性、权限边界、操作影响和数量限制只能省略具体结论或显式标注 TBD。
+- 发布判断：`TC-050-034` 暂不执行；需完成补强后的真实 LLM 回归，且 Review 无 Error 后再进入发布检查。

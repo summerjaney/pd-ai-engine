@@ -46,6 +46,7 @@ const STAGE_INSTRUCTIONS: Record<StageId, string> = {
     "只输出一个合法 JSON 对象，不要使用 Markdown 代码围栏或附加说明。",
     "JSON 必须符合下文 PrototypeDsl JSON Schema 约束，字段名、层级和引用关系必须完全一致。",
     "页面 pattern 只能是 list、form、detail；字段 type 只能是 text、textarea、select、datetime；操作 kind 只能是 primary、secondary、danger。",
+    "逐项读取需求分析中的待确认项/TBD：不得在字段校验、异常反馈、操作影响、规则描述或其他属性中将其改写为确定性事实；如必须提及，需显式保留“待确认/TBD”标记。",
   ].join("\n"),
   mastergo: "根据 Prototype DSL 生成 MasterGo 适配数据。本阶段通常由确定性适配器执行。",
   "prototype-confirmation": "记录真实原型确认状态。本阶段不得由模型代替用户作出确认。",
@@ -234,7 +235,10 @@ export class PromptBuilder {
       checklist.push("- 表单中若一个选择字段的候选值依赖另一个字段（如主岗位来自关联岗位），必须用 optionsSource 填写来源字段 id。");
     }
     if (selectedIds.has("rule.error-feedback")) {
-      checklist.push("- 顶层必须填写 errorFeedback，分别声明校验失败提示、操作失败提示和可恢复的下一步；不得只在 PRD 中描述异常处理。");
+      checklist.push(
+        "- 顶层必须填写 errorFeedback，分别声明校验失败提示、操作失败提示和可恢复的下一步；不得只在 PRD 中描述异常处理。",
+        "- 生成 errorFeedback 前必须逐项对照需求分析的待确认项/TBD。未确认的校验格式、唯一性、权限边界、操作影响或数量限制，不得写入 validationMessage、operationFailureMessage 或 recoveryAction 作为已生效事实；可改用不包含未确认规则的通用提示，或显式标注 TBD。",
+      );
     }
 
     if (checklist.length === 0) return "";
