@@ -107,3 +107,26 @@ test("TC-060-018: 静态画布 HTML 不隐藏页面且不依赖脚本", () => {
   assert.match(html, /姓名/);
   assert.doesNotMatch(html, /<script|display:\s*none|var\(--/i);
 });
+
+test("TC-060-019: 写入失败时保存原始响应、失败阶段和提交 HTML", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-mastergo-evidence-"));
+  const directory = path.join(root, "07-mastergo");
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, "mastergo-data.json"), JSON.stringify({ schemaVersion: "0.2", product: { name: "测试" }, tokens: { color: {}, spacing: {}, radius: {} }, screens: [{ id: "p/1", name: "页面", route: "/", pattern: "list", frame: { width: 1440, height: 900 }, nodes: [], interactions: [] }] }));
+  const connection: MasterGoConnection = {
+    probe: async () => ({ capabilities: ["tools"] }),
+    listTools: async () => ({ tools: [{ name: "design_page" }, { name: "submit_page_to_canvas" }], writableTools: [], hasCanvasWriteCapability: true }),
+    callTool: async (name) => name === "design_page"
+      ? { content: [{ type: "text", text: "设计规则" }] }
+      : { isError: true, content: [{ type: "text", text: "HTML validation failed" }] },
+    close: async () => undefined,
+  };
+  const output = await executeMasterGoPagePipeline(root, connection, { confirmedWrite: true });
+  assert.equal(output.status, "FAIL");
+  const result = JSON.parse(await readFile(output.resultPath, "utf8"));
+  assert.equal(result.schemaVersion, "0.3");
+  assert.equal(result.pages[0].stage, "submit_page_to_canvas");
+  assert.equal(result.pages[0].submitResult.isError, true);
+  assert.match(result.errors[0], /HTML validation failed/);
+  assert.match(await readFile(path.join(directory, result.pages[0].htmlArtifact), "utf8"), /<!doctype html>/i);
+});

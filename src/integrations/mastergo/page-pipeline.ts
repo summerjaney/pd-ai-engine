@@ -10,6 +10,10 @@ export interface MasterGoPagePipelineOutput {
   status: "PASS" | "PENDING_VERIFICATION" | "FAIL";
 }
 
+function safeArtifactName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "screen";
+}
+
 function textValues(value: unknown): string[] {
   if (typeof value === "string") return [value];
   if (Array.isArray(value)) return value.flatMap(textValues);
@@ -71,22 +75,29 @@ export async function executeMasterGoPagePipeline(requirementDirectory: string, 
   const plan = { schemaVersion: "0.2", generatedAt: startedAt, source: "07-mastergo/mastergo-data.json", confirmedWrite: true, pages: data.screens.map((screen) => ({ screenId: screen.id, screenName: screen.name, calls: [{ tool: "design_page", arguments: { requirement: describeScreen(screen), designSource: "free-draw", userConfirmedDesignSource: true } }, { tool: "submit_page_to_canvas", argumentsFrom: "pae.staticScreenHtml" }] })) };
   await mkdir(directory, { recursive: true });
   await writeFile(planPath, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
-  const result: Record<string, unknown> = { schemaVersion: "0.2", status: "FAIL", startedAt, completedAt: startedAt, pages: [], errors: [] };
+  const result: Record<string, unknown> = { schemaVersion: "0.3", status: "FAIL", startedAt, completedAt: startedAt, pages: [], errors: [] };
   try {
     const info = await connection.probe();
     const discovery = await connection.listTools();
     for (const required of ["design_page", "submit_page_to_canvas"]) if (!discovery.tools.some((tool) => tool.name === required)) throw new Error(`MasterGo MCP 缺少必需工具：${required}`);
     let pending = false;
     for (const screen of data.screens) {
+      const pageResult: Record<string, unknown> = { screenId: screen.id, screenName: screen.name, status: "FAIL", stage: "design_page" };
+      (result.pages as unknown[]).push(pageResult);
       const requirement = describeScreen(screen);
       const designed = await connection.callTool("design_page", { requirement, designSource: "free-draw", userConfirmedDesignSource: true });
-      if (designed.isError) throw new Error(`${screen.name}：design_page 返回 isError=true。`);
+      pageResult.designResult = designed;
+      if (designed.isError) throw new Error(`${screen.name}：design_page 返回 isError=true：${textValues(designed).join(" | ") || "未返回错误详情"}`);
       const html = renderMasterGoScreenHtml(data, screen);
+      const htmlArtifact = `mastergo-page-${safeArtifactName(screen.id)}.html`;
+      await writeFile(path.join(directory, htmlArtifact), html, "utf8");
+      Object.assign(pageResult, { stage: "submit_page_to_canvas", htmlSource: "pae.staticScreenHtml", htmlArtifact, htmlBytes: Buffer.byteLength(html) });
       const submitted = await connection.callTool("submit_page_to_canvas", { code: html });
-      if (submitted.isError) throw new Error(`${screen.name}：submit_page_to_canvas 返回 isError=true。`);
+      pageResult.submitResult = submitted;
+      if (submitted.isError) throw new Error(`${screen.name}：submit_page_to_canvas 返回 isError=true：${textValues(submitted).join(" | ") || "未返回错误详情"}`);
       const acceptedOnly = isAcceptedOnly(submitted);
       pending ||= acceptedOnly;
-      (result.pages as unknown[]).push({ screenId: screen.id, screenName: screen.name, status: acceptedOnly ? "PENDING_VERIFICATION" : "PASS", htmlSource: "pae.staticScreenHtml", htmlBytes: Buffer.byteLength(html), submitResult: submitted });
+      Object.assign(pageResult, { status: acceptedOnly ? "PENDING_VERIFICATION" : "PASS", stage: "completed" });
     }
     Object.assign(result, { status: pending ? "PENDING_VERIFICATION" : "PASS", server: info, verificationRequired: pending });
   } catch (error) {
