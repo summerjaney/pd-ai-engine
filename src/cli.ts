@@ -138,9 +138,10 @@ async function main(): Promise<void> {
     if (!loaded) throw new Error("未找到 MasterGo MCP 配置。请先运行 pae mastergo doctor。");
     const output = await executeMasterGoPagePipeline(path.resolve(args[2]), new StdioMasterGoConnection(loaded.config, { timeoutMs: 120_000 }), { confirmedWrite: true });
     console.log(`MasterGo 真实写入：${output.status}`);
+    if (output.status === "PENDING_VERIFICATION") console.log("MasterGo 已受理逐页写入，仍需在画布中核验最终渲染结果；当前不判定为 PASS。");
     console.log(`写入计划：${output.planPath}`);
     console.log(`执行结果：${output.resultPath}`);
-    if (output.status !== "PASS") process.exitCode = 1;
+    if (output.status === "FAIL") process.exitCode = 1;
     return;
   }
 
