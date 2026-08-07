@@ -50,3 +50,22 @@ test("TC-060-011: tools/list 支持分页并识别画布写入候选工具", asy
     assert.equal(discovery.hasCanvasWriteCapability, true);
   } finally { await connection.close(); }
 });
+
+test("TC-060-012: tools/call 传递真实参数并返回结构化结果", async () => {
+  const server = [
+    "const readline = require('node:readline');",
+    "readline.createInterface({ input: process.stdin }).on('line', line => {",
+    " const r = JSON.parse(line); let result;",
+    " if (r.method === 'initialize') result = { serverInfo: { name: 'fixture' }, capabilities: { tools: {} } };",
+    " if (r.method === 'tools/call') result = { content: [{ type: 'text', text: r.params.name }], structuredContent: { received: r.params.arguments } };",
+    " if (result) process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: r.id, result }) + '\\n');",
+    "});",
+  ].join(" ");
+  const connection = new StdioMasterGoConnection({ command: process.execPath, args: ["-e", server] }, { timeoutMs: 2_000 });
+  try {
+    await connection.probe();
+    const result = await connection.callTool("design_page", { prompt: "用户管理" });
+    assert.equal(result.content[0]?.text, "design_page");
+    assert.deepEqual(result.structuredContent, { received: { prompt: "用户管理" } });
+  } finally { await connection.close(); }
+});

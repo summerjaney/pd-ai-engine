@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import readline from "node:readline";
-import type { MasterGoConnection, MasterGoConnectionInfo, MasterGoMcpConfig, MasterGoTool, MasterGoToolDiscovery } from "./types.js";
+import type { MasterGoConnection, MasterGoConnectionInfo, MasterGoMcpConfig, MasterGoTool, MasterGoToolCallResult, MasterGoToolDiscovery } from "./types.js";
 
 interface JsonRpcResponse {
   jsonrpc: "2.0";
@@ -10,6 +10,9 @@ interface JsonRpcResponse {
     capabilities?: Record<string, unknown>;
     tools?: MasterGoTool[];
     nextCursor?: string;
+    content?: Array<Record<string, unknown>>;
+    structuredContent?: Record<string, unknown>;
+    isError?: boolean;
   };
   error?: { code?: number; message?: string };
 }
@@ -79,6 +82,18 @@ export class StdioMasterGoConnection implements MasterGoConnection {
     const writePattern = /\b(create|insert|add|update|set|write|render|append)\b|(^|[_/-])(create|insert|add|update|set|write|render|append)([_/-]|$)|画布|创建|新增|写入/i;
     const writableTools = tools.filter((tool) => writePattern.test(`${tool.name} ${tool.description ?? ""}`)).map((tool) => tool.name);
     return { tools, writableTools, hasCanvasWriteCapability: writableTools.length > 0 };
+  }
+
+  async callTool(name: string, arguments_: Record<string, unknown>): Promise<MasterGoToolCallResult> {
+    if (!this.process) throw new Error("请先完成 MasterGo MCP initialize。");
+    const response = await this.request("tools/call", { name, arguments: arguments_ }, this.options.timeoutMs ?? 30_000);
+    if (response.error) throw new Error(`tools/call ${name} 被拒绝：${response.error.message ?? response.error.code ?? "unknown error"}`);
+    if (!response.result) throw new Error(`tools/call ${name} 响应缺少 result。`);
+    return {
+      content: response.result.content ?? [],
+      structuredContent: response.result.structuredContent,
+      isError: response.result.isError,
+    };
   }
 
   private routeLine(line: string): void {

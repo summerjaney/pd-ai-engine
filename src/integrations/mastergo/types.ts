@@ -22,9 +22,16 @@ export interface MasterGoToolDiscovery {
   hasCanvasWriteCapability: boolean;
 }
 
+export interface MasterGoToolCallResult {
+  content: Array<Record<string, unknown>>;
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+}
+
 export interface MasterGoConnection {
   probe(): Promise<MasterGoConnectionInfo>;
   listTools(): Promise<MasterGoToolDiscovery>;
+  callTool(name: string, arguments_: Record<string, unknown>): Promise<MasterGoToolCallResult>;
   close(): Promise<void>;
 }
 
