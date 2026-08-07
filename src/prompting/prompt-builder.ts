@@ -135,6 +135,9 @@ export class PromptBuilder {
 
     const schemaBlock = stage === "prototype" ? PROTOTYPE_DSL_SCHEMA : "";
     const knowledgeBlock = this.buildKnowledgeBlock(stage, context);
+    const prototypeKnowledgeChecklist = stage === "prototype"
+      ? this.buildPrototypeKnowledgeChecklist(context)
+      : "";
 
     return {
       version: PROMPT_VERSION,
@@ -150,6 +153,7 @@ export class PromptBuilder {
         context.input.content.trim(),
         previousArtifacts ? `# 前序成果物\n${previousArtifacts}` : "",
         knowledgeBlock,
+        prototypeKnowledgeChecklist,
         schemaBlock,
       ].filter(Boolean).join("\n\n"),
     };
@@ -182,6 +186,36 @@ export class PromptBuilder {
       `# 阶段知识约束（Catalog ${trace.knowledgeCatalogVersion}）`,
       "仅使用下列与当前阶段相关的知识；知识 ID 与版本必须保留用于追踪。",
       ...lines,
+    ].join("\n");
+  }
+
+  private buildPrototypeKnowledgeChecklist(context: Readonly<WorkflowContext>): string {
+    const selectedIds = new Set(
+      this.stageKnowledgeTrace("prototype", context)?.selectedKnowledge.map((item) => item.knowledgeId) ?? [],
+    );
+    const checklist: string[] = [];
+
+    if (selectedIds.has("rule.status-visible")) {
+      checklist.push(
+        "- 对每一个 pattern 为 list 或 detail 的页面，都必须在 fields 中加入当前业务状态字段；字段 id 优先使用 status，label 必须包含“状态”（如“审批状态”“调动状态”）。页面名称或正文中出现“状态”不能替代该字段。",
+      );
+    }
+    if (selectedIds.has("rule.destructive-confirmation")) {
+      checklist.push(
+        "- 对每一个 kind 为 danger 的操作（包括删除、停用、撤回、驳回等高影响操作），都必须显式设置 confirmation: true。",
+      );
+    }
+    if (selectedIds.has("rule.required-field")) {
+      checklist.push(
+        "- 每一个 pattern 为 form 的页面必须至少包含一个 required: true 且 label 非空的关键业务字段。",
+      );
+    }
+
+    if (checklist.length === 0) return "";
+    return [
+      "# Prototype 知识规则落实清单（生成后逐页自检）",
+      ...checklist,
+      "以上清单必须落实到 JSON 的 fields/actions 属性中，不能只写在 rules.description 中。",
     ].join("\n");
   }
 

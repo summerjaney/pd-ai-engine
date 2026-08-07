@@ -47,6 +47,15 @@ test("TC-050-017: Prompt 包含知识 ID、版本和约束且不泄漏无关知�
   assert.doesNotMatch(prompt.user, /pattern\.list-page/);
 });
 
+test("TC-050-017A: Prototype Prompt 将知识断言翻译为可执行的逐页约束", () => {
+  const prompt = new PromptBuilder().buildStagePrompt("prototype", context);
+  assert.match(prompt.user, /每一个 pattern 为 list 或 detail 的页面/);
+  assert.match(prompt.user, /字段 id 优先使用 status/);
+  assert.match(prompt.user, /每一个 kind 为 danger 的操作/);
+  assert.match(prompt.user, /confirmation: true/);
+  assert.match(prompt.user, /不能只写在 rules\.description 中/);
+});
+
 test("TC-050-018: 阶段元数据记录选择来源、原因和知识版本", async () => {
   const builder = new PromptBuilder();
   const confirmationTrace = builder.stageKnowledgeTrace("prototype-confirmation", context);
