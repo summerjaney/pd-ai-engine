@@ -10,8 +10,21 @@ export interface MasterGoConnectionInfo {
   capabilities: string[];
 }
 
+export interface MasterGoTool {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
+export interface MasterGoToolDiscovery {
+  tools: MasterGoTool[];
+  writableTools: string[];
+  hasCanvasWriteCapability: boolean;
+}
+
 export interface MasterGoConnection {
   probe(): Promise<MasterGoConnectionInfo>;
+  listTools(): Promise<MasterGoToolDiscovery>;
   close(): Promise<void>;
 }
 

@@ -23,6 +23,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae run <需求文件> [--out <输出目录>] [选项]
   pae prototype push <需求目录> --dry-run
   pae mastergo doctor
+  pae mastergo tools
   pae --help
 
 示例：
@@ -30,6 +31,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae run examples/b2b-requirement.md --out output/legacy-example --project hr-system --id REQ-001 --name leave-request
   pae prototype push output/hr-system/requirements/REQ-001-leave-request --dry-run
   pae mastergo doctor
+  pae mastergo tools
 
 选项：
   --project <标识>            项目唯一标识（requirement create 必填，run 可选）
@@ -140,6 +142,26 @@ async function main(): Promise<void> {
     }
     if (report.nextAction) console.log(`下一步：${report.nextAction}`);
     if (report.status !== "READY") process.exitCode = 1;
+    return;
+  }
+
+  const isMasterGoTools = args[0] === "mastergo" && args[1] === "tools" && args.length === 2;
+  if (isMasterGoTools) {
+    const loaded = await loadMasterGoMcpConfig();
+    if (!loaded) throw new Error("未找到 MasterGo MCP 配置。请先运行 pae mastergo doctor。");
+    const connection = new StdioMasterGoConnection(loaded.config);
+    try {
+      const info = await connection.probe();
+      if (!info.capabilities.includes("tools")) throw new Error("MasterGo MCP Server 未声明 tools 能力。");
+      const discovery = await connection.listTools();
+      console.log(`MasterGo MCP 工具：${discovery.tools.length} 个`);
+      for (const tool of discovery.tools) {
+        const tags = [tool.inputSchema ? "schema" : "no-schema", discovery.writableTools.includes(tool.name) ? "write-candidate" : "read/unknown"];
+        console.log(`- ${tool.name} [${tags.join(", ")}]${tool.description ? `：${tool.description}` : ""}`);
+      }
+      console.log(`画布写入候选：${discovery.writableTools.length ? discovery.writableTools.join("、") : "未识别"}`);
+      if (!discovery.hasCanvasWriteCapability) process.exitCode = 2;
+    } finally { await connection.close(); }
     return;
   }
 

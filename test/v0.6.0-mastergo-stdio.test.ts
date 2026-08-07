@@ -29,3 +29,24 @@ test("TC-060-010: stdio initialize 超时会明确失败并可安全关闭", asy
   await assert.rejects(connection.probe(), /initialize 超时/);
   await connection.close();
 });
+
+test("TC-060-011: tools/list 支持分页并识别画布写入候选工具", async () => {
+  const server = [
+    "const readline = require('node:readline');",
+    "readline.createInterface({ input: process.stdin }).on('line', line => {",
+    " const r = JSON.parse(line); let result;",
+    " if (r.method === 'initialize') result = { serverInfo: { name: 'fixture' }, capabilities: { tools: {} } };",
+    " if (r.method === 'tools/list' && !r.params.cursor) result = { tools: [{ name: 'get_document' }], nextCursor: '2' };",
+    " if (r.method === 'tools/list' && r.params.cursor) result = { tools: [{ name: 'create_frame', description: 'Create a frame on canvas', inputSchema: { type: 'object' } }] };",
+    " if (result) process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: r.id, result }) + '\\n');",
+    "});",
+  ].join(" ");
+  const connection = new StdioMasterGoConnection({ command: process.execPath, args: ["-e", server] }, { timeoutMs: 2_000 });
+  try {
+    await connection.probe();
+    const discovery = await connection.listTools();
+    assert.deepEqual(discovery.tools.map((tool) => tool.name), ["get_document", "create_frame"]);
+    assert.deepEqual(discovery.writableTools, ["create_frame"]);
+    assert.equal(discovery.hasCanvasWriteCapability, true);
+  } finally { await connection.close(); }
+});
