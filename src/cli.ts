@@ -15,6 +15,7 @@ import { preparePrototypePush } from "./prototype-execution/execution-service.js
 import { loadMasterGoMcpConfig } from "./integrations/mastergo/config.js";
 import { diagnoseMasterGo } from "./integrations/mastergo/doctor.js";
 import { StdioMasterGoConnection } from "./integrations/mastergo/stdio-connection.js";
+import { executeMasterGoPagePipeline } from "./integrations/mastergo/page-pipeline.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -22,6 +23,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae requirement create <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
   pae run <需求文件> [--out <输出目录>] [选项]
   pae prototype push <需求目录> --dry-run
+  pae prototype push <需求目录> --write --confirm-write
   pae mastergo doctor
   pae mastergo tools [--json <文件>]
   pae --help
@@ -46,6 +48,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --model <名称>             模型名称；openai 模式必填
   --knowledge-mode <模式>   知识模式：auto（默认）或 off（A/B 对照基线）
   --dry-run                 只生成 MasterGo 操作计划，不修改画布
+  --write                   执行真实 MasterGo 页面写入
+  --confirm-write           显式确认本次写入（必须与 --write 同时使用）
   --json <文件>             保存 MasterGo 完整工具契约（不会调用工具）
 `;
 
@@ -79,7 +83,7 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
-  "--dry-run", "--json",
+  "--dry-run", "--json", "--write", "--confirm-write",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -119,14 +123,24 @@ async function main(): Promise<void> {
   const isPrototypePush = args[0] === "prototype" && args[1] === "push" && Boolean(args[2]);
   if (isPrototypePush) {
     validateArgs(args);
-    if (!args.includes("--dry-run")) {
-      throw new Error("prototype push 当前必须使用 --dry-run，避免在执行器验证前修改真实画布。");
+    if (args.includes("--dry-run")) {
+      const output = await preparePrototypePush(path.resolve(args[2]), { dryRun: true });
+      console.log("MasterGo 操作计划已生成（dry-run，未修改画布）。");
+      console.log(`操作数：${output.result.totalOperations}`);
+      console.log(`操作计划：${output.planPath}`);
+      console.log(`执行结果：${output.resultPath}`);
+      return;
     }
-    const output = await preparePrototypePush(path.resolve(args[2]), { dryRun: true });
-    console.log("MasterGo 操作计划已生成（dry-run，未修改画布）。");
-    console.log(`操作数：${output.result.totalOperations}`);
-    console.log(`操作计划：${output.planPath}`);
+    if (!args.includes("--write") || !args.includes("--confirm-write")) {
+      throw new Error("真实写入必须同时使用 --write --confirm-write；仅预览请使用 --dry-run。");
+    }
+    const loaded = await loadMasterGoMcpConfig();
+    if (!loaded) throw new Error("未找到 MasterGo MCP 配置。请先运行 pae mastergo doctor。");
+    const output = await executeMasterGoPagePipeline(path.resolve(args[2]), new StdioMasterGoConnection(loaded.config, { timeoutMs: 120_000 }), { confirmedWrite: true });
+    console.log(`MasterGo 真实写入：${output.status}`);
+    console.log(`写入计划：${output.planPath}`);
     console.log(`执行结果：${output.resultPath}`);
+    if (output.status !== "PASS") process.exitCode = 1;
     return;
   }
 
