@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-07
+
+### Added
+
+- 新增 B 端产品设计知识目录，以及 Business、Pattern、Component、Rule 四类知识资产。
+- 新增确定性知识选择、显式知识覆盖、按阶段 Prompt 注入和 manifest 知识追踪。
+- 新增 Prototype DSL 知识合规门禁及 Review 知识合规矩阵。
+- 新增用户管理 A/B 对照验收、员工调动回归样本和量化评审材料。
+
+### Fixed
+
+- 修复状态字段与危险操作确认规则未稳定落实到 Prototype DSL 的问题。
+- 修复操作级权限、列表查询/重置、表格列、分页、空状态和字段联动表达缺口。
+- 修复待确认项污染 Prototype 异常反馈并继承到 PRD 的问题。
+- 为知识合规失败保留被拒绝原型和规则诊断产物。
+
+### Validation
+
+- 自动化测试：130/130 通过；`npm run build`、`npm run check` 通过。
+- 用户管理 A/B 评分：A 组 21/30，B 组 26/30。
+- 用户管理与员工调动真实 LLM 工作流均完成 10/10 阶段。
+- `PAE-050-001`～`PAE-050-004` 全部关闭，最终 Review 为 0 个 Error。
+- `TC-050-001`～`TC-050-033` 已完成；`TC-050-034` 在版本提交与 Tag 创建后完成最终一致性确认。
+
 ## [0.4.0] - 2026-08-06
 
 ### Added
