@@ -12,6 +12,8 @@ import { ProductDesignWorkflow } from "./workflow/workflow.js";
 import { prepareRequirementOutput } from "./output/requirement-output.js";
 import { readEngineVersion } from "./version.js";
 import { preparePrototypePush } from "./prototype-execution/execution-service.js";
+import { loadMasterGoMcpConfig } from "./integrations/mastergo/config.js";
+import { diagnoseMasterGo } from "./integrations/mastergo/doctor.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -19,12 +21,14 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae requirement create <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
   pae run <需求文件> [--out <输出目录>] [选项]
   pae prototype push <需求目录> --dry-run
+  pae mastergo doctor
   pae --help
 
 示例：
   pae requirement create examples/b2b-requirement.md --project hr-system --id REQ-001 --name leave-request
   pae run examples/b2b-requirement.md --out output/legacy-example --project hr-system --id REQ-001 --name leave-request
   pae prototype push output/hr-system/requirements/REQ-001-leave-request --dry-run
+  pae mastergo doctor
 
 选项：
   --project <标识>            项目唯一标识（requirement create 必填，run 可选）
@@ -119,6 +123,17 @@ async function main(): Promise<void> {
     console.log(`操作数：${output.result.totalOperations}`);
     console.log(`操作计划：${output.planPath}`);
     console.log(`执行结果：${output.resultPath}`);
+    return;
+  }
+
+  const isMasterGoDoctor = args[0] === "mastergo" && args[1] === "doctor" && args.length === 2;
+  if (isMasterGoDoctor) {
+    const loaded = await loadMasterGoMcpConfig();
+    const report = await diagnoseMasterGo(loaded);
+    console.log(`MasterGo MCP 诊断：${report.status}`);
+    for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
+    if (report.nextAction) console.log(`下一步：${report.nextAction}`);
+    if (report.status !== "READY") process.exitCode = 1;
     return;
   }
 

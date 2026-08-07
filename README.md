@@ -85,6 +85,25 @@ npm run dev -- requirement create path/to/requirement.md \
 npm run dev -- --help
 ```
 
+### MasterGo 执行预检（v0.6.0）
+
+先配置 MasterGo MCP，再运行诊断：
+
+```bash
+export PAE_MASTERGO_MCP_CONFIG=/absolute/path/to/mcp.json
+npm run dev -- mastergo doctor
+```
+
+配置文件既支持标准的 `mcpServers.mastergo` 结构，也支持直接提供 `{ "command": "...", "args": [...] }`。还可以用 `PAE_MASTERGO_MCP_COMMAND` 和 JSON 数组格式的 `PAE_MASTERGO_MCP_ARGS` 配置。
+
+当前批次可安全生成操作计划，不修改真实画布：
+
+```bash
+npm run dev -- prototype push output/<project>/requirements/<requirement> --dry-run
+```
+
+doctor 会分别报告配置、启动命令和 MCP 连接状态；未执行真实 initialize 探测时不会把连接标记为成功。
+
 为兼容 v0.2.0，旧命令仍可使用：
 
 ```bash
