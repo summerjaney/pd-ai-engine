@@ -24,6 +24,11 @@ const prototype = (): PrototypeDsl => ({
     { id: "detail", name: "用户详情", route: "/users/1", pattern: "detail", fields: [{ id: "status", label: "状态", type: "select", required: false }], actions: [] },
   ],
   rules: [], transitions: [],
+  errorFeedback: {
+    validationMessage: "字段校验失败时说明原因。",
+    operationFailureMessage: "操作失败时说明原因。",
+    recoveryAction: "保留输入并允许重试。",
+  },
   designTokens: { colors: {}, spacing: {}, radius: {}, typography: { fontSize: {}, fontWeight: {}, lineHeight: {} } },
 });
 
@@ -71,6 +76,17 @@ test("PAE-050-002: 列表查询与空状态结构可自动校验", () => {
   const result = validator.validatePrototype(value, catalog, select("用户列表查询重置空状态"));
   assert.equal(result.items.find((item) => item.knowledgeId === "rule.list-search")?.status, "failed");
   assert.equal(result.items.find((item) => item.knowledgeId === "rule.empty-state")?.status, "failed");
+});
+
+test("PAE-050-004: 异常反馈有结构时自动通过，旧 DSL 保持人工评审兼容", () => {
+  const value = prototype();
+  let result = validator.validatePrototype(value, catalog, select("用户表单异常错误反馈"));
+  assert.equal(result.items.find((item) => item.knowledgeId === "rule.error-feedback")?.status, "passed");
+  delete value.errorFeedback;
+  result = validator.validatePrototype(value, catalog, select("用户表单异常错误反馈"));
+  const issue = result.items.find((item) => item.knowledgeId === "rule.error-feedback");
+  assert.equal(issue?.status, "manual");
+  assert.equal(result.valid, true);
 });
 
 test("TC-050-024: error 级知识规则失败会阻断后续阶段", async () => {

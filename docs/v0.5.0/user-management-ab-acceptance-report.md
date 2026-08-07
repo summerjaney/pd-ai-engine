@@ -5,7 +5,8 @@
 - `TC-050-029`：**PASS**。A/B 两组均使用真实 LLM 完成 10 个阶段，运行状态为 `completed`。
 - `TC-050-031`：**PASS**。两组成果物分别归档，A 组为 `knowledge.mode=off`，B 组为 `knowledge.mode=auto`，模式及知识选择记录可区分。
 - `TC-050-032`：**PASS（评审活动完成）**。已形成六维量化评分、具体差异和可定位证据。
-- v0.5.0 发布门槛：**暂未达到**。B 组 Prototype DSL 存在按钮级权限表达缺失这一阻断缺陷，需修复并回归后才能发布。
+- `PAE-050-001～003`：**CLOSED**。修复后的 B 组真实 LLM 回归通过，三类 DSL 缺陷均有成果物证据。
+- v0.5.0 发布门槛：**暂未达到**。最新 Review 新发现待确认项未闭环却进入 PRD 的 Error，登记为 `PAE-050-004`；关闭前不执行 `TC-050-034`。
 
 ## 2. 运行信息
 
@@ -94,4 +95,65 @@
 - Mock、真实 Provider 测试夹具与旧版兼容测试已同步更新。
 - 自动化验证：`npm run check` 通过，127/127 项测试通过；TypeScript 无类型错误。
 
-三个缺陷当前状态为 **代码已修复、等待真实 LLM 回归关闭**。在新的 B 组结果通过自动门禁与人工复核前，发布判断仍保持“暂未达到”。
+三个缺陷已在下述真实 LLM 回归中完成关闭；本节保留其代码修复记录。
+
+## 9. 修复后 B 组真实 LLM 回归
+
+### 9.1 回归结果
+
+| 项目 | 结果 |
+|---|---|
+| Run ID | `64eef5b0-0f41-4fb4-8a8c-01d2a9454dec` |
+| 知识模式 | `auto` |
+| 知识目录版本 | `0.5.0` |
+| 知识选择 | 20 条 |
+| 工作流 | 10/10 `completed` |
+| 自动合规 | `valid=true`；6 条自动规则 `passed`，`rule.error-feedback` 保持 `manual` |
+| Debug 产物 | 0（无门禁失败） |
+
+### 9.2 缺陷关闭证据
+
+| 缺陷 | 回归证据 | 状态 |
+|---|---|---|
+| `PAE-050-001` 操作级权限 | `user_list`、`user_form`、`user_detail` 的所有 `actions[]` 均声明 `roles`；`rule.permission-visibility` 自动结果为 `passed` | **CLOSED** |
+| `PAE-050-002` 列表结构 | `user_list` 已包含 `search/reset`、`tableColumns`、`pagination.enabled=true`、`emptyState`；`rule.list-search` 与 `rule.empty-state` 均为 `passed` | **CLOSED** |
+| `PAE-050-003` 字段联动与确认影响 | `main_post.optionsSource="posts"`；全部 `danger` 操作均包含 `confirmation=true` 和非空 `confirmationMessage`；`rule.destructive-confirmation` 为 `passed` | **CLOSED** |
+
+结构化复核未发现上述三类问题，修复后的真实 LLM 回归满足其关闭标准。
+
+### 9.3 回归中新发现的问题
+
+#### PAE-050-004：待确认项未闭环却写入确定性 PRD
+
+- 严重程度：**Blocker**
+- 来源：修复后 B 组 `10-review.md`
+- 现象：需求分析提出的组织管理员权限边界、密码策略、账号唯一性校验时机等待确认项，未形成明确确认记录；PRD 却将部分内容写为确定性需求，并遗漏部分待确认结果。
+- 影响：违反“不虚构确定性事实”和 Prototype First 原则，Review 明确判定需修复后方可进入开发阶段。
+- 关闭标准：未确认事项在 PRD 中保持“待确认”，或由结构化确认结果提供依据；Review 不再输出该 Error；真实 LLM 回归 10/10 完成。
+
+以下两项作为非阻断一致性问题一并记录，建议与 `PAE-050-004` 同批修复：
+
+- Prototype 的 `rule.required-field.description` 遗漏“主岗位”，与实际字段及 PRD 不一致。
+- `rule.error-feedback` 已在核心流程与 PRD 中通过人工评审，但 Prototype DSL 尚无结构化 `errorFeedback` 表达，Review 判定为部分合规。
+
+## 10. 最终发布判断
+
+- `TC-050-029～032`：已完成并通过。
+- `PAE-050-001～003`：真实 LLM 回归关闭。
+- `PAE-050-004`：**OPEN / Blocker**。
+- `TC-050-034`：**暂不执行**。
+- v0.5.0：**暂不可发布**。
+
+下一步应修复“待确认项闭环”以及两项 Prototype/PRD 一致性问题，完成最后一次 B 组真实 LLM 回归；Review 无 Error 后，方可开始版本号、package、manifest、README、CHANGELOG 与 Tag 一致性检查。
+
+## 11. PAE-050-004 修复进展
+
+已完成代码修复，等待最后一次真实 LLM 回归关闭：
+
+- PRD Prompt 强制逐项继承需求分析中的待确认项；没有确认依据时必须保留为“待确认/TBD”，禁止转换为确定性需求。
+- Review Prompt 明确区分“正确保留待确认”与“虚构确定性事实”。
+- Prototype DSL 新增可选 `errorFeedback`，结构化表达校验失败、操作失败和恢复动作；新生成 Prompt 强制填写，旧 DSL 缺失时保持人工评审兼容。
+- `rule.required-field` 生成约束要求规则描述覆盖全部实际必填字段。
+- 自动化验证：`npm run check` 通过，129/129 项测试通过；TypeScript 无类型错误。
+
+在真实 LLM 回归的 `10-review.md` 不再包含待确认项 Error，且 Prototype 包含 `errorFeedback` 后，可关闭 `PAE-050-004` 并进入 `TC-050-034`。
