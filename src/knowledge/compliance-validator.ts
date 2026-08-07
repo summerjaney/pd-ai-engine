@@ -50,10 +50,28 @@ export class KnowledgeComplianceValidator {
         : { ...base, status: "failed", message: `页面缺少状态展示：${invalid.map((page) => page.name).join("、")}` };
     }
     if (rule.id === "rule.destructive-confirmation") {
-      const unsafe = prototype.pages.flatMap((page) => page.actions.filter((action) => action.kind === "danger" && action.confirmation !== true)
+      const unsafe = prototype.pages.flatMap((page) => page.actions.filter((action) => action.kind === "danger" && (action.confirmation !== true || !action.confirmationMessage?.trim()))
         .map((action) => `${page.name}/${action.label}`));
-      return unsafe.length === 0 ? { ...base, status: "passed", message: "危险操作均配置确认机制" }
-        : { ...base, status: "failed", message: `危险操作缺少确认机制：${unsafe.join("、")}` };
+      return unsafe.length === 0 ? { ...base, status: "passed", message: "危险操作均配置确认机制与影响说明" }
+        : { ...base, status: "failed", message: `危险操作缺少确认机制或影响说明：${unsafe.join("、")}` };
+    }
+    if (rule.id === "rule.permission-visibility") {
+      const invalid = prototype.pages.flatMap((page) => page.actions.filter((action) => !action.roles?.length)
+        .map((action) => `${page.name}/${action.label}`));
+      return invalid.length === 0 ? { ...base, status: "passed", message: "所有操作均声明角色权限" }
+        : { ...base, status: "failed", message: `操作缺少角色权限：${invalid.join("、")}` };
+    }
+    if (rule.id === "rule.list-search") {
+      const invalid = prototype.pages.filter((page) => page.pattern === "list")
+        .filter((page) => page.fields.length === 0 || !page.actions.some((action) => action.id === "search") || !page.actions.some((action) => action.id === "reset"));
+      return invalid.length === 0 ? { ...base, status: "passed", message: "列表页均提供查询字段、查询和重置操作" }
+        : { ...base, status: "failed", message: `列表检索结构不完整：${invalid.map((page) => page.name).join("、")}` };
+    }
+    if (rule.id === "rule.empty-state") {
+      const invalid = prototype.pages.filter((page) => page.pattern === "list")
+        .filter((page) => !page.tableColumns?.length || page.pagination?.enabled !== true || !page.emptyState?.description?.trim());
+      return invalid.length === 0 ? { ...base, status: "passed", message: "列表页均声明表格列、分页和空状态" }
+        : { ...base, status: "failed", message: `列表页缺少表格列、分页或空状态：${invalid.map((page) => page.name).join("、")}` };
     }
     return { ...base, status: "manual", message: `暂不支持自动执行断言：${rule.assertion.operator} ${rule.assertion.path}` };
   }

@@ -20,7 +20,14 @@ const prototype: PrototypeDsl = {
     route: "/transfers",
     pattern: "list",
     fields: [{ id: "status", label: "状态", type: "select", required: false }],
-    actions: [{ id: "create", label: "新建", kind: "primary" }],
+    actions: [
+      { id: "search", label: "查询", kind: "primary", roles: ["管理员"] },
+      { id: "reset", label: "重置", kind: "secondary", roles: ["管理员"] },
+      { id: "create", label: "新建", kind: "primary", roles: ["管理员"] },
+    ],
+    tableColumns: ["status"],
+    pagination: { enabled: true, pageSize: 20 },
+    emptyState: { description: "暂无调动记录", actionId: "create" },
   }],
   rules: [{ id: "rule-1", description: "生效日期不得早于审批日期", appliesTo: ["transfer-list"] }],
   transitions: [],
@@ -56,9 +63,9 @@ class RecordingProvider implements LlmProvider {
     const content = request.stage === "prototype"
       ? JSON.stringify(prototype)
       : request.stage === "page-structure"
-        ? "# 页面结构\n\n- 调动列表：展示状态，支持新建。"
+        ? "# 页面结构\n\n- 调动列表：展示状态，支持查询、重置和新建。"
         : request.stage === "prd"
-          ? "# PRD\n\n## 调动列表\n\n字段：状态。\n\n操作：新建。"
+          ? "# PRD\n\n## 调动列表\n\n字段：状态。\n\n操作：查询、重置、新建。"
       : `# ${request.stage}\n\n这是 ${request.stage} 的有效成果物。`;
     return { content, model: "integration-model", provider: "openai" };
   }

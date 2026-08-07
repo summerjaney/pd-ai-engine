@@ -112,6 +112,8 @@ function generatePageId(name: string, index: number): string {
 function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
   const parsed = parseRequirement(context.input.content);
   const title = parsed.title;
+  const actionRoles = parsed.roles.map((role) => role.name);
+  if (actionRoles.length === 0) actionRoles.push("管理员");
 
   const navLabels = new Set<string>();
   const pageIdToNavLabel = new Map<string, string>();
@@ -155,17 +157,19 @@ function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
 
     const actions = pattern === "form"
       ? [
-          { id: "submit", label: "提交", kind: "primary" as const },
-          { id: "save-draft", label: "保存草稿", kind: "secondary" as const },
-          { id: "cancel", label: "取消", kind: "secondary" as const },
+          { id: "submit", label: "提交", kind: "primary" as const, roles: actionRoles },
+          { id: "save-draft", label: "保存草稿", kind: "secondary" as const, roles: actionRoles },
+          { id: "cancel", label: "取消", kind: "secondary" as const, roles: actionRoles },
         ]
       : pattern === "detail"
       ? [
-          { id: "withdraw", label: "撤回", kind: "danger" as const, confirmation: true },
+          { id: "withdraw", label: "撤回", kind: "danger" as const, confirmation: true, confirmationMessage: "撤回后当前流程将终止，请确认业务影响。", roles: actionRoles },
         ]
       : [
-          { id: "create", label: "新建", kind: "primary" as const },
-          { id: "view", label: "查看", kind: "secondary" as const },
+          { id: "search", label: "查询", kind: "primary" as const, roles: actionRoles },
+          { id: "reset", label: "重置", kind: "secondary" as const, roles: actionRoles },
+          { id: "create", label: "新建", kind: "primary" as const, roles: actionRoles },
+          { id: "view", label: "查看", kind: "secondary" as const, roles: actionRoles },
         ];
 
     pageList.push({
@@ -175,6 +179,11 @@ function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
       pattern,
       fields,
       actions,
+      ...(pattern === "list" ? {
+        tableColumns: fields.map((field) => field.id),
+        pagination: { enabled: true, pageSize: 20 },
+        emptyState: { description: "暂无数据，请调整查询条件或新建记录。", actionId: "create" },
+      } : {}),
     });
   }
 

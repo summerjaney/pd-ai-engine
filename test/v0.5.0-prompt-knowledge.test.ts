@@ -53,6 +53,11 @@ test("TC-050-017A: Prototype Prompt 将知识断言翻译为可执行的逐页�
   assert.match(prompt.user, /字段 id 优先使用 status/);
   assert.match(prompt.user, /每一个 kind 为 danger 的操作/);
   assert.match(prompt.user, /confirmation: true/);
+  assert.match(prompt.user, /confirmationMessage/);
+  assert.match(prompt.user, /action 都必须填写非空 roles/);
+  assert.match(prompt.user, /id=search/);
+  assert.match(prompt.user, /tableColumns/);
+  assert.match(prompt.user, /optionsSource/);
   assert.match(prompt.user, /不能只写在 rules\.description 中/);
 });
 

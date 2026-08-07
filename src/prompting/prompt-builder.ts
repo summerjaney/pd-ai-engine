@@ -69,7 +69,7 @@ const STAGE_KNOWLEDGE_TYPES: Record<StageId, readonly KnowledgeType[]> = {
 const PROTOTYPE_DSL_SCHEMA = `# PrototypeDsl JSON Schema 约束（必须严格遵守）
 
 只允许使用下列字段名，不得新增、改名或使用下划线/缩写变体。
-禁止使用 roles、groups、items、target_page、page_id、source_page_id 等非标准字段。
+禁止使用 groups、items、target_page、page_id、source_page_id 等非标准字段。
 navigation、transitions、rules 中的页面引用字段必须与 pages[].id 完全匹配。
 
 ## 顶层结构
@@ -92,11 +92,17 @@ navigation、transitions、rules 中的页面引用字段必须与 pages[].id �
     - label: 字符串
     - type: "text" | "textarea" | "select" | "datetime"
     - required: 布尔
+    - optionsSource: 可选字符串；联动选择字段填写其候选值来源字段 id
   - actions: 数组，每个元素
     - id: 字符串
     - label: 字符串
     - kind: "primary" | "secondary" | "danger"
     - confirmation: 可选布尔值；危险或不可逆操作必须为 true
+    - confirmationMessage: 可选字符串；危险操作必须填写明确的影响说明，未确认事实可使用 TBD 标记
+    - roles: 可选字符串数组；启用权限规则时每个操作都必须声明允许执行的角色
+  - tableColumns: list 页面可选字符串数组；每个值必须等于本页 fields 中某个字段 id
+  - pagination: list 页面可选对象，包含 enabled 布尔值和正整数 pageSize
+  - emptyState: list 页面可选对象，包含非空 description 和可选 actionId；actionId 必须引用本页操作
 - rules: 数组，每个元素
   - id: 字符串
   - description: 字符串
@@ -191,7 +197,7 @@ export class PromptBuilder {
 
   private buildPrototypeKnowledgeChecklist(context: Readonly<WorkflowContext>): string {
     const selectedIds = new Set(
-      this.stageKnowledgeTrace("prototype", context)?.selectedKnowledge.map((item) => item.knowledgeId) ?? [],
+      context.knowledge?.selection.selectedKnowledge.map((item) => item.knowledgeId) ?? [],
     );
     const checklist: string[] = [];
 
@@ -202,13 +208,25 @@ export class PromptBuilder {
     }
     if (selectedIds.has("rule.destructive-confirmation")) {
       checklist.push(
-        "- 对每一个 kind 为 danger 的操作（包括删除、停用、撤回、驳回等高影响操作），都必须显式设置 confirmation: true。",
+        "- 对每一个 kind 为 danger 的操作（包括删除、停用、撤回、驳回等高影响操作），都必须显式设置 confirmation: true，并填写非空 confirmationMessage 说明业务影响；影响尚未确认时保留 TBD，不得虚构。",
       );
     }
     if (selectedIds.has("rule.required-field")) {
       checklist.push(
         "- 每一个 pattern 为 form 的页面必须至少包含一个 required: true 且 label 非空的关键业务字段。",
       );
+    }
+    if (selectedIds.has("rule.permission-visibility")) {
+      checklist.push("- pages 中每个 action 都必须填写非空 roles 数组，明确允许执行该操作的业务角色；不能只在 navigation 中声明页面角色。");
+    }
+    if (selectedIds.has("rule.list-search")) {
+      checklist.push("- 每个 list 页面必须包含可检索 fields，并在 actions 中同时包含查询（id=search）和重置（id=reset）操作。");
+    }
+    if (selectedIds.has("rule.empty-state")) {
+      checklist.push("- 每个 list 页面必须填写 tableColumns、pagination（enabled=true 且 pageSize 为正整数）和 emptyState.description；emptyState.actionId 如填写必须引用本页 action.id。");
+    }
+    if (selectedIds.has("pattern.form-page")) {
+      checklist.push("- 表单中若一个选择字段的候选值依赖另一个字段（如主岗位来自关联岗位），必须用 optionsSource 填写来源字段 id。");
     }
 
     if (checklist.length === 0) return "";
