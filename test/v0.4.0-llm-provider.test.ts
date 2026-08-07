@@ -11,6 +11,7 @@ import { OpenAiProvider } from "../src/llm/openai-provider.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { LlmRequirementAnalysisExecutor } from "../src/execution/llm-requirement-analysis-executor.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
+import { PROMPT_VERSION } from "../src/prompting/prompt-builder.js";
 
 const workflowContext = (): WorkflowContext => ({
   runId: "run",
@@ -131,5 +132,5 @@ test("TC-040-006/021 manifest 记录生成信息但不包含 API Key", async () 
   const manifest = await readFile(path.join(output, "manifest.json"), "utf8");
   assert.doesNotMatch(manifest, new RegExp(secret));
   assert.match(manifest, /"provider": "openai"/);
-  assert.match(manifest, /"promptVersion": "0.5.0"/);
+  assert.match(manifest, new RegExp(`"promptVersion": "${PROMPT_VERSION.replaceAll(".", "\\.")}"`));
 });

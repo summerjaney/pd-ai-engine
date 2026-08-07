@@ -16,6 +16,7 @@ import { loadMasterGoMcpConfig } from "./integrations/mastergo/config.js";
 import { diagnoseMasterGo } from "./integrations/mastergo/doctor.js";
 import { StdioMasterGoConnection } from "./integrations/mastergo/stdio-connection.js";
 import { executeMasterGoPagePipeline } from "./integrations/mastergo/page-pipeline.js";
+import { verifyMasterGoCanvas } from "./integrations/mastergo/verification.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -24,6 +25,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae run <需求文件> [--out <输出目录>] [选项]
   pae prototype push <需求目录> --dry-run
   pae prototype push <需求目录> --write --confirm-write
+  pae prototype verify <需求目录> --pass --evidence <证据说明>
   pae mastergo doctor
   pae mastergo tools [--json <文件>]
   pae --help
@@ -50,6 +52,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --dry-run                 只生成 MasterGo 操作计划，不修改画布
   --write                   执行真实 MasterGo 页面写入
   --confirm-write           显式确认本次写入（必须与 --write 同时使用）
+  --pass                    将已人工核验的 MasterGo 画布回写为 PASS
+  --evidence <说明>         人工画布验收证据说明（verify 必填）
   --json <文件>             保存 MasterGo 完整工具契约（不会调用工具）
 `;
 
@@ -83,7 +87,7 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
-  "--dry-run", "--json", "--write", "--confirm-write",
+  "--dry-run", "--json", "--write", "--confirm-write", "--pass", "--evidence",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -142,6 +146,18 @@ async function main(): Promise<void> {
     console.log(`写入计划：${output.planPath}`);
     console.log(`执行结果：${output.resultPath}`);
     if (output.status === "FAIL") process.exitCode = 1;
+    return;
+  }
+
+  const isPrototypeVerify = args[0] === "prototype" && args[1] === "verify" && Boolean(args[2]);
+  if (isPrototypeVerify) {
+    validateArgs(args);
+    if (!args.includes("--pass")) throw new Error("人工画布验收回写必须显式使用 --pass。");
+    const evidence = option(args, "--evidence");
+    if (!evidence) throw new Error("人工画布验收回写必须提供 --evidence <证据说明>。");
+    const output = await verifyMasterGoCanvas(path.resolve(args[2]), evidence);
+    console.log(`MasterGo 人工画布验收：${output.status}`);
+    console.log(`执行结果：${output.resultPath}`);
     return;
   }
 

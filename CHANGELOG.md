@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-07
+
+### Added
+
+- 新增 MasterGo MCP 配置诊断、真实握手、工具发现和完整 Schema 导出。
+- 新增 `design_page → submit_page_to_canvas` 逐页写入链路及 `--write --confirm-write` 双重门禁。
+- 新增 MasterGo 合规静态 HTML 生成、本地协议校验、逐页 HTML 与 MCP 原始响应留痕。
+- 新增 `prototype verify --pass --evidence` 人工画布验收回写。
+
+### Fixed
+
+- 修复将 MCP `accepted` 回执误判为最终成功的问题，改为 `PENDING_VERIFICATION`。
+- 修复多页面合并提交、交互原型隐藏页面及不兼容 HTML 导致空白画板或 `CreateNodesFailed` 的问题。
+- 修复写入失败时未保存失败阶段、实际 HTML 和 MasterGo 原始错误的问题。
+
+### Validation
+
+- MasterGo Vibe MCP `1.0.27` 真实连接诊断为 `READY`，发现 24 个真实工具。
+- 基础平台用户管理 P1 列表页与 P2 表单/详情页均成功写入 MasterGo，并通过人工画布核验。
+- 两个页面均生成可编辑图层；未再出现空白画板或 `CreateNodesFailed`。
+
 ## [0.5.0] - 2026-08-07
 
 ### Added

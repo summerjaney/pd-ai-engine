@@ -2,7 +2,7 @@ import type { StageId, WorkflowContext } from "../domain/types.js";
 import { createStageKnowledgeTrace, type KnowledgeTrace } from "../knowledge/trace.js";
 import type { KnowledgeEntity, KnowledgeType } from "../knowledge/types.js";
 
-export const PROMPT_VERSION = "0.5.0";
+export const PROMPT_VERSION = "0.6.0";
 
 export interface StagePrompt {
   version: string;
