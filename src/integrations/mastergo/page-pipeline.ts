@@ -34,11 +34,33 @@ function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
+function text(name: string, value: string, className = "text-[14px] leading-[20px] font-[400] text-[#1D2129] text-left"): string {
+  return `<span data-name="${escapeHtml(name)}" class="${className}">${escapeHtml(value)}</span>`;
+}
+
 function fieldControl(node: MasterGoScreenNode): string {
   const name = escapeHtml(node.name);
-  const required = node.required ? '<span style="color:#ff4d4f"> *</span>' : "";
-  const suffix = /select/i.test(node.component) ? "⌄" : "";
-  return `<div style="width:280px;margin:0 16px 20px 0;display:inline-block;vertical-align:top"><div style="font-size:14px;color:#333;margin-bottom:8px">${name}${required}</div><div style="height:40px;border:1px solid #d9d9d9;border-radius:4px;background:#fff;padding:10px 12px;color:#999;font-size:14px">请输入${name}<span style="float:right">${suffix}</span></div></div>`;
+  const required = node.required ? text(`${node.id}-required`, "*", "text-[14px] leading-[20px] font-[500] text-[#F53F3F] text-left") : "";
+  const suffix = /select/i.test(node.component) ? text(`${node.id}-suffix`, "⌄", "text-[14px] leading-[20px] font-[400] text-[#86909C] text-right") : "";
+  return `<div data-name="field-${escapeHtml(node.id)}" class="flex flex-col justify-start items-stretch w-[280px] gap-[8px]"><div data-name="field-label-${escapeHtml(node.id)}" class="flex flex-row justify-start items-center gap-[4px]">${text(`${node.id}-label`, name)}${required}</div><div data-name="field-control-${escapeHtml(node.id)}" class="flex flex-row justify-between items-center self-stretch h-[40px] border-[1px] border-[#D9DDE4] rounded-[4px] bg-[#FFFFFF] px-[12px]">${text(`${node.id}-placeholder`, `请输入${name}`, "text-[14px] leading-[20px] font-[400] text-[#A9AEB8] text-left")}${suffix}</div></div>`;
+}
+
+function actionButton(node: MasterGoScreenNode, primary = false): string {
+  return `<div data-name="action-${escapeHtml(node.id)}" class="flex flex-row justify-center items-center h-[36px] px-[18px] rounded-[4px] border-[1px] ${primary ? "border-[#1890FF] bg-[#1890FF]" : "border-[#D9DDE4] bg-[#FFFFFF]"}">${text(`${node.id}-text`, node.name, `text-[14px] leading-[20px] font-[500] ${primary ? "text-[#FFFFFF]" : "text-[#1D2129]"} text-center`)}</div>`;
+}
+
+/** Reject syntax which MasterGo's HTML reverse-transpiler documents as non-convertible. */
+export function validateMasterGoHtml(html: string): void {
+  const violations: string[] = [];
+  if (!/^<main\b/i.test(html.trim()) || !/<\/main>\s*$/i.test(html.trim())) violations.push("必须是单一 <main> 根节点片段");
+  if (/<!doctype|<html\b|<head\b|<body\b/i.test(html)) violations.push("禁止提交文档外壳");
+  if (/\sstyle\s*=/i.test(html)) violations.push("禁止内联 style");
+  if (/<(?:table|thead|tbody|tfoot|tr|th|td|input|select|textarea|button|form)\b/i.test(html)) violations.push("禁止原生表格或表单标签");
+  if (/\b(?:m|mx|my|mt|mr|mb|ml)-\[?[^\s\"]+/i.test(html)) violations.push("禁止 margin 工具类");
+  if (/\b(?:grid|float-|w-full|h-full)\b/i.test(html)) violations.push("禁止 Grid、float 或相对尺寸");
+  const tags = html.match(/<(?:main|div|span|p|i|img)\b[^>]*>/gi) ?? [];
+  if (tags.some((tag) => !/\sdata-name="[^"]+"/i.test(tag))) violations.push("所有 DOM 节点必须包含 data-name");
+  if (violations.length) throw new Error(`MasterGo HTML 协议校验失败：${violations.join("；")}`);
 }
 
 /** Render one static, fully visible page. MasterGo converts this HTML to editable canvas nodes. */
@@ -47,11 +69,17 @@ export function renderMasterGoScreenHtml(data: MasterGoData, screen: MasterGoScr
   const actions = screen.nodes.filter((node) => node.type === "action");
   const primary = actions.find((node) => /^(查询|保存|新增)/.test(node.name));
   const secondary = actions.filter((node) => node !== primary);
-  const button = (node: MasterGoScreenNode, main = false) => `<span style="display:inline-block;height:36px;line-height:36px;padding:0 18px;margin-left:8px;border-radius:4px;border:1px solid ${main ? "#1890ff" : "#d9d9d9"};background:${main ? "#1890ff" : "#fff"};color:${main ? "#fff" : "#333"};font-size:14px">${escapeHtml(node.name)}</span>`;
+  const searchActions = [primary, ...secondary.slice(0, 2)].filter(Boolean) as MasterGoScreenNode[];
+  const tableActions = actions.filter((node) => !searchActions.includes(node));
+  const columns = fields.slice(0, 7);
+  const cell = (name: string, value: string, emphasis = false) => `<div data-name="${escapeHtml(name)}" class="flex flex-row justify-start items-center flex-1 min-w-[112px] px-[12px]">${text(`${name}-text`, value, `text-[14px] leading-[20px] font-[${emphasis ? "500" : "400"}] ${emphasis ? "text-[#1890FF]" : "text-[#4E5969]"} text-left`)}</div>`;
+  const row = (index: number, person: string) => `<div data-name="table-row-${index}" class="flex flex-row justify-start items-stretch self-stretch min-h-[54px] border-b-[1px] border-[#E5E6EB]">${columns.map((node, columnIndex) => cell(`row-${index}-${node.id}`, columnIndex === 0 ? person : columnIndex === 1 ? `user00${index}` : columnIndex === 5 ? "启用" : "示例数据")).join("")}${cell(`row-${index}-operation`, "查看　编辑", true)}</div>`;
   const body = screen.pattern === "list"
-    ? `<div style="padding:24px;background:#fff;border-radius:4px"><div>${fields.map(fieldControl).join("")}</div><div style="text-align:right">${primary ? button(primary, true) : ""}${secondary.slice(0, 2).map((node) => button(node)).join("")}</div></div><div style="margin-top:16px;padding:20px 24px;background:#fff;border-radius:4px"><div style="margin-bottom:18px"><span style="font-size:16px;font-weight:600">用户列表</span><span style="float:right">${actions.filter((node) => ![primary, ...secondary.slice(0, 2)].includes(node)).map((node, index) => button(node, index === 0)).join("")}</span></div><table style="width:100%;border-collapse:collapse;font-size:14px"><tr style="height:48px;background:#fafafa;color:#555">${fields.slice(0, 7).map((node) => `<th style="text-align:left;padding:0 12px;border-bottom:1px solid #eee">${escapeHtml(node.name)}</th>`).join("")}<th style="text-align:left;padding:0 12px;border-bottom:1px solid #eee">操作</th></tr>${["张伟", "李娜", "王强"].map((name, i) => `<tr style="height:54px"><td style="padding:0 12px;border-bottom:1px solid #eee">${name}</td>${fields.slice(1, 7).map((node, j) => `<td style="padding:0 12px;border-bottom:1px solid #eee;color:#555">${j === 0 ? `user00${i + 1}` : j === 4 ? "启用" : "示例数据"}</td>`).join("")}<td style="padding:0 12px;border-bottom:1px solid #eee;color:#1890ff">查看　编辑</td></tr>`).join("")}</table><div style="margin-top:18px;text-align:right;color:#666;font-size:14px">共 3 条　1 / 1</div></div>`
-    : `<div style="padding:32px;background:#fff;border-radius:4px"><div style="max-width:900px">${fields.map(fieldControl).join("")}</div><div style="margin-top:12px;padding-top:24px;border-top:1px solid #eee;text-align:right">${secondary.map((node) => button(node)).join("")}${primary ? button(primary, true) : ""}</div></div>`;
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(screen.name)}</title></head><body style="margin:0;width:${screen.frame.width}px;min-height:${screen.frame.height}px;background:#f5f7fa;font-family:Arial,'PingFang SC',sans-serif;color:#333"><div style="height:56px;background:#18233c;color:#fff;padding:0 24px;line-height:56px;font-size:18px">${escapeHtml(data.product.name)}</div><div style="padding:24px 32px"><div style="margin-bottom:20px"><span style="font-size:20px;font-weight:600">${escapeHtml(screen.name)}</span><span style="margin-left:12px;color:#999;font-size:13px">${escapeHtml(screen.route)}</span></div>${body}</div></body></html>`;
+    ? `<div data-name="search-card" class="flex flex-col justify-start items-stretch self-stretch bg-[#FFFFFF] rounded-[4px] p-[24px] gap-[20px]"><div data-name="search-fields" class="flex flex-row justify-start items-start self-stretch flex-wrap gap-[16px]">${fields.map(fieldControl).join("")}</div><div data-name="search-actions" class="flex flex-row justify-end items-center self-stretch gap-[8px]">${searchActions.map((node) => actionButton(node, node === primary)).join("")}</div></div><div data-name="list-card" class="flex flex-col justify-start items-stretch self-stretch bg-[#FFFFFF] rounded-[4px] p-[24px] gap-[18px]"><div data-name="list-header" class="flex flex-row justify-between items-center self-stretch">${text("list-title", "用户列表", "text-[16px] leading-[24px] font-[600] text-[#1D2129] text-left")}<div data-name="list-actions" class="flex flex-row justify-end items-center gap-[8px]">${tableActions.map((node, index) => actionButton(node, index === 0)).join("")}</div></div><div data-name="data-table" class="flex flex-col justify-start items-stretch self-stretch border-[1px] border-[#E5E6EB] rounded-[4px] overflow-hidden"><div data-name="table-header" class="flex flex-row justify-start items-stretch self-stretch min-h-[48px] bg-[#F7F8FA] border-b-[1px] border-[#E5E6EB]">${columns.map((node) => cell(`header-${node.id}`, node.name)).join("")}${cell("header-operation", "操作")}</div>${row(1, "张伟")}${row(2, "李娜")}${row(3, "王强")}</div><div data-name="pagination" class="flex flex-row justify-end items-center self-stretch">${text("pagination-text", "共 3 条　1 / 1", "text-[14px] leading-[20px] font-[400] text-[#4E5969] text-right")}</div></div>`
+    : `<div data-name="form-card" class="flex flex-col justify-start items-stretch self-stretch bg-[#FFFFFF] rounded-[4px] p-[32px] gap-[24px]"><div data-name="form-fields" class="flex flex-row justify-start items-start self-stretch flex-wrap gap-[20px]">${fields.map(fieldControl).join("")}</div><div data-name="form-actions" class="flex flex-row justify-end items-center self-stretch pt-[24px] gap-[8px] border-t-[1px] border-[#E5E6EB]">${secondary.map((node) => actionButton(node)).join("")}${primary ? actionButton(primary, true) : ""}</div></div>`;
+  const html = `<main data-name="${escapeHtml(screen.id)}-${escapeHtml(screen.name)}" class="flex flex-col justify-start items-stretch w-[${screen.frame.width}px] min-h-[${screen.frame.height}px] bg-[#F5F7FA]"><div data-name="top-bar" class="flex flex-row justify-start items-center self-stretch h-[56px] bg-[#18233C] px-[24px]">${text("product-name", data.product.name, "text-[18px] leading-[24px] font-[600] text-[#FFFFFF] text-left")}</div><div data-name="page-content" class="flex flex-col justify-start items-stretch self-stretch p-[32px] gap-[20px]"><div data-name="page-heading" class="flex flex-row justify-start items-center self-stretch gap-[12px]">${text("page-title", screen.name, "text-[20px] leading-[28px] font-[600] text-[#1D2129] text-left")}${text("page-route", screen.route, "text-[13px] leading-[20px] font-[400] text-[#86909C] text-left")}</div>${body}</div></main>`;
+  validateMasterGoHtml(html);
+  return html;
 }
 
 function describeScreen(screen: MasterGoScreen): string {

@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { executeMasterGoPagePipeline, extractGeneratedHtml, renderMasterGoScreenHtml } from "../src/integrations/mastergo/page-pipeline.js";
+import { executeMasterGoPagePipeline, extractGeneratedHtml, renderMasterGoScreenHtml, validateMasterGoHtml } from "../src/integrations/mastergo/page-pipeline.js";
 import type { MasterGoConnection } from "../src/integrations/mastergo/types.js";
 
 test("TC-060-013: 从 design_page 结果提取完整 HTML", () => {
@@ -105,7 +105,16 @@ test("TC-060-018: 静态画布 HTML 不隐藏页面且不依赖脚本", () => {
   const data = { schemaVersion: "0.2", product: { name: "用户管理" }, tokens: { color: {}, spacing: {}, radius: {} }, screens: [] } as any;
   const html = renderMasterGoScreenHtml(data, { id: "p1", name: "用户列表", route: "/users", pattern: "list", frame: { width: 1440, height: 900 }, nodes: [{ id: "name", name: "姓名", type: "field", component: "Input", description: "" }], interactions: [] });
   assert.match(html, /姓名/);
-  assert.doesNotMatch(html, /<script|display:\s*none|var\(--/i);
+  assert.match(html, /^<main\b/i);
+  assert.doesNotMatch(html, /<!doctype|<html|<body|<script|display:\s*none|var\(--|\sstyle=|<table/i);
+  assert.doesNotThrow(() => validateMasterGoHtml(html));
+});
+
+test("TC-060-018A: MasterGo 协议校验在 MCP 调用前拒绝不兼容 HTML", () => {
+  assert.throws(
+    () => validateMasterGoHtml('<main data-name="bad" style="margin:8px"><table><tr><td>bad</td></tr></table></main>'),
+    /禁止内联 style.*禁止原生表格或表单标签/,
+  );
 });
 
 test("TC-060-019: 写入失败时保存原始响应、失败阶段和提交 HTML", async () => {
@@ -128,5 +137,5 @@ test("TC-060-019: 写入失败时保存原始响应、失败阶段和提交 HTML
   assert.equal(result.pages[0].stage, "submit_page_to_canvas");
   assert.equal(result.pages[0].submitResult.isError, true);
   assert.match(result.errors[0], /HTML validation failed/);
-  assert.match(await readFile(path.join(directory, result.pages[0].htmlArtifact), "utf8"), /<!doctype html>/i);
+  assert.match(await readFile(path.join(directory, result.pages[0].htmlArtifact), "utf8"), /^<main\b/i);
 });
