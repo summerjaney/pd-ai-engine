@@ -14,6 +14,7 @@ import { readEngineVersion } from "./version.js";
 import { preparePrototypePush } from "./prototype-execution/execution-service.js";
 import { loadMasterGoMcpConfig } from "./integrations/mastergo/config.js";
 import { diagnoseMasterGo } from "./integrations/mastergo/doctor.js";
+import { StdioMasterGoConnection } from "./integrations/mastergo/stdio-connection.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -129,9 +130,14 @@ async function main(): Promise<void> {
   const isMasterGoDoctor = args[0] === "mastergo" && args[1] === "doctor" && args.length === 2;
   if (isMasterGoDoctor) {
     const loaded = await loadMasterGoMcpConfig();
-    const report = await diagnoseMasterGo(loaded);
+    const report = await diagnoseMasterGo(loaded, loaded ? {
+      connectionFactory: async () => new StdioMasterGoConnection(loaded.config),
+    } : undefined);
     console.log(`MasterGo MCP 诊断：${report.status}`);
     for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
+    if (report.connection?.serverName) {
+      console.log(`Server：${report.connection.serverName}${report.connection.serverVersion ? ` ${report.connection.serverVersion}` : ""}`);
+    }
     if (report.nextAction) console.log(`下一步：${report.nextAction}`);
     if (report.status !== "READY") process.exitCode = 1;
     return;

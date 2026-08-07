@@ -102,7 +102,7 @@ npm run dev -- mastergo doctor
 npm run dev -- prototype push output/<project>/requirements/<requirement> --dry-run
 ```
 
-doctor 会分别报告配置、启动命令和 MCP 连接状态；未执行真实 initialize 探测时不会把连接标记为成功。
+doctor 会分别报告配置、启动命令和 MCP 连接状态，并通过标准输入输出向 MCP Server 发出真实 `initialize` 探测；只有握手成功才会把连接检查标记为 `PASS`。
 
 为兼容 v0.2.0，旧命令仍可使用：
 
