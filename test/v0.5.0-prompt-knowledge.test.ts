@@ -82,6 +82,27 @@ test("PAE-050-004: PRD Prompt 保留未闭环待确认项", () => {
   assert.match(prompt.user, /组织管理员是否允许停用用户：待确认/);
 });
 
+test("PAE-050-004: Prototype Prompt 禁止待确认项污染异常反馈", () => {
+  const prompt = new PromptBuilder().buildStagePrompt("prototype", {
+    ...context,
+    artifacts: {
+      "requirement-analysis": [
+        "# 需求分析",
+        "",
+        "## 待确认项",
+        "",
+        "- 手机号是否需要强制格式校验：待确认。",
+      ].join("\n"),
+      "page-structure": "# 页面结构\n\n- 用户列表\n- 用户表单",
+    },
+  });
+  assert.match(prompt.system, /字段校验、异常反馈、操作影响、规则描述/);
+  assert.match(prompt.system, /待确认\/TBD/);
+  assert.match(prompt.user, /手机号是否需要强制格式校验：待确认/);
+  assert.match(prompt.user, /不得写入 validationMessage、operationFailureMessage 或 recoveryAction 作为已生效事实/);
+  assert.match(prompt.user, /通用提示/);
+});
+
 test("TC-050-018: 阶段元数据记录选择来源、原因和知识版本", async () => {
   const builder = new PromptBuilder();
   const confirmationTrace = builder.stageKnowledgeTrace("prototype-confirmation", context);
