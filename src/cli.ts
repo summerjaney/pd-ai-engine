@@ -11,17 +11,20 @@ import { OpenAiProvider } from "./llm/openai-provider.js";
 import { ProductDesignWorkflow } from "./workflow/workflow.js";
 import { prepareRequirementOutput } from "./output/requirement-output.js";
 import { readEngineVersion } from "./version.js";
+import { preparePrototypePush } from "./prototype-execution/execution-service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
 用法：
   pae requirement create <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
   pae run <需求文件> [--out <输出目录>] [选项]
+  pae prototype push <需求目录> --dry-run
   pae --help
 
 示例：
   pae requirement create examples/b2b-requirement.md --project hr-system --id REQ-001 --name leave-request
   pae run examples/b2b-requirement.md --out output/legacy-example --project hr-system --id REQ-001 --name leave-request
+  pae prototype push output/hr-system/requirements/REQ-001-leave-request --dry-run
 
 选项：
   --project <标识>            项目唯一标识（requirement create 必填，run 可选）
@@ -35,6 +38,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --provider <名称>          LLM Provider：mock（默认）或 openai
   --model <名称>             模型名称；openai 模式必填
   --knowledge-mode <模式>   知识模式：auto（默认）或 off（A/B 对照基线）
+  --dry-run                 只生成 MasterGo 操作计划，不修改画布
 `;
 
 async function buildHelp(): Promise<string> {
@@ -67,6 +71,7 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
+  "--dry-run",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -100,6 +105,20 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     console.log(await buildHelp());
+    return;
+  }
+
+  const isPrototypePush = args[0] === "prototype" && args[1] === "push" && Boolean(args[2]);
+  if (isPrototypePush) {
+    validateArgs(args);
+    if (!args.includes("--dry-run")) {
+      throw new Error("prototype push 当前必须使用 --dry-run，避免在执行器验证前修改真实画布。");
+    }
+    const output = await preparePrototypePush(path.resolve(args[2]), { dryRun: true });
+    console.log("MasterGo 操作计划已生成（dry-run，未修改画布）。");
+    console.log(`操作数：${output.result.totalOperations}`);
+    console.log(`操作计划：${output.planPath}`);
+    console.log(`执行结果：${output.resultPath}`);
     return;
   }
 
