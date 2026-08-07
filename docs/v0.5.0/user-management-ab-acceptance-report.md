@@ -6,7 +6,7 @@
 - `TC-050-031`：**PASS**。两组成果物分别归档，A 组为 `knowledge.mode=off`，B 组为 `knowledge.mode=auto`，模式及知识选择记录可区分。
 - `TC-050-032`：**PASS（评审活动完成）**。已形成六维量化评分、具体差异和可定位证据。
 - `PAE-050-001～003`：**CLOSED**。修复后的 B 组真实 LLM 回归通过，三类 DSL 缺陷均有成果物证据。
-- v0.5.0 发布门槛：**暂未达到**。最新 Review 新发现待确认项未闭环却进入 PRD 的 Error，登记为 `PAE-050-004`；关闭前不执行 `TC-050-034`。
+- v0.5.0 发布门槛：**已达到**。最终真实 LLM 回归完成 10/10 阶段，Review 为 0 个 Error；`PAE-050-001`～`PAE-050-004` 均已关闭，可以执行 `TC-050-034`。
 
 ## 2. 运行信息
 
@@ -167,3 +167,21 @@
 - 根因：上一轮只约束 PRD 保留 TBD 清单，没有阻止 Prototype 的异常反馈、危险操作影响或规则描述提前固化未确认事实。
 - 修复补强：Prototype Prompt 新增待确认项污染检查；生成 `errorFeedback` 前逐项对照 TBD，未确认的校验格式、唯一性、权限边界、操作影响和数量限制只能省略具体结论或显式标注 TBD。
 - 发布判断：`TC-050-034` 暂不执行；需完成补强后的真实 LLM 回归，且 Review 无 Error 后再进入发布检查。
+
+## 13. TBD 补强修复最终回归（2026-08-07）
+
+最终回归包：`base-platform-ab-b-tbd-regression.zip`。
+
+- Run ID：`7fd94653-252e-4a88-b3b2-028fb16ccf70`。
+- Provider / Model：OpenAI-compatible / `qwen3.7-plus`。
+- 工作流状态：`completed`，10/10 阶段全部完成且结构校验通过。
+- Prototype 自动知识门禁：7 条规则全部通过。
+- Prototype `errorFeedback.validationMessage` 已改为通用字段错误提示，不再固化手机号格式、位数或唯一性规则。
+- PRD 未将手机号格式或唯一性写成确定性开发逻辑。
+- Review：`Conditional Pass`，0 个 Error、2 个 Warning、1 个 Info；剩余项均为非阻断产品评审建议。
+- `PAE-050-004`：**CLOSED**。
+- `PAE-050-001`～`PAE-050-004`：全部关闭。
+- `TC-050-034`：**进入发布一致性检查**。
+- v0.5.0：**允许进行版本号升级、Tag 与 Release 收口**。
+
+说明：本版本正式范围不包含直接写入 MasterGo 画布。回归包中的 `mastergo-result.json` 为适配数据阶段记录，不能替代真实 MasterGo 画布质量验收，也不作为本次知识驱动版本的发布阻断项。

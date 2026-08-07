@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前正式版本为 `v0.4.0`，聚焦 B 端产品设计交付链路，并坚持 **Prototype First**。本版本在 Requirement-centric Output Model 基础上新增真实 LLM 执行链路、结构化输出校验、自动重试、失败诊断与统一版本元数据。
+当前正式版本为 `v0.5.0`，聚焦知识驱动的 B 端产品设计，并坚持 **Prototype First**。本版本在真实 LLM 执行链路基础上新增结构化知识目录、确定性知识选择、按阶段注入、Prototype 合规门禁和跨成果物知识追踪。
 
 ## 成果物组织模型
 

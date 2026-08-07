@@ -74,7 +74,7 @@ test("legacy-compatibility: 新生成的 manifest.version 与根 package.json.ve
   const rootPackageJson = await readJson<{ version: string }>(
     path.resolve(__dirname, "..", "package.json"),
   );
-  assert.equal(rootPackageJson.version, "0.4.0", "根 package.json 当前版本应为 0.4.0");
+  assert.equal(rootPackageJson.version, "0.5.0", "根 package.json 当前版本应为 0.5.0");
 
   const tempOut = await mkdtemp(path.join(os.tmpdir(), "pae-legacy-newmanifest-"));
   try {
