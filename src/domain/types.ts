@@ -33,6 +33,7 @@ export interface PrototypeField {
   label: string;
   type: "text" | "textarea" | "select" | "datetime";
   required: boolean;
+  optionsSource?: string;
 }
 
 export interface PrototypeAction {
@@ -40,6 +41,8 @@ export interface PrototypeAction {
   label: string;
   kind: "primary" | "secondary" | "danger";
   confirmation?: boolean;
+  confirmationMessage?: string;
+  roles?: string[];
 }
 
 export interface PrototypePage {
@@ -49,6 +52,9 @@ export interface PrototypePage {
   pattern: "list" | "form" | "detail";
   fields: PrototypeField[];
   actions: PrototypeAction[];
+  tableColumns?: string[];
+  pagination?: { enabled: boolean; pageSize: number };
+  emptyState?: { description: string; actionId?: string };
 }
 
 export interface DesignTokens {

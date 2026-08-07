@@ -19,8 +19,8 @@ const prototype = (): PrototypeDsl => ({
   product: { name: "用户管理", description: "管理用户状态" },
   navigation: [{ label: "用户管理", pageId: "list" }],
   pages: [
-    { id: "list", name: "用户列表", route: "/users", pattern: "list", fields: [{ id: "status", label: "状态", type: "select", required: false }], actions: [{ id: "delete", label: "删除", kind: "danger", confirmation: true }] },
-    { id: "form", name: "用户表单", route: "/users/new", pattern: "form", fields: [{ id: "name", label: "姓名", type: "text", required: true }], actions: [{ id: "save", label: "保存", kind: "primary" }] },
+    { id: "list", name: "用户列表", route: "/users", pattern: "list", fields: [{ id: "status", label: "状态", type: "select", required: false }], actions: [{ id: "search", label: "查询", kind: "primary", roles: ["管理员"] }, { id: "reset", label: "重置", kind: "secondary", roles: ["管理员"] }, { id: "delete", label: "删除", kind: "danger", confirmation: true, confirmationMessage: "删除后无法恢复。", roles: ["管理员"] }], tableColumns: ["status"], pagination: { enabled: true, pageSize: 20 }, emptyState: { description: "暂无用户" } },
+    { id: "form", name: "用户表单", route: "/users/new", pattern: "form", fields: [{ id: "name", label: "姓名", type: "text", required: true }], actions: [{ id: "save", label: "保存", kind: "primary", roles: ["管理员"] }] },
     { id: "detail", name: "用户详情", route: "/users/1", pattern: "detail", fields: [{ id: "status", label: "状态", type: "select", required: false }], actions: [] },
   ],
   rules: [], transitions: [],
@@ -47,11 +47,30 @@ test("TC-050-022: 状态规则同时校验列表页和详情页", () => {
 
 test("TC-050-023: 危险操作缺少确认机制时产生问题", () => {
   const value = prototype();
-  value.pages[0].actions[0].confirmation = false;
+  value.pages[0].actions.find((action) => action.id === "delete")!.confirmation = false;
   const result = validator.validatePrototype(value, catalog, select("删除危险操作确认"));
   const issue = result.items.find((item) => item.knowledgeId === "rule.destructive-confirmation");
   assert.equal(issue?.status, "failed");
   assert.equal(result.valid, true, "warning 级规则不阻断，但必须进入问题矩阵");
+});
+
+test("PAE-050-001: 操作级权限缺失会被 error 规则阻断", () => {
+  const value = prototype();
+  delete value.pages[0].actions[0].roles;
+  const result = validator.validatePrototype(value, catalog, select("用户权限角色列表管理"));
+  const issue = result.items.find((item) => item.knowledgeId === "rule.permission-visibility");
+  assert.equal(issue?.status, "failed");
+  assert.equal(result.valid, false);
+  assert.match(validator.formatErrors(result), /操作缺少角色权限/);
+});
+
+test("PAE-050-002: 列表查询与空状态结构可自动校验", () => {
+  const value = prototype();
+  value.pages[0].actions = value.pages[0].actions.filter((action) => action.id !== "reset");
+  delete value.pages[0].emptyState;
+  const result = validator.validatePrototype(value, catalog, select("用户列表查询重置空状态"));
+  assert.equal(result.items.find((item) => item.knowledgeId === "rule.list-search")?.status, "failed");
+  assert.equal(result.items.find((item) => item.knowledgeId === "rule.empty-state")?.status, "failed");
 });
 
 test("TC-050-024: error 级知识规则失败会阻断后续阶段", async () => {
