@@ -98,6 +98,18 @@ export class OutputValidator {
     if (!prototype.designTokens || typeof prototype.designTokens !== "object") {
       issues.push({ code: "invalid-structure", message: "designTokens 缺失或不是对象。" });
     }
+    if (prototype.errorFeedback !== undefined) {
+      const feedback = prototype.errorFeedback;
+      if (!feedback || typeof feedback !== "object"
+        || !feedback.validationMessage?.trim()
+        || !feedback.operationFailureMessage?.trim()
+        || !feedback.recoveryAction?.trim()) {
+        issues.push({
+          code: "invalid-structure",
+          message: "errorFeedback 必须包含非空 validationMessage、operationFailureMessage 和 recoveryAction。",
+        });
+      }
+    }
 
     const pageIds = new Set<string>();
     prototype.pages.forEach((page, index) => {

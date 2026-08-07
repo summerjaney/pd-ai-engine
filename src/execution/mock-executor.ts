@@ -234,6 +234,11 @@ function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
       { id: "withdraw-pending-only", description: "仅待审批申请允许撤回。", appliesTo: ["withdraw"] },
     ],
     transitions,
+    errorFeedback: {
+      validationMessage: "校验失败时在字段旁说明具体原因，并保留已填写内容。",
+      operationFailureMessage: "操作失败时说明失败原因，不产生脏数据。",
+      recoveryAction: "允许用户修正后重试，网络异常时可重新提交。",
+    },
     designTokens: {
       colors: {
         primary: "#3B82F6",

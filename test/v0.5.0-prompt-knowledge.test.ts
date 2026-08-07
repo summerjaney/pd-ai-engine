@@ -58,7 +58,28 @@ test("TC-050-017A: Prototype Prompt 将知识断言翻译为可执行的逐页�
   assert.match(prompt.user, /id=search/);
   assert.match(prompt.user, /tableColumns/);
   assert.match(prompt.user, /optionsSource/);
+  assert.match(prompt.user, /errorFeedback/);
+  assert.match(prompt.user, /完整列出所有 required: true/);
   assert.match(prompt.user, /不能只写在 rules\.description 中/);
+});
+
+test("PAE-050-004: PRD Prompt 保留未闭环待确认项", () => {
+  const prompt = new PromptBuilder().buildStagePrompt("prd", {
+    ...context,
+    artifacts: {
+      "requirement-analysis": "# 需求分析\n\n## 待确认项\n\n- 组织管理员是否允许停用用户：待确认。",
+      prototype: {
+        schemaVersion: "0.2",
+        product: { name: "用户管理", description: "管理用户" },
+        navigation: [], pages: [], rules: [], transitions: [],
+        designTokens: { colors: {}, spacing: {}, radius: {}, typography: { fontSize: {}, fontWeight: {}, lineHeight: {} } },
+      },
+      "prototype-confirmation": { status: "pending" },
+    },
+  });
+  assert.match(prompt.system, /待确认项闭环说明/);
+  assert.match(prompt.system, /待确认\/TBD/);
+  assert.match(prompt.user, /组织管理员是否允许停用用户：待确认/);
 });
 
 test("TC-050-018: 阶段元数据记录选择来源、原因和知识版本", async () => {

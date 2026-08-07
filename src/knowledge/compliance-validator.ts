@@ -36,6 +36,14 @@ export class KnowledgeComplianceValidator {
 
   private evaluate(rule: RuleKnowledge, prototype: PrototypeDsl): KnowledgeComplianceItem {
     const base = { knowledgeId: rule.id, version: rule.version, name: rule.name, severity: rule.severity };
+    if (rule.id === "rule.error-feedback") {
+      const feedback = prototype.errorFeedback;
+      const valid = Boolean(feedback?.validationMessage.trim()
+        && feedback.operationFailureMessage.trim()
+        && feedback.recoveryAction.trim());
+      return valid ? { ...base, status: "passed", message: "已声明校验失败、操作失败和恢复动作" }
+        : { ...base, status: "manual", message: "Prototype 尚无结构化异常反馈，需人工评审文档中的异常处理" };
+    }
     if (rule.checkType !== "prototype") return { ...base, status: "manual", message: "需要人工评审" };
     if (rule.id === "rule.required-field") {
       const invalid = prototype.pages.filter((page) => page.pattern === "form")

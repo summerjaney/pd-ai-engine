@@ -49,8 +49,8 @@ const STAGE_INSTRUCTIONS: Record<StageId, string> = {
   ].join("\n"),
   mastergo: "根据 Prototype DSL 生成 MasterGo 适配数据。本阶段通常由确定性适配器执行。",
   "prototype-confirmation": "记录真实原型确认状态。本阶段不得由模型代替用户作出确认。",
-  prd: "输出 Markdown PRD。页面、字段、操作和跳转必须以 Prototype DSL 为准，至少包含产品目标、角色、流程、页面需求、业务规则和异常处理。",
-  review: "输出 Markdown 评审报告，检查需求、Prototype DSL 与 PRD 的完整性和一致性，列出结论、问题、严重程度、位置及修复建议，并包含知识合规矩阵。",
+  prd: "输出 Markdown PRD。页面、字段、操作和跳转必须以 Prototype DSL 为准，至少包含产品目标、角色、流程、页面需求、业务规则、异常处理和待确认项闭环说明。逐项读取需求分析中的待确认项：没有明确确认依据的内容必须继续标记为“待确认/TBD”，不得写成确定性需求。",
+  review: "输出 Markdown 评审报告，检查需求、Prototype DSL 与 PRD 的完整性和一致性，列出结论、问题、严重程度、位置及修复建议，并包含知识合规矩阵。只有 PRD 将未确认事项写成确定性事实时才报错；明确保留为待确认/TBD 属于正确闭环。",
 };
 
 const STAGE_KNOWLEDGE_TYPES: Record<StageId, readonly KnowledgeType[]> = {
@@ -113,6 +113,10 @@ navigation、transitions、rules 中的页面引用字段必须与 pages[].id �
   - triggerId: 字符串
   - triggerLabel: 字符串
   - targetPageId: 字符串（必须等于 pages 中某个页面的 id）
+- errorFeedback: 可选对象；启用异常反馈规则时必须填写
+  - validationMessage: 非空字符串，说明校验失败时如何反馈原因
+  - operationFailureMessage: 非空字符串，说明接口或操作失败时如何反馈原因
+  - recoveryAction: 非空字符串，说明用户可执行的恢复或重试动作
 - designTokens: 对象
   - colors: 字符串键值对
   - spacing: 数值键值对
@@ -214,6 +218,7 @@ export class PromptBuilder {
     if (selectedIds.has("rule.required-field")) {
       checklist.push(
         "- 每一个 pattern 为 form 的页面必须至少包含一个 required: true 且 label 非空的关键业务字段。",
+        "- rules 中 rule.required-field 的 description 必须完整列出所有 required: true 的业务字段，不得遗漏实际必填字段。",
       );
     }
     if (selectedIds.has("rule.permission-visibility")) {
@@ -227,6 +232,9 @@ export class PromptBuilder {
     }
     if (selectedIds.has("pattern.form-page")) {
       checklist.push("- 表单中若一个选择字段的候选值依赖另一个字段（如主岗位来自关联岗位），必须用 optionsSource 填写来源字段 id。");
+    }
+    if (selectedIds.has("rule.error-feedback")) {
+      checklist.push("- 顶层必须填写 errorFeedback，分别声明校验失败提示、操作失败提示和可恢复的下一步；不得只在 PRD 中描述异常处理。");
     }
 
     if (checklist.length === 0) return "";

@@ -75,6 +75,11 @@ export interface PrototypeDsl {
   pages: PrototypePage[];
   rules: Array<{ id: string; description: string; appliesTo: string[] }>;
   transitions: PrototypeTransition[];
+  errorFeedback?: {
+    validationMessage: string;
+    operationFailureMessage: string;
+    recoveryAction: string;
+  };
   designTokens: DesignTokens;
 }
 
