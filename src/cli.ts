@@ -56,6 +56,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --resume                  从上次失败页面继续，跳过已提交页面
   --pass                    将已人工核验的 MasterGo 画布回写为 PASS
   --evidence <说明>         人工画布验收证据说明（verify 必填）
+  --page <页面ID>           仅验收指定 MasterGo 页面；省略时验收全部待验收页面
   --json <文件>             保存 MasterGo 完整工具契约（不会调用工具）
 `;
 
@@ -157,7 +158,10 @@ async function main(): Promise<void> {
     if (!args.includes("--pass")) throw new Error("人工画布验收回写必须显式使用 --pass。");
     const evidence = option(args, "--evidence");
     if (!evidence) throw new Error("人工画布验收回写必须提供 --evidence <证据说明>。");
-    const output = await verifyMasterGoCanvas(path.resolve(args[2]), evidence);
+    const pageIndex = args.indexOf("--page");
+    const pageId = pageIndex >= 0 ? args[pageIndex + 1] : undefined;
+    if (pageIndex >= 0 && !pageId) throw new Error("--page 必须提供页面 ID。");
+    const output = await verifyMasterGoCanvas(path.resolve(args[2]), evidence, undefined, pageId);
     console.log(`MasterGo 人工画布验收：${output.status}`);
     console.log(`执行结果：${output.resultPath}`);
     return;

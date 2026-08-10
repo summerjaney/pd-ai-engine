@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { executeMasterGoPagePipeline, extractGeneratedHtml, renderMasterGoScreenHtml, validateMasterGoHtml } from "../src/integrations/mastergo/page-pipeline.js";
+import { buildMasterGoCanvasLayout, executeMasterGoPagePipeline, extractGeneratedHtml, renderMasterGoScreenHtml, validateMasterGoHtml } from "../src/integrations/mastergo/page-pipeline.js";
 import type { MasterGoConnection } from "../src/integrations/mastergo/types.js";
 
 test("TC-060-013: 从 design_page 结果提取完整 HTML", () => {
@@ -195,4 +195,13 @@ test("TC-070-010: 失败续跑跳过已提交页面并从失败页面继续", as
   assert.equal(result.resumed, true);
   assert.equal(result.pages[0].resumedAction, "SKIPPED_ALREADY_SUBMITTED");
   assert.deepEqual(result.pages.map((page: any) => page.status), ["PASS", "PASS", "PASS"]);
+});
+
+test("TC-070-011: 多页面画布按统一间距生成确定性布局", () => {
+  const screen = (id: string, width: number, height: number) => ({ id, name: `页面${id}`, route: `/${id}`, pattern: "form" as const, frame: { width, height }, nodes: [], interactions: [] });
+  const horizontal = buildMasterGoCanvasLayout([screen("P1", 1440, 900), screen("P2", 1200, 800)], "horizontal", 120);
+  assert.deepEqual(horizontal.map(({ x, y }) => ({ x, y })), [{ x: 0, y: 0 }, { x: 1560, y: 0 }]);
+  assert.deepEqual(horizontal.map(({ order }) => order), [0, 1]);
+  const vertical = buildMasterGoCanvasLayout([screen("P1", 1440, 900), screen("P2", 1200, 800)], "vertical", 80);
+  assert.deepEqual(vertical.map(({ x, y }) => ({ x, y })), [{ x: 0, y: 0 }, { x: 0, y: 980 }]);
 });

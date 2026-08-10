@@ -10,6 +10,34 @@ export interface MasterGoPagePipelineOutput {
   status: "PASS" | "PENDING_VERIFICATION" | "FAIL";
 }
 
+export interface MasterGoCanvasPlacement {
+  screenId: string;
+  screenName: string;
+  order: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function buildMasterGoCanvasLayout(
+  screens: MasterGoScreen[],
+  layout: "horizontal" | "vertical" = "horizontal",
+  gap = 120,
+): MasterGoCanvasPlacement[] {
+  let offset = 0;
+  return screens.map((screen, order) => {
+    const placement = {
+      screenId: screen.id, screenName: screen.name, order,
+      x: layout === "horizontal" ? offset : 0,
+      y: layout === "vertical" ? offset : 0,
+      width: screen.frame.width, height: screen.frame.height,
+    };
+    offset += (layout === "horizontal" ? screen.frame.width : screen.frame.height) + gap;
+    return placement;
+  });
+}
+
 function safeArtifactName(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "screen";
 }
@@ -100,7 +128,17 @@ export async function executeMasterGoPagePipeline(requirementDirectory: string, 
   const startedAt = now().toISOString();
   const planPath = path.join(directory, "mastergo-write-plan.json");
   const resultPath = path.join(directory, "mastergo-write-result.json");
-  const plan = { schemaVersion: "0.2", generatedAt: startedAt, source: "07-mastergo/mastergo-data.json", confirmedWrite: true, pages: data.screens.map((screen) => ({ screenId: screen.id, screenName: screen.name, calls: [{ tool: "design_page", arguments: { requirement: describeScreen(screen), designSource: "free-draw", userConfirmedDesignSource: true } }, { tool: "submit_page_to_canvas", argumentsFrom: "pae.staticScreenHtml" }] })) };
+  let layoutDirection: "horizontal" | "vertical" = "horizontal";
+  let layoutGap = 120;
+  try {
+    const context = JSON.parse(await readFile(path.join(requirementDirectory, "05-page-plan", "design-context.json"), "utf8")) as { frame?: { layout?: string; gap?: number } };
+    if (context.frame?.layout === "vertical") layoutDirection = "vertical";
+    if (typeof context.frame?.gap === "number" && context.frame.gap >= 0) layoutGap = context.frame.gap;
+  } catch { /* Older requirement outputs use the stable defaults. */ }
+  const canvasLayout = buildMasterGoCanvasLayout(data.screens, layoutDirection, layoutGap);
+  const layoutPath = path.join(directory, "canvas-layout.json");
+  await writeFile(layoutPath, `${JSON.stringify({ schemaVersion: "0.7", layout: layoutDirection, gap: layoutGap, pages: canvasLayout }, null, 2)}\n`, "utf8");
+  const plan = { schemaVersion: "0.7", generatedAt: startedAt, source: "07-mastergo/mastergo-data.json", canvasLayout: "07-mastergo/canvas-layout.json", confirmedWrite: true, pages: data.screens.map((screen, index) => ({ screenId: screen.id, screenName: screen.name, placement: canvasLayout[index], calls: [{ tool: "design_page", arguments: { requirement: describeScreen(screen), designSource: "free-draw", userConfirmedDesignSource: true } }, { tool: "submit_page_to_canvas", argumentsFrom: "pae.staticScreenHtml" }] })) };
   await mkdir(directory, { recursive: true });
   await writeFile(planPath, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
   let previous: Record<string, unknown> | undefined;
@@ -132,7 +170,7 @@ export async function executeMasterGoPagePipeline(requirementDirectory: string, 
         await persist();
         continue;
       }
-      const pageResult: Record<string, unknown> = { screenId: screen.id, screenName: screen.name, status: "FAIL", stage: "design_page" };
+      const pageResult: Record<string, unknown> = { screenId: screen.id, screenName: screen.name, placement: canvasLayout.find((item) => item.screenId === screen.id), status: "FAIL", stage: "design_page" };
       (result.pages as unknown[]).push(pageResult);
       await persist();
       const requirement = describeScreen(screen);
