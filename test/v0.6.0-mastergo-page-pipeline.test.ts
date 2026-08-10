@@ -133,9 +133,66 @@ test("TC-060-019: 写入失败时保存原始响应、失败阶段和提交 HTML
   const output = await executeMasterGoPagePipeline(root, connection, { confirmedWrite: true });
   assert.equal(output.status, "FAIL");
   const result = JSON.parse(await readFile(output.resultPath, "utf8"));
-  assert.equal(result.schemaVersion, "0.3");
+  assert.equal(result.schemaVersion, "0.4");
   assert.equal(result.pages[0].stage, "submit_page_to_canvas");
   assert.equal(result.pages[0].submitResult.isError, true);
   assert.match(result.errors[0], /HTML validation failed/);
   assert.match(await readFile(path.join(directory, result.pages[0].htmlArtifact), "utf8"), /^<main\b/i);
+});
+
+test("TC-070-009: 多页面严格串行并在失败页面停止且逐页持久化", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-mastergo-serial-"));
+  const directory = path.join(root, "07-mastergo");
+  await mkdir(directory, { recursive: true });
+  const screen = (id: string) => ({ id, name: `页面${id}`, route: `/${id}`, pattern: "form", frame: { width: 1440, height: 900 }, nodes: [], interactions: [] });
+  await writeFile(path.join(directory, "mastergo-data.json"), JSON.stringify({ schemaVersion: "0.2", product: { name: "测试" }, tokens: { color: {}, spacing: {}, radius: {} }, screens: [screen("P1"), screen("P2"), screen("P3")] }));
+  const calls: string[] = [];
+  const connection: MasterGoConnection = {
+    probe: async () => ({ capabilities: ["tools"] }),
+    listTools: async () => ({ tools: [{ name: "design_page" }, { name: "submit_page_to_canvas" }], writableTools: [], hasCanvasWriteCapability: true }),
+    callTool: async (name, arguments_) => {
+      calls.push(`${name}:${String(arguments_.code ?? "design")}`);
+      if (name === "submit_page_to_canvas" && String(arguments_.code).includes("页面P2")) return { isError: true, content: [{ type: "text", text: "P2 failed" }] };
+      return { content: [{ type: "text", text: "ok" }] };
+    },
+    close: async () => undefined,
+  };
+  const output = await executeMasterGoPagePipeline(root, connection, { confirmedWrite: true });
+  assert.equal(output.status, "FAIL");
+  assert.equal(calls.filter((call) => call.startsWith("submit_page_to_canvas")).length, 2);
+  assert.ok(calls.every((call) => !call.includes("页面P3")));
+  const result = JSON.parse(await readFile(output.resultPath, "utf8"));
+  assert.equal(result.schemaVersion, "0.4");
+  assert.deepEqual(result.pages.map((page: any) => page.screenId), ["P1", "P2"]);
+  assert.equal(result.pages[0].status, "PASS");
+  assert.equal(result.pages[1].status, "FAIL");
+});
+
+test("TC-070-010: 失败续跑跳过已提交页面并从失败页面继续", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-mastergo-resume-"));
+  const directory = path.join(root, "07-mastergo");
+  await mkdir(directory, { recursive: true });
+  const screen = (id: string) => ({ id, name: `页面${id}`, route: `/${id}`, pattern: "form", frame: { width: 1440, height: 900 }, nodes: [], interactions: [] });
+  await writeFile(path.join(directory, "mastergo-data.json"), JSON.stringify({ schemaVersion: "0.2", product: { name: "测试" }, tokens: { color: {}, spacing: {}, radius: {} }, screens: [screen("P1"), screen("P2"), screen("P3")] }));
+  await writeFile(path.join(directory, "mastergo-write-result.json"), JSON.stringify({ schemaVersion: "0.4", status: "FAIL", startedAt: "2026-08-10T00:00:00.000Z", pages: [{ screenId: "P1", screenName: "页面P1", status: "PASS", stage: "completed" }, { screenId: "P2", screenName: "页面P2", status: "FAIL", stage: "submit_page_to_canvas" }], errors: ["P2 failed"] }));
+  const submitted: string[] = [];
+  const connection: MasterGoConnection = {
+    probe: async () => ({ capabilities: ["tools"] }),
+    listTools: async () => ({ tools: [{ name: "design_page" }, { name: "submit_page_to_canvas" }], writableTools: [], hasCanvasWriteCapability: true }),
+    callTool: async (name, arguments_) => {
+      if (name === "submit_page_to_canvas") submitted.push(String(arguments_.code));
+      return { content: [{ type: "text", text: "ok" }] };
+    },
+    close: async () => undefined,
+  };
+  const output = await executeMasterGoPagePipeline(root, connection, { confirmedWrite: true, resume: true });
+  assert.equal(output.status, "PASS");
+  assert.equal(submitted.length, 2);
+  assert.ok(submitted[0].includes("页面P2"));
+  assert.ok(submitted[1].includes("页面P3"));
+  assert.ok(submitted.every((html) => !html.includes("页面P1")));
+  const result = JSON.parse(await readFile(output.resultPath, "utf8"));
+  assert.equal(result.resumed, true);
+  assert.equal(result.pages[0].resumedAction, "SKIPPED_ALREADY_SUBMITTED");
+  assert.deepEqual(result.pages.map((page: any) => page.status), ["PASS", "PASS", "PASS"]);
 });

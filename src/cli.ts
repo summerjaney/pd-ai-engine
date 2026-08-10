@@ -25,6 +25,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae run <需求文件> [--out <输出目录>] [选项]
   pae prototype push <需求目录> --dry-run
   pae prototype push <需求目录> --write --confirm-write
+  pae prototype push <需求目录> --write --confirm-write --resume
   pae prototype verify <需求目录> --pass --evidence <证据说明>
   pae mastergo doctor
   pae mastergo tools [--json <文件>]
@@ -52,6 +53,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --dry-run                 只生成 MasterGo 操作计划，不修改画布
   --write                   执行真实 MasterGo 页面写入
   --confirm-write           显式确认本次写入（必须与 --write 同时使用）
+  --resume                  从上次失败页面继续，跳过已提交页面
   --pass                    将已人工核验的 MasterGo 画布回写为 PASS
   --evidence <说明>         人工画布验收证据说明（verify 必填）
   --json <文件>             保存 MasterGo 完整工具契约（不会调用工具）
@@ -87,7 +89,7 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
-  "--dry-run", "--json", "--write", "--confirm-write", "--pass", "--evidence",
+  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -140,7 +142,7 @@ async function main(): Promise<void> {
     }
     const loaded = await loadMasterGoMcpConfig();
     if (!loaded) throw new Error("未找到 MasterGo MCP 配置。请先运行 pae mastergo doctor。");
-    const output = await executeMasterGoPagePipeline(path.resolve(args[2]), new StdioMasterGoConnection(loaded.config, { timeoutMs: 120_000 }), { confirmedWrite: true });
+    const output = await executeMasterGoPagePipeline(path.resolve(args[2]), new StdioMasterGoConnection(loaded.config, { timeoutMs: 120_000 }), { confirmedWrite: true, resume: args.includes("--resume") });
     console.log(`MasterGo 真实写入：${output.status}`);
     if (output.status === "PENDING_VERIFICATION") console.log("MasterGo 已受理逐页写入，仍需在画布中核验最终渲染结果；当前不判定为 PASS。");
     console.log(`写入计划：${output.planPath}`);
