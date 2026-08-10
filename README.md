@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前候选版本为 `v0.6.0`，在 v0.5.0 知识驱动设计能力上新增 MasterGo MCP 真实连接、合规画布 HTML、逐页写入、失败诊断和人工画布验收闭环。
+当前版本为 `v0.7.0`，已从单页 MasterGo 真实写入升级到真实业务需求端到端交付：需求级页面规划、多页面统一生成与串行写入、失败续跑、逐页画布验收、PRD 稳定追踪和交付一致性检查。
 
 ## 成果物组织模型
 
@@ -85,7 +85,7 @@ npm run dev -- requirement create path/to/requirement.md \
 npm run dev -- --help
 ```
 
-### MasterGo 执行预检（v0.6.0）
+### MasterGo 多页面执行与验收（v0.7.0）
 
 先配置 MasterGo MCP，再运行诊断：
 
@@ -108,11 +108,25 @@ npm run dev -- prototype push output/<project>/requirements/<requirement> --dry-
 npm run dev -- prototype push output/<project>/requirements/<requirement> --write --confirm-write
 ```
 
+写入中断后可从失败页面续跑：
+
+```bash
+npm run dev -- prototype push output/<project>/requirements/<requirement> \
+  --write --confirm-write --resume
+```
+
 MasterGo 返回 `accepted` 时，PAE 会记录为 `PENDING_VERIFICATION`。人工核验画布中的页面完整且可编辑后，再回写最终结果：
 
 ```bash
 npm run dev -- prototype verify output/<project>/requirements/<requirement> \
-  --pass --evidence "P1 用户列表页与 P2 用户表单/详情页人工核验通过"
+  --page P1 --pass --evidence "页面内容非空、图层可选择且可编辑"
+```
+
+全部页面验收完成后，执行交付检查并生成正式验收报告：
+
+```bash
+npm run dev -- delivery check output/<project>/requirements/<requirement>
+npm run dev -- acceptance report output/<project>/requirements/<requirement>
 ```
 
 doctor 会分别报告配置、启动命令和 MCP 连接状态，并通过标准输入输出向 MCP Server 发出真实 `initialize` 探测；只有握手成功才会把连接检查标记为 `PASS`。
@@ -156,13 +170,13 @@ MVP 暂不包含：多 Agent、插件市场、企业知识库、开放 API、自
 - `mastergo-data.json` 提供面向设计工具的适配数据，可作为后续接入 MasterGo 写入能力的中间层。
 - `preview/*.svg` 为每个页面输出静态预览图，便于目录浏览和外部引用。
 
-当前已经实现“DSL + 可交互 HTML 原型 + MasterGo 适配数据 + MasterGo 可编辑画布逐页写入”。真实写入必须经过预演、双重确认和人工画布验收。
+当前已经实现“需求级页面规划 + DSL + 可交互 HTML 原型 + MasterGo 多页面可编辑画布串行写入 + PRD 追踪 + 完整交付一致性验收”。真实写入必须经过预演、双重确认和人工逐页画布验收。
 
 ## 下一步
 
-1. 完善 B 端 Pattern / Component / Rule 知识数据。
-2. 将 `mastergo-data.json` 对接到真实 MasterGo 插件或设计工具写入能力。
-3. 扩大真实产品需求回归范围，持续提升各阶段生成质量。
+1. 扩大真实业务需求回归范围，持续提升多页面生成质量。
+2. 完善 B 端 Pattern / Component / Rule 知识数据和设计上下文复用。
+3. 在后续版本补充产品手册和操作手册生成。
 
 ## 许可证
 
