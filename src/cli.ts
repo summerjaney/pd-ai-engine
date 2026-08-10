@@ -18,7 +18,7 @@ import { StdioMasterGoConnection } from "./integrations/mastergo/stdio-connectio
 import { executeMasterGoPagePipeline } from "./integrations/mastergo/page-pipeline.js";
 import { verifyMasterGoCanvas } from "./integrations/mastergo/verification.js";
 import { generateAcceptanceReport, runDeliveryCheck } from "./planning/delivery-check.js";
-import { generateManualDelivery, runManualCheck } from "./manual/service.js";
+import { generateManualDelivery, runManualCheck, updateManualDelivery } from "./manual/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -32,6 +32,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae delivery check <需求目录>
   pae manual generate <需求目录>
   pae manual check <需求目录>
+  pae manual update <需求目录>
   pae acceptance report <需求目录>
   pae mastergo doctor
   pae mastergo tools [--json <文件>]
@@ -215,6 +216,15 @@ async function main(): Promise<void> {
     console.log(`手册一致性检查：${output.report.valid ? "PASS" : "FAIL"}`);
     console.log(`检查报告：${output.markdownPath}`);
     if (!output.report.valid) process.exitCode = 1;
+    return;
+  }
+
+  const isManualUpdate = args[0] === "manual" && args[1] === "update" && Boolean(args[2]);
+  if (isManualUpdate) {
+    const output = await updateManualDelivery(path.resolve(args[2]));
+    console.log(`手册增量更新：${output.report.changed ? "已更新" : "无来源变化"}`);
+    console.log(`保留手工补充：${output.report.preservedManualNotes.length} 处`);
+    console.log(`影响报告：${output.reportPath}`);
     return;
   }
 

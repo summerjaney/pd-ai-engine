@@ -16,9 +16,10 @@ export interface ProductManual {
     purpose: string;
     fields: Array<{ id: string; label: string; required: boolean }>;
     actions: Array<{ id: string; label: string; kind: string; confirmation: boolean; roles: string[] }>;
+    manualNotes?: string;
     sourceReferences: ManualSourceReference[];
   }>;
-  rules: Array<{ id: string; description: string; appliesTo: string[]; sourceReferences: ManualSourceReference[] }>;
+  rules: Array<{ id: string; description: string; appliesTo: string[]; manualNotes?: string; sourceReferences: ManualSourceReference[] }>;
 }
 
 export interface OperationManual {
@@ -35,9 +36,31 @@ export interface OperationManual {
       steps: Array<{ order: number; pageId: string; actionId: string; instruction: string; targetPageId?: string }>;
       expectedResult: string;
       failureHandling?: string;
+      manualNotes?: string;
       sourceReferences: ManualSourceReference[];
     }>;
   }>;
+}
+
+export interface ManualGenerationState {
+  schemaVersion: "0.8";
+  requirementId?: string;
+  revision?: number;
+  sourceFingerprints: Record<string, string>;
+}
+
+export interface ManualImpactReport {
+  schemaVersion: "0.8";
+  requirementId?: string;
+  previousRevision?: number;
+  currentRevision?: number;
+  changed: boolean;
+  impact: {
+    added: string[];
+    modified: string[];
+    removed: string[];
+  };
+  preservedManualNotes: string[];
 }
 
 export interface ManualTraceabilityMatrix {

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { generateManuals } from "../src/manual/generator.js";
-import { generateManualDelivery } from "../src/manual/service.js";
+import { generateManualDelivery, updateManualDelivery } from "../src/manual/service.js";
 import { runManualCheck } from "../src/manual/service.js";
 import { validateManualConsistency } from "../src/manual/validator.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
@@ -83,4 +83,55 @@ test("TC-080-002: 操作步骤只引用真实页面、操作和跳转", () => {
   assert.equal(operation.steps[0].actionId, "create");
   assert.equal(operation.steps[0].targetPageId, "P2");
   assert.equal(result.traceability.summary.missingCount, 0);
+});
+
+test("TC-080-005: 需求修订后识别新增、修改和删除的手册影响", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v080-impact-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "organization.md", title: "组织结构管理", content: "# 组织结构管理\n\n支持维护组织关系。" }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-082", requirementName: "organization-management", revision: 1,
+  });
+  await writeFile(path.join(output, "requirement.json"), `${JSON.stringify({ projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-082", requirementName: "organization-management", revision: 1 }, null, 2)}\n`, "utf8");
+  await generateManualDelivery(output);
+  const prototypePath = path.join(output, "06-prototype", "prototype.json");
+  const requirementPath = path.join(output, "requirement.json");
+  const prototype = await readJson<any>(prototypePath);
+  prototype.pages[0].fields.push({ id: "organization-code", label: "组织编码", type: "text", required: true });
+  prototype.rules.pop();
+  await writeFile(prototypePath, `${JSON.stringify(prototype, null, 2)}\n`, "utf8");
+  const requirement = await readJson<any>(requirementPath);
+  requirement.revision = 2;
+  await writeFile(requirementPath, `${JSON.stringify(requirement, null, 2)}\n`, "utf8");
+  const updated = await updateManualDelivery(output);
+  assert.equal(updated.report.changed, true);
+  assert.equal(updated.report.previousRevision, 1);
+  assert.equal(updated.report.currentRevision, 2);
+  assert.ok(updated.report.impact.modified.includes("requirement"));
+  assert.ok(updated.report.impact.modified.some((item) => item.startsWith("page:")));
+  assert.ok(updated.report.impact.removed.some((item) => item.startsWith("rule:")));
+});
+
+test("TC-080-006: 增量更新按稳定 ID 保留手工补充并移除失效章节", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v080-preserve-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "user.md", title: "用户管理", content: "# 用户管理\n\n支持用户维护。" }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-083", requirementName: "user-management", revision: 1,
+  });
+  await generateManualDelivery(output);
+  const productPath = path.join(output, "10-product-manual", "product-manual.json");
+  const product = await readJson<any>(productPath);
+  const preservedId = product.modules[0].id;
+  product.modules[0].manualNotes = "这是产品经理人工补充的业务边界。";
+  await writeFile(productPath, `${JSON.stringify(product, null, 2)}\n`, "utf8");
+  const prototypePath = path.join(output, "06-prototype", "prototype.json");
+  const prototype = await readJson<any>(prototypePath);
+  const removedPageId = prototype.pages.at(-1).id;
+  prototype.pages.pop();
+  prototype.navigation = prototype.navigation.filter((item: any) => item.pageId !== removedPageId);
+  prototype.transitions = prototype.transitions.filter((item: any) => item.sourcePageId !== removedPageId && item.targetPageId !== removedPageId);
+  await writeFile(prototypePath, `${JSON.stringify(prototype, null, 2)}\n`, "utf8");
+  const updated = await updateManualDelivery(output);
+  const regenerated = await readJson<any>(productPath);
+  assert.equal(regenerated.modules.find((item: any) => item.id === preservedId).manualNotes, "这是产品经理人工补充的业务边界。");
+  assert.ok(updated.report.preservedManualNotes.includes(preservedId));
+  assert.equal(regenerated.modules.some((item: any) => item.id === `module:${removedPageId}`), false);
+  assert.match(await readFile(path.join(output, "10-product-manual", "product-manual.md"), "utf8"), /产品经理人工补充/);
 });

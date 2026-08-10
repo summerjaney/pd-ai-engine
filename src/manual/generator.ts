@@ -109,12 +109,12 @@ export function generateManuals(prototype: PrototypeDsl, prd: string, requiremen
 
 export function renderProductManual(manual: ProductManual): string {
   const roles = manual.roles.map((role) => `- ${role.name}：可访问 ${role.pageIds.length} 个页面`).join("\n");
-  const modules = manual.modules.map((module) => `## ${module.name}\n\n- 页面 ID：${module.id.replace("module:", "")}\n- 路由：${module.route}\n- 功能说明：${module.purpose}\n\n### 字段\n\n${module.fields.length ? module.fields.map((field) => `- ${field.label}${field.required ? "（必填）" : ""}`).join("\n") : "无。"}\n\n### 操作\n\n${module.actions.length ? module.actions.map((action) => `- ${action.label}${action.confirmation ? "（需二次确认）" : ""}；角色：${action.roles.join("、")}`).join("\n") : "无。"}`).join("\n\n");
-  const rules = manual.rules.length ? manual.rules.map((rule) => `- ${rule.id}：${rule.description}`).join("\n") : "无。";
+  const modules = manual.modules.map((module) => `## ${module.name}\n\n- 页面 ID：${module.id.replace("module:", "")}\n- 路由：${module.route}\n- 功能说明：${module.purpose}${module.manualNotes ? `\n- 手工补充：${module.manualNotes}` : ""}\n\n### 字段\n\n${module.fields.length ? module.fields.map((field) => `- ${field.label}${field.required ? "（必填）" : ""}`).join("\n") : "无。"}\n\n### 操作\n\n${module.actions.length ? module.actions.map((action) => `- ${action.label}${action.confirmation ? "（需二次确认）" : ""}；角色：${action.roles.join("、")}`).join("\n") : "无。"}`).join("\n\n");
+  const rules = manual.rules.length ? manual.rules.map((rule) => `- ${rule.id}：${rule.description}${rule.manualNotes ? `（手工补充：${rule.manualNotes}）` : ""}`).join("\n") : "无。";
   return `# ${manual.title}\n\n${manual.product.description}\n\n## 用户角色\n\n${roles}\n\n${modules}\n\n## 业务规则\n\n${rules}\n`;
 }
 
 export function renderOperationManual(manual: OperationManual): string {
-  const guides = manual.roleGuides.map((guide) => `## ${guide.role}\n\n${guide.operations.map((operation, index) => `### ${index + 1}. ${operation.title}\n\n- 前置条件：${operation.preconditions.join("；")}\n- 操作步骤：${operation.steps.map((step) => `${step.order}. ${step.instruction}`).join("；")}\n- 预期结果：${operation.expectedResult}${operation.failureHandling ? `\n- 失败处理：${operation.failureHandling}` : ""}`).join("\n\n")}`).join("\n\n");
+  const guides = manual.roleGuides.map((guide) => `## ${guide.role}\n\n${guide.operations.map((operation, index) => `### ${index + 1}. ${operation.title}\n\n- 前置条件：${operation.preconditions.join("；")}\n- 操作步骤：${operation.steps.map((step) => `${step.order}. ${step.instruction}`).join("；")}\n- 预期结果：${operation.expectedResult}${operation.failureHandling ? `\n- 失败处理：${operation.failureHandling}` : ""}${operation.manualNotes ? `\n- 手工补充：${operation.manualNotes}` : ""}`).join("\n\n")}`).join("\n\n");
   return `# ${manual.title}\n\n${guides}\n`;
 }
