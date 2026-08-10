@@ -17,6 +17,7 @@ import { diagnoseMasterGo } from "./integrations/mastergo/doctor.js";
 import { StdioMasterGoConnection } from "./integrations/mastergo/stdio-connection.js";
 import { executeMasterGoPagePipeline } from "./integrations/mastergo/page-pipeline.js";
 import { verifyMasterGoCanvas } from "./integrations/mastergo/verification.js";
+import { generateAcceptanceReport, runDeliveryCheck } from "./planning/delivery-check.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -27,6 +28,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae prototype push <需求目录> --write --confirm-write
   pae prototype push <需求目录> --write --confirm-write --resume
   pae prototype verify <需求目录> --pass --evidence <证据说明>
+  pae delivery check <需求目录>
+  pae acceptance report <需求目录>
   pae mastergo doctor
   pae mastergo tools [--json <文件>]
   pae --help
@@ -90,7 +93,7 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
-  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence",
+  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -180,6 +183,25 @@ async function main(): Promise<void> {
     }
     if (report.nextAction) console.log(`下一步：${report.nextAction}`);
     if (report.status !== "READY") process.exitCode = 1;
+    return;
+  }
+
+  const isDeliveryCheck = args[0] === "delivery" && args[1] === "check" && Boolean(args[2]);
+  if (isDeliveryCheck) {
+    const output = await runDeliveryCheck(path.resolve(args[2]));
+    console.log(`完整交付一致性检查：${output.report.valid ? "PASS" : "FAIL"}`);
+    console.log(`MasterGo 写入：${output.report.checks.masterGoSubmission}`);
+    console.log(`检查报告：${output.markdownPath}`);
+    if (!output.report.valid) process.exitCode = 1;
+    return;
+  }
+
+  const isAcceptanceReport = args[0] === "acceptance" && args[1] === "report" && Boolean(args[2]);
+  if (isAcceptanceReport) {
+    const output = await generateAcceptanceReport(path.resolve(args[2]));
+    console.log(`正式验收报告：${output.status}`);
+    console.log(`验收报告：${output.reportPath}`);
+    if (output.status === "FAIL") process.exitCode = 1;
     return;
   }
 

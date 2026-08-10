@@ -10,8 +10,32 @@ import { validateDesignConsistency } from "../src/planning/design-consistency-va
 import { validateInteractionConsistency } from "../src/planning/interaction-consistency-validator.js";
 import { buildPrdTraceabilityReport } from "../src/planning/prd-traceability.js";
 import { validateDeliveryConsistency } from "../src/planning/delivery-consistency-validator.js";
+import { generateAcceptanceReport, runDeliveryCheck } from "../src/planning/delivery-check.js";
 
 const test = (globalThis as any).test ?? (await import("node:test")).default;
+
+test("TC-070-017: CLI 交付检查服务可从需求目录重建并落盘一致性报告", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-check-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "requirement.md", title: "测试", content: "# 测试\n\n创建并审批申请。" }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "1.0.0", requirementId: "REQ-070", requirementName: "user-management", revision: 1,
+  });
+  const checked = await runDeliveryCheck(output);
+  assert.equal(checked.report.valid, true);
+  assert.equal(checked.report.checks.masterGoSubmission, "PENDING");
+  assert.match(await readFile(checked.markdownPath, "utf8"), /完整交付一致性报告/);
+});
+
+test("TC-070-018: 正式验收报告区分待画布验收与发布通过", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-acceptance-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "requirement.md", title: "测试", content: "# 测试\n\n创建并审批申请。" }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "1.0.0", requirementId: "REQ-070", requirementName: "user-management", revision: 1,
+  });
+  const result = await generateAcceptanceReport(output);
+  assert.equal(result.status, "PENDING");
+  const content = await readFile(result.reportPath, "utf8");
+  assert.match(content, /验收结论：PENDING/);
+  assert.match(content, /待完成 MasterGo 真实画布验收/);
+});
 
 test("TC-070-015: 工作流输出需求、原型、MasterGo 与 PRD 完整交付一致性报告", async () => {
   const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-delivery-"));
