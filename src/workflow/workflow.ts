@@ -16,6 +16,7 @@ import { buildRequirementPlanningArtifacts } from "../planning/requirement-page-
 import { renderPagePlanValidationReport, validateRequirementPagePlan } from "../planning/page-plan-validator.js";
 import { renderDesignConsistencyReport, validateDesignConsistency } from "../planning/design-consistency-validator.js";
 import { renderInteractionConsistencyReport, validateInteractionConsistency } from "../planning/interaction-consistency-validator.js";
+import { buildPrdTraceabilityReport, renderPrdTraceabilityReport } from "../planning/prd-traceability.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -42,6 +43,7 @@ const MANAGED_OUTPUT_PATHS = [
   "07-mastergo",
   "08-prototype-confirmation.json",
   "09-prd.md",
+  "09-validation",
   "10-review.md",
   "99-debug",
   "manifest.json",
@@ -239,6 +241,17 @@ export class ProductDesignWorkflow {
           ? result.artifact
           : `${JSON.stringify(result.artifact, null, 2)}\n`;
         await writeFile(path.join(outputDirectory, file), body, "utf8");
+        if (stage === "prd") {
+          const prototype = context.artifacts.prototype;
+          if (!prototype || typeof result.artifact !== "string") throw new Error("PRD 追踪矩阵必须依赖 Prototype DSL 和文本 PRD");
+          const report = buildPrdTraceabilityReport(prototype, result.artifact, requirement);
+          const validationDirectory = path.join(outputDirectory, "09-validation");
+          await mkdir(validationDirectory, { recursive: true });
+          await Promise.all([
+            writeFile(path.join(validationDirectory, "prd-traceability.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8"),
+            writeFile(path.join(validationDirectory, "prd-traceability.md"), renderPrdTraceabilityReport(report), "utf8"),
+          ]);
+        }
         stages.push({
           id: stage,
           status: "completed",
@@ -308,6 +321,9 @@ export class ProductDesignWorkflow {
               "07-mastergo/mastergo-result.json",
             ],
           };
+        }
+        if (stage.id === "prd") {
+          return { ...stage, type: "file", relatedFiles: ["09-validation/prd-traceability.json", "09-validation/prd-traceability.md"] };
         }
         return {
           ...stage,

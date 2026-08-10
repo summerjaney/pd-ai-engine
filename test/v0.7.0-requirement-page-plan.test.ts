@@ -2,14 +2,44 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { DesignConsistencyReport, InteractionConsistencyReport, PrototypeDsl, RequirementDesignContext, RequirementInteractionMap, RequirementPagePlan, PagePlanValidationReport } from "../src/domain/types.js";
+import type { DesignConsistencyReport, InteractionConsistencyReport, PrdTraceabilityReport, PrototypeDsl, RequirementDesignContext, RequirementInteractionMap, RequirementPagePlan, PagePlanValidationReport } from "../src/domain/types.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { validateRequirementPagePlan } from "../src/planning/page-plan-validator.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 import { validateDesignConsistency } from "../src/planning/design-consistency-validator.js";
 import { validateInteractionConsistency } from "../src/planning/interaction-consistency-validator.js";
+import { buildPrdTraceabilityReport } from "../src/planning/prd-traceability.js";
 
 const test = (globalThis as any).test ?? (await import("node:test")).default;
+
+test("TC-070-013: 工作流输出 PRD 页面、字段、规则和验收标准追踪矩阵", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-prd-trace-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "requirement.md", title: "测试", content: "# 测试\n\n创建并审批申请。" }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "1.0.0", requirementId: "REQ-070", requirementName: "user-management", revision: 1,
+  });
+  const report = await readJson<PrdTraceabilityReport>(path.join(output, "09-validation", "prd-traceability.json"));
+  assert.equal(report.schemaVersion, "0.7");
+  assert.equal(report.requirementId, "REQ-070");
+  assert.equal(report.valid, true);
+  assert.ok(report.summary.pageCount > 0 && report.summary.fieldCount > 0 && report.summary.ruleCount > 0);
+  assert.equal(report.summary.acceptanceCriteriaCount, report.summary.pageCount);
+  assert.ok(report.items.every((item) => /^[A-Z]+-/.test(item.id)));
+});
+
+test("TC-070-014: PRD 追踪检查识别缺失页面字段、规则和验收覆盖", () => {
+  const prototype: PrototypeDsl = {
+    schemaVersion: "0.2", product: { name: "测试", description: "测试" }, navigation: [], transitions: [],
+    pages: [{ id: "P1", name: "用户列表", route: "/users", pattern: "list", fields: [{ id: "name", label: "姓名", type: "text", required: true }], actions: [{ id: "create", label: "新建", kind: "primary" }] }],
+    rules: [{ id: "unique-name", description: "用户名必须唯一。", appliesTo: ["name"] }],
+    designTokens: { colors: {}, spacing: {}, radius: {}, typography: { fontSize: {}, fontWeight: {}, lineHeight: {} } },
+  };
+  const report = buildPrdTraceabilityReport(prototype, "# PRD\n\n用户列表，路由 /users。\n");
+  assert.equal(report.valid, false);
+  assert.ok(report.items.some((item) => item.kind === "field" && !item.prdCovered));
+  assert.ok(report.items.some((item) => item.kind === "rule" && !item.prdCovered));
+  assert.ok(report.items.some((item) => item.kind === "acceptance-criterion" && !item.prdCovered));
+});
+
 const readJson = async <T>(file: string): Promise<T> => JSON.parse(await readFile(file, "utf8")) as T;
 
 test("TC-070-001: 工作流输出需求级页面规划、设计上下文和交互图", async () => {

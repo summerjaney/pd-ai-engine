@@ -183,6 +183,30 @@ export interface InteractionConsistencyReport {
   issues: InteractionConsistencyIssue[];
 }
 
+export interface PrdTraceabilityItem {
+  id: string;
+  kind: "page" | "field" | "rule" | "acceptance-criterion";
+  label: string;
+  pageId?: string;
+  sourceId: string;
+  prdCovered: boolean;
+}
+
+export interface PrdTraceabilityReport {
+  schemaVersion: "0.7";
+  requirementId?: string;
+  valid: boolean;
+  summary: {
+    pageCount: number;
+    fieldCount: number;
+    ruleCount: number;
+    acceptanceCriteriaCount: number;
+    coveredCount: number;
+    missingCount: number;
+  };
+  items: PrdTraceabilityItem[];
+}
+
 export interface PrototypePageManifest {
   id: string;
   name: string;
