@@ -14,6 +14,7 @@ import {
 } from "../prototype/bundle.js";
 import { buildRequirementPlanningArtifacts } from "../planning/requirement-page-plan.js";
 import { renderPagePlanValidationReport, validateRequirementPagePlan } from "../planning/page-plan-validator.js";
+import { renderDesignConsistencyReport, validateDesignConsistency } from "../planning/design-consistency-validator.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -169,6 +170,7 @@ export class ProductDesignWorkflow {
           const masterGoData = buildMasterGoData(prototype);
           const planning = buildRequirementPlanningArtifacts(prototype, requirement);
           const planningValidation = validateRequirementPagePlan(planning.pagePlan, planning.interactionMap, prototype.navigation);
+          const designConsistency = validateDesignConsistency(prototype, planning.designContext);
           const pagePlanDirectory = path.join(outputDirectory, "05-page-plan");
 
           await Promise.all([
@@ -181,6 +183,8 @@ export class ProductDesignWorkflow {
             writeFile(path.join(pagePlanDirectory, "interaction-map.json"), `${JSON.stringify(planning.interactionMap, null, 2)}\n`, "utf8"),
             writeFile(path.join(pagePlanDirectory, "validation-report.json"), `${JSON.stringify(planningValidation, null, 2)}\n`, "utf8"),
             writeFile(path.join(pagePlanDirectory, "validation-report.md"), renderPagePlanValidationReport(planningValidation), "utf8"),
+            writeFile(path.join(pagePlanDirectory, "design-consistency-report.json"), `${JSON.stringify(designConsistency, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "design-consistency-report.md"), renderDesignConsistencyReport(designConsistency), "utf8"),
           ]);
           await writeFile(path.join(bundleDirectory, "prototype.json"), `${JSON.stringify(prototype, null, 2)}\n`, "utf8");
           await writeFile(
@@ -284,6 +288,8 @@ export class ProductDesignWorkflow {
               "05-page-plan/interaction-map.json",
               "05-page-plan/validation-report.json",
               "05-page-plan/validation-report.md",
+              "05-page-plan/design-consistency-report.json",
+              "05-page-plan/design-consistency-report.md",
             ],
           };
         }

@@ -146,6 +146,26 @@ export interface PagePlanValidationReport {
   issues: PagePlanValidationIssue[];
 }
 
+export type DesignConsistencySeverity = "error" | "warning";
+
+export interface DesignConsistencyIssue {
+  code: "FIELD_DEFINITION_CONFLICT" | "TOO_MANY_PRIMARY_ACTIONS" | "DANGER_ACTION_WITHOUT_CONFIRMATION" | "LIST_WITHOUT_PAGINATION" | "LIST_WITHOUT_EMPTY_STATE";
+  severity: DesignConsistencySeverity;
+  message: string;
+  pageId?: string;
+  fieldId?: string;
+  actionId?: string;
+}
+
+export interface DesignConsistencyReport {
+  schemaVersion: "0.7";
+  valid: boolean;
+  context: RequirementDesignContext;
+  summary: { pageCount: number; checkedFieldCount: number; checkedActionCount: number; errorCount: number; warningCount: number };
+  pages: Array<{ pageId: string; frame: RequirementDesignContext["frame"]; conventions: RequirementDesignContext["conventions"] }>;
+  issues: DesignConsistencyIssue[];
+}
+
 export interface PrototypePageManifest {
   id: string;
   name: string;

@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { PrototypeDsl, RequirementDesignContext, RequirementInteractionMap, RequirementPagePlan, PagePlanValidationReport } from "../src/domain/types.js";
+import type { DesignConsistencyReport, PrototypeDsl, RequirementDesignContext, RequirementInteractionMap, RequirementPagePlan, PagePlanValidationReport } from "../src/domain/types.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { validateRequirementPagePlan } from "../src/planning/page-plan-validator.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
+import { validateDesignConsistency } from "../src/planning/design-consistency-validator.js";
 
 const test = (globalThis as any).test ?? (await import("node:test")).default;
 const readJson = async <T>(file: string): Promise<T> => JSON.parse(await readFile(file, "utf8")) as T;
@@ -31,6 +32,7 @@ test("TC-070-001: 工作流输出需求级页面规划、设计上下文和交�
   const designContext = await readJson<RequirementDesignContext>(path.join(directory, "design-context.json"));
   const interactionMap = await readJson<RequirementInteractionMap>(path.join(directory, "interaction-map.json"));
   const validation = await readJson<PagePlanValidationReport>(path.join(directory, "validation-report.json"));
+  const consistency = await readJson<DesignConsistencyReport>(path.join(directory, "design-consistency-report.json"));
 
   assert.equal(pagePlan.schemaVersion, "0.7");
   assert.equal(pagePlan.requirementId, "REQ-070");
@@ -46,6 +48,36 @@ test("TC-070-001: 工作流输出需求级页面规划、设计上下文和交�
   assert.equal(validation.summary.pageCount, pagePlan.pages.length);
   assert.equal(validation.summary.interactionCount, interactionMap.interactions.length);
   assert.equal(validation.valid, validation.summary.errorCount === 0);
+  assert.equal(consistency.summary.pageCount, pagePlan.pages.length);
+  assert.ok(consistency.pages.every((page) => page.frame.width === designContext.frame.width));
+});
+
+test("TC-070-005: 多页面共享同一设计上下文并完成规则检查", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-consistency-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "requirement.md", title: "测试", content: "# 测试\n\n创建并审批申请。" }, output);
+  const report = await readJson<DesignConsistencyReport>(path.join(output, "05-page-plan", "design-consistency-report.json"));
+  assert.equal(report.schemaVersion, "0.7");
+  assert.equal(report.pages.length, report.summary.pageCount);
+  assert.ok(report.pages.every((page) => page.conventions.formLabelWidth === 120));
+  assert.equal(report.valid, true);
+});
+
+test("TC-070-006: 一致性检查识别字段冲突、危险操作和列表约定缺失", () => {
+  const prototype: PrototypeDsl = {
+    schemaVersion: "0.2", product: { name: "测试", description: "测试" }, navigation: [], rules: [], transitions: [],
+    designTokens: { colors: {}, spacing: {}, radius: {}, typography: { fontSize: {}, fontWeight: {}, lineHeight: {} } },
+    pages: [
+      { id: "P1", name: "列表", route: "/list", pattern: "list", fields: [{ id: "status", label: "状态", type: "select", required: false }], actions: [{ id: "delete", label: "删除", kind: "danger" }] },
+      { id: "P2", name: "详情", route: "/detail", pattern: "detail", fields: [{ id: "status", label: "状态说明", type: "text", required: false }], actions: [] },
+    ],
+  };
+  const context: RequirementDesignContext = { schemaVersion: "0.7", frame: { width: 1440, height: 1024, layout: "horizontal", gap: 120 }, tokens: prototype.designTokens, conventions: { pageHeader: true, formLabelWidth: 120, primaryActionLimit: 1, destructiveActionRequiresConfirmation: true } };
+  const report = validateDesignConsistency(prototype, context);
+  assert.equal(report.valid, false);
+  assert.ok(report.issues.some((issue) => issue.code === "FIELD_DEFINITION_CONFLICT"));
+  assert.ok(report.issues.some((issue) => issue.code === "DANGER_ACTION_WITHOUT_CONFIRMATION"));
+  assert.ok(report.issues.some((issue) => issue.code === "LIST_WITHOUT_PAGINATION"));
+  assert.ok(report.issues.some((issue) => issue.code === "LIST_WITHOUT_EMPTY_STATE"));
 });
 
 test("TC-070-003: 页面规划校验识别重复 ID、孤立页面和无效目标页面", () => {
