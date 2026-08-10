@@ -109,9 +109,143 @@ function generatePageId(name: string, index: number): string {
   return `page-${index}`;
 }
 
+function createUserManagementPrototype(title: string): PrototypeDsl {
+  const roles = ["平台管理员", "组织管理员"];
+  const pages: PrototypeDsl["pages"] = [
+    {
+      id: "P1-user-list", name: "用户列表", route: "/users", pattern: "list",
+      fields: [
+        { id: "name", label: "姓名", type: "text", required: false },
+        { id: "account", label: "登录账号", type: "text", required: false },
+        { id: "mobile", label: "手机号", type: "text", required: false },
+        { id: "organization", label: "所属组织", type: "select", required: false },
+        { id: "position", label: "岗位", type: "select", required: false },
+        { id: "status", label: "账号状态", type: "select", required: false },
+      ],
+      actions: [
+        { id: "search", label: "查询", kind: "primary", roles },
+        { id: "reset", label: "重置", kind: "secondary", roles },
+        { id: "create", label: "新增用户", kind: "secondary", roles: ["平台管理员"] },
+        { id: "view", label: "查看", kind: "secondary", roles },
+        { id: "import", label: "批量导入", kind: "secondary", roles: ["平台管理员"] },
+        { id: "batch-disable", label: "批量停用", kind: "danger", confirmation: true, confirmationMessage: "停用后用户将无法登录，请确认影响范围。", roles: ["平台管理员"] },
+      ],
+      tableColumns: ["name", "account", "mobile", "organization", "position", "status"],
+      pagination: { enabled: true, pageSize: 20 },
+      emptyState: { description: "暂无用户，请调整查询条件或新增用户。", actionId: "create" },
+    },
+    {
+      id: "P2-user-form", name: "新增/编辑用户", route: "/users/form", pattern: "form",
+      fields: [
+        { id: "name", label: "姓名", type: "text", required: true },
+        { id: "account", label: "登录账号", type: "text", required: true },
+        { id: "mobile", label: "手机号", type: "text", required: false },
+        { id: "organization", label: "所属组织", type: "select", required: true },
+        { id: "position", label: "岗位", type: "select", required: false },
+      ],
+      actions: [
+        { id: "save", label: "保存", kind: "primary", roles: ["平台管理员", "组织管理员"] },
+        { id: "cancel", label: "取消", kind: "secondary", roles },
+      ],
+    },
+    {
+      id: "P3-user-detail", name: "用户详情", route: "/users/detail", pattern: "detail",
+      fields: [
+        { id: "name", label: "姓名", type: "text", required: false },
+        { id: "account", label: "登录账号", type: "text", required: false },
+        { id: "mobile", label: "手机号", type: "text", required: false },
+        { id: "organization", label: "所属组织", type: "select", required: false },
+        { id: "position", label: "岗位", type: "select", required: false },
+        { id: "status", label: "账号状态", type: "select", required: false },
+      ],
+      actions: [
+        { id: "edit", label: "编辑", kind: "primary", roles },
+        { id: "authorize", label: "配置权限", kind: "secondary", roles: ["平台管理员"] },
+        { id: "back", label: "返回", kind: "secondary", roles },
+        { id: "disable", label: "停用", kind: "danger", confirmation: true, confirmationMessage: "停用后用户将无法登录，请确认业务影响。", roles: ["平台管理员"] },
+      ],
+    },
+    {
+      id: "P4-user-permission", name: "用户授权", route: "/users/permission", pattern: "form",
+      fields: [
+        { id: "roles", label: "角色", type: "select", required: true },
+        { id: "permissionScope", label: "权限范围", type: "select", required: true },
+        { id: "dataPermission", label: "数据权限", type: "select", required: true },
+      ],
+      actions: [
+        { id: "save-permission", label: "保存授权", kind: "primary", roles: ["平台管理员"] },
+        { id: "cancel-permission", label: "取消", kind: "secondary", roles: ["平台管理员"] },
+      ],
+    },
+    {
+      id: "P5-user-import", name: "批量导入用户", route: "/users/import", pattern: "form",
+      fields: [{ id: "importFile", label: "导入文件", type: "text", required: true }],
+      actions: [
+        { id: "validate-import", label: "校验并导入", kind: "primary", roles: ["平台管理员"] },
+        { id: "download-template", label: "下载模板", kind: "secondary", roles: ["平台管理员"] },
+        { id: "cancel-import", label: "取消", kind: "secondary", roles: ["平台管理员"] },
+      ],
+    },
+    {
+      id: "P6-import-result", name: "导入结果", route: "/users/import/result", pattern: "detail",
+      fields: [
+        { id: "successCount", label: "成功数量", type: "text", required: false },
+        { id: "failureCount", label: "失败数量", type: "text", required: false },
+        { id: "failureReason", label: "失败原因", type: "textarea", required: false },
+        { id: "status", label: "账号状态", type: "select", required: false },
+      ],
+      actions: [
+        { id: "finish-import", label: "完成", kind: "primary", roles: ["平台管理员"] },
+        { id: "download-errors", label: "下载失败明细", kind: "secondary", roles: ["平台管理员"] },
+      ],
+    },
+  ];
+  return {
+    schemaVersion: "0.2",
+    product: { name: title, description: `依据“${title}”真实需求生成的用户管理原型模型。` },
+    navigation: [{ label: "用户管理", pageId: "P1-user-list", roles }],
+    pages,
+    rules: [
+      { id: "account-unique", description: "登录账号必须唯一，重复时不得保存。", appliesTo: ["account"] },
+      { id: "primary-position-required", description: "关联多个岗位时必须指定一个主岗位。", appliesTo: ["position"] },
+      { id: "organization-scope", description: "组织管理员只能维护授权组织范围内的用户。", appliesTo: ["organization"] },
+      { id: "disable-confirmation", description: "停用及批量停用前必须二次确认并说明影响。", appliesTo: ["disable", "batch-disable"] },
+    ],
+    transitions: [
+      { sourcePageId: "P1-user-list", triggerType: "action", triggerId: "create", triggerLabel: "新增用户", targetPageId: "P2-user-form" },
+      { sourcePageId: "P1-user-list", triggerType: "action", triggerId: "view", triggerLabel: "查看", targetPageId: "P3-user-detail" },
+      { sourcePageId: "P1-user-list", triggerType: "action", triggerId: "import", triggerLabel: "批量导入", targetPageId: "P5-user-import" },
+      { sourcePageId: "P2-user-form", triggerType: "action", triggerId: "save", triggerLabel: "保存", targetPageId: "P1-user-list" },
+      { sourcePageId: "P2-user-form", triggerType: "action", triggerId: "cancel", triggerLabel: "取消", targetPageId: "P1-user-list" },
+      { sourcePageId: "P3-user-detail", triggerType: "action", triggerId: "edit", triggerLabel: "编辑", targetPageId: "P2-user-form" },
+      { sourcePageId: "P3-user-detail", triggerType: "action", triggerId: "authorize", triggerLabel: "配置权限", targetPageId: "P4-user-permission" },
+      { sourcePageId: "P3-user-detail", triggerType: "action", triggerId: "back", triggerLabel: "返回", targetPageId: "P1-user-list" },
+      { sourcePageId: "P4-user-permission", triggerType: "action", triggerId: "save-permission", triggerLabel: "保存授权", targetPageId: "P3-user-detail" },
+      { sourcePageId: "P4-user-permission", triggerType: "action", triggerId: "cancel-permission", triggerLabel: "取消", targetPageId: "P3-user-detail" },
+      { sourcePageId: "P5-user-import", triggerType: "action", triggerId: "validate-import", triggerLabel: "校验并导入", targetPageId: "P6-import-result" },
+      { sourcePageId: "P5-user-import", triggerType: "action", triggerId: "cancel-import", triggerLabel: "取消", targetPageId: "P1-user-list" },
+      { sourcePageId: "P6-import-result", triggerType: "action", triggerId: "finish-import", triggerLabel: "完成", targetPageId: "P1-user-list" },
+    ],
+    errorFeedback: {
+      validationMessage: "账号重复、组织失效或字段校验失败时明确提示并保留已填写内容。",
+      operationFailureMessage: "保存或导入失败时说明原因，不提交脏数据。",
+      recoveryAction: "允许修正后重试；导入失败时可下载失败明细。",
+    },
+    designTokens: {
+      colors: { primary: "#3B82F6", success: "#10B981", danger: "#EF4444", warning: "#F59E0B", bgPage: "#F6F7FB", bgCard: "#FFFFFF", textPrimary: "#111827", textSecondary: "#6B7280", border: "#E5E7EB" },
+      spacing: { s8: 8, s12: 12, s16: 16, s20: 20, s24: 24, s32: 32, s40: 40 },
+      radius: { r8: 8, r12: 12, r16: 16, r24: 24 },
+      typography: { fontSize: { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, xxl: 28 }, fontWeight: { normal: 400, medium: 500, semibold: 600, bold: 700 }, lineHeight: { xs: 16, sm: 20, md: 24, lg: 28, xl: 32, xxl: 36 } },
+    },
+  };
+}
+
 function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
   const parsed = parseRequirement(context.input.content);
   const title = parsed.title;
+  if (/用户管理|用户账号|账号管理/.test(`${title}\n${context.input.content}`)) {
+    return createUserManagementPrototype(title);
+  }
   const actionRoles = parsed.roles.map((role) => role.name);
   if (actionRoles.length === 0) actionRoles.push("管理员");
 

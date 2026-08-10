@@ -39,3 +39,38 @@ test("TC-060-022: 存在失败页面时禁止人工覆盖为 PASS", async () => 
   const root = await fixture("PENDING_VERIFICATION", "FAIL");
   await assert.rejects(verifyMasterGoCanvas(root, "画布截图"), /存在未受理或失败页面/);
 });
+
+test("TC-070-012: 支持逐页验收并仅在全部页面完成后汇总 PASS", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-mastergo-page-verify-"));
+  const directory = path.join(root, "07-mastergo");
+  await mkdir(directory);
+  await writeFile(path.join(directory, "mastergo-write-result.json"), JSON.stringify({
+    schemaVersion: "0.4", status: "PENDING_VERIFICATION", verificationRequired: true,
+    pages: [{ screenId: "P1", status: "PENDING_VERIFICATION" }, { screenId: "P2", status: "PENDING_VERIFICATION" }],
+  }));
+  const first = await verifyMasterGoCanvas(root, "P1 截图及图层检查通过", () => new Date("2026-08-10T01:00:00.000Z"), "P1");
+  assert.equal(first.status, "PENDING_VERIFICATION");
+  let result = JSON.parse(await readFile(first.resultPath, "utf8"));
+  assert.deepEqual(result.pages.map((page: any) => page.status), ["VERIFIED", "PENDING_VERIFICATION"]);
+  assert.match(result.pages[0].verification.evidence, /P1/);
+  const second = await verifyMasterGoCanvas(root, "P2 截图及图层检查通过", () => new Date("2026-08-10T01:10:00.000Z"), "P2");
+  assert.equal(second.status, "PASS");
+  result = JSON.parse(await readFile(second.resultPath, "utf8"));
+  assert.equal(result.verificationRequired, false);
+  assert.deepEqual(result.pages.map((page: any) => page.status), ["VERIFIED", "VERIFIED"]);
+});
+
+test("TC-070-020: 逐页验收支持 P1 简写匹配 P1-user-list", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-mastergo-page-alias-"));
+  const directory = path.join(root, "07-mastergo");
+  await mkdir(directory);
+  await writeFile(path.join(directory, "mastergo-write-result.json"), JSON.stringify({
+    schemaVersion: "0.4", status: "PENDING_VERIFICATION", verificationRequired: true,
+    pages: [{ screenId: "P1-user-list", screenName: "用户列表", status: "PENDING_VERIFICATION" }],
+  }));
+  const output = await verifyMasterGoCanvas(root, "P1 画布核验通过", () => new Date("2026-08-10T02:00:00.000Z"), "P1");
+  assert.equal(output.status, "PASS");
+  const result = JSON.parse(await readFile(output.resultPath, "utf8"));
+  assert.equal(result.pages[0].screenId, "P1-user-list");
+  assert.equal(result.pages[0].status, "VERIFIED");
+});

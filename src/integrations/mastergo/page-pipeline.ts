@@ -3,11 +3,39 @@ import path from "node:path";
 import type { MasterGoData, MasterGoScreen, MasterGoScreenNode } from "../../domain/types.js";
 import type { MasterGoConnection, MasterGoToolCallResult } from "./types.js";
 
-export interface MasterGoPagePipelineOptions { confirmedWrite: boolean; now?: () => Date; }
+export interface MasterGoPagePipelineOptions { confirmedWrite: boolean; resume?: boolean; now?: () => Date; }
 export interface MasterGoPagePipelineOutput {
   planPath: string;
   resultPath: string;
   status: "PASS" | "PENDING_VERIFICATION" | "FAIL";
+}
+
+export interface MasterGoCanvasPlacement {
+  screenId: string;
+  screenName: string;
+  order: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function buildMasterGoCanvasLayout(
+  screens: MasterGoScreen[],
+  layout: "horizontal" | "vertical" = "horizontal",
+  gap = 120,
+): MasterGoCanvasPlacement[] {
+  let offset = 0;
+  return screens.map((screen, order) => {
+    const placement = {
+      screenId: screen.id, screenName: screen.name, order,
+      x: layout === "horizontal" ? offset : 0,
+      y: layout === "vertical" ? offset : 0,
+      width: screen.frame.width, height: screen.frame.height,
+    };
+    offset += (layout === "horizontal" ? screen.frame.width : screen.frame.height) + gap;
+    return placement;
+  });
 }
 
 function safeArtifactName(value: string): string {
@@ -100,18 +128,51 @@ export async function executeMasterGoPagePipeline(requirementDirectory: string, 
   const startedAt = now().toISOString();
   const planPath = path.join(directory, "mastergo-write-plan.json");
   const resultPath = path.join(directory, "mastergo-write-result.json");
-  const plan = { schemaVersion: "0.2", generatedAt: startedAt, source: "07-mastergo/mastergo-data.json", confirmedWrite: true, pages: data.screens.map((screen) => ({ screenId: screen.id, screenName: screen.name, calls: [{ tool: "design_page", arguments: { requirement: describeScreen(screen), designSource: "free-draw", userConfirmedDesignSource: true } }, { tool: "submit_page_to_canvas", argumentsFrom: "pae.staticScreenHtml" }] })) };
+  let layoutDirection: "horizontal" | "vertical" = "horizontal";
+  let layoutGap = 120;
+  try {
+    const context = JSON.parse(await readFile(path.join(requirementDirectory, "05-page-plan", "design-context.json"), "utf8")) as { frame?: { layout?: string; gap?: number } };
+    if (context.frame?.layout === "vertical") layoutDirection = "vertical";
+    if (typeof context.frame?.gap === "number" && context.frame.gap >= 0) layoutGap = context.frame.gap;
+  } catch { /* Older requirement outputs use the stable defaults. */ }
+  const canvasLayout = buildMasterGoCanvasLayout(data.screens, layoutDirection, layoutGap);
+  const layoutPath = path.join(directory, "canvas-layout.json");
+  await writeFile(layoutPath, `${JSON.stringify({ schemaVersion: "0.7", layout: layoutDirection, gap: layoutGap, pages: canvasLayout }, null, 2)}\n`, "utf8");
+  const plan = { schemaVersion: "0.7", generatedAt: startedAt, source: "07-mastergo/mastergo-data.json", canvasLayout: "07-mastergo/canvas-layout.json", confirmedWrite: true, pages: data.screens.map((screen, index) => ({ screenId: screen.id, screenName: screen.name, placement: canvasLayout[index], calls: [{ tool: "design_page", arguments: { requirement: describeScreen(screen), designSource: "free-draw", userConfirmedDesignSource: true } }, { tool: "submit_page_to_canvas", argumentsFrom: "pae.staticScreenHtml" }] })) };
   await mkdir(directory, { recursive: true });
   await writeFile(planPath, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
-  const result: Record<string, unknown> = { schemaVersion: "0.3", status: "FAIL", startedAt, completedAt: startedAt, pages: [], errors: [] };
+  let previous: Record<string, unknown> | undefined;
+  if (options.resume) {
+    try {
+      previous = JSON.parse(await readFile(resultPath, "utf8")) as Record<string, unknown>;
+    } catch {
+      throw new Error("续跑需要已有 mastergo-write-result.json；请先执行一次真实写入。");
+    }
+  }
+  const previousPages = Array.isArray(previous?.pages) ? previous.pages as Array<Record<string, unknown>> : [];
+  const resumablePages = new Map(previousPages.map((page) => [String(page.screenId), page]));
+  const result: Record<string, unknown> = {
+    schemaVersion: "0.4", status: "FAIL", startedAt, completedAt: startedAt,
+    resumed: Boolean(options.resume), resumedFrom: options.resume ? String(previous?.startedAt ?? "unknown") : undefined,
+    pages: [], errors: [],
+  };
+  const persist = async () => writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
   try {
     const info = await connection.probe();
     const discovery = await connection.listTools();
     for (const required of ["design_page", "submit_page_to_canvas"]) if (!discovery.tools.some((tool) => tool.name === required)) throw new Error(`MasterGo MCP 缺少必需工具：${required}`);
     let pending = false;
     for (const screen of data.screens) {
-      const pageResult: Record<string, unknown> = { screenId: screen.id, screenName: screen.name, status: "FAIL", stage: "design_page" };
+      const prior = resumablePages.get(screen.id);
+      if (options.resume && prior && ["PASS", "PENDING_VERIFICATION", "VERIFIED"].includes(String(prior.status))) {
+        (result.pages as unknown[]).push({ ...prior, resumedAction: "SKIPPED_ALREADY_SUBMITTED" });
+        pending ||= prior.status === "PENDING_VERIFICATION";
+        await persist();
+        continue;
+      }
+      const pageResult: Record<string, unknown> = { screenId: screen.id, screenName: screen.name, placement: canvasLayout.find((item) => item.screenId === screen.id), status: "FAIL", stage: "design_page" };
       (result.pages as unknown[]).push(pageResult);
+      await persist();
       const requirement = describeScreen(screen);
       const designed = await connection.callTool("design_page", { requirement, designSource: "free-draw", userConfirmedDesignSource: true });
       pageResult.designResult = designed;
@@ -126,13 +187,14 @@ export async function executeMasterGoPagePipeline(requirementDirectory: string, 
       const acceptedOnly = isAcceptedOnly(submitted);
       pending ||= acceptedOnly;
       Object.assign(pageResult, { status: acceptedOnly ? "PENDING_VERIFICATION" : "PASS", stage: "completed" });
+      await persist();
     }
     Object.assign(result, { status: pending ? "PENDING_VERIFICATION" : "PASS", server: info, verificationRequired: pending });
   } catch (error) {
     (result.errors as string[]).push(error instanceof Error ? error.message : String(error));
   } finally {
     result.completedAt = now().toISOString();
-    await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+    await persist();
     await connection.close().catch(() => undefined);
   }
   return { planPath, resultPath, status: result.status as MasterGoPagePipelineOutput["status"] };

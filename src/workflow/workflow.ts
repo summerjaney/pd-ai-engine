@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { STAGE_IDS, type KnowledgeMode, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
+import { STAGE_IDS, type DeliveryConsistencyReport, type KnowledgeMode, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
 import { readEngineVersion } from "../version.js";
 import { KnowledgeLoader } from "../knowledge/loader.js";
 import { KnowledgeSelector } from "../knowledge/selector.js";
@@ -12,6 +12,12 @@ import {
   renderInteractivePrototypeHtml,
   renderPreviewSvg,
 } from "../prototype/bundle.js";
+import { buildRequirementPlanningArtifacts } from "../planning/requirement-page-plan.js";
+import { renderPagePlanValidationReport, validateRequirementPagePlan } from "../planning/page-plan-validator.js";
+import { renderDesignConsistencyReport, validateDesignConsistency } from "../planning/design-consistency-validator.js";
+import { renderInteractionConsistencyReport, validateInteractionConsistency } from "../planning/interaction-consistency-validator.js";
+import { buildPrdTraceabilityReport, renderPrdTraceabilityReport } from "../planning/prd-traceability.js";
+import { renderDeliveryConsistencyReport, validateDeliveryConsistency } from "../planning/delivery-consistency-validator.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -32,11 +38,13 @@ const MANAGED_OUTPUT_PATHS = [
   "03-product-architecture.md",
   "04-core-flow.md",
   "05-page-structure.md",
+  "05-page-plan",
   "06-prototype",
   "06-prototype.json",
   "07-mastergo",
   "08-prototype-confirmation.json",
   "09-prd.md",
+  "09-validation",
   "10-review.md",
   "99-debug",
   "manifest.json",
@@ -105,6 +113,7 @@ export class ProductDesignWorkflow {
       generation?: StageResult["generationMetadata"];
     }> = [];
     let hasFailed = false;
+    let deliveryConsistency: DeliveryConsistencyReport | undefined;
 
     for (const stage of STAGE_IDS) {
       if (hasFailed) {
@@ -164,8 +173,27 @@ export class ProductDesignWorkflow {
 
           const prototypeManifest = buildPrototypeManifest(prototype);
           const masterGoData = buildMasterGoData(prototype);
+          const planning = buildRequirementPlanningArtifacts(prototype, requirement);
+          const planningValidation = validateRequirementPagePlan(planning.pagePlan, planning.interactionMap, prototype.navigation);
+          const designConsistency = validateDesignConsistency(prototype, planning.designContext);
+          const interactionConsistency = validateInteractionConsistency(prototype, planning.pagePlan, planning.interactionMap);
+          const pagePlanDirectory = path.join(outputDirectory, "05-page-plan");
 
-          await mkdir(previewDirectory, { recursive: true });
+          await Promise.all([
+            mkdir(previewDirectory, { recursive: true }),
+            mkdir(pagePlanDirectory, { recursive: true }),
+          ]);
+          await Promise.all([
+            writeFile(path.join(pagePlanDirectory, "page-plan.json"), `${JSON.stringify(planning.pagePlan, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "design-context.json"), `${JSON.stringify(planning.designContext, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "interaction-map.json"), `${JSON.stringify(planning.interactionMap, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "validation-report.json"), `${JSON.stringify(planningValidation, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "validation-report.md"), renderPagePlanValidationReport(planningValidation), "utf8"),
+            writeFile(path.join(pagePlanDirectory, "design-consistency-report.json"), `${JSON.stringify(designConsistency, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "design-consistency-report.md"), renderDesignConsistencyReport(designConsistency), "utf8"),
+            writeFile(path.join(pagePlanDirectory, "interaction-consistency-report.json"), `${JSON.stringify(interactionConsistency, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "interaction-consistency-report.md"), renderInteractionConsistencyReport(interactionConsistency), "utf8"),
+          ]);
           await writeFile(path.join(bundleDirectory, "prototype.json"), `${JSON.stringify(prototype, null, 2)}\n`, "utf8");
           await writeFile(
             path.join(bundleDirectory, "prototype-manifest.json"),
@@ -215,6 +243,22 @@ export class ProductDesignWorkflow {
           ? result.artifact
           : `${JSON.stringify(result.artifact, null, 2)}\n`;
         await writeFile(path.join(outputDirectory, file), body, "utf8");
+        if (stage === "prd") {
+          const prototype = context.artifacts.prototype;
+          if (!prototype || typeof result.artifact !== "string") throw new Error("PRD 追踪矩阵必须依赖 Prototype DSL 和文本 PRD");
+          const report = buildPrdTraceabilityReport(prototype, result.artifact, requirement);
+          const mastergo = context.artifacts.mastergo;
+          if (!mastergo) throw new Error("完整交付一致性检查必须依赖 MasterGo 产物");
+          deliveryConsistency = validateDeliveryConsistency(prototype, mastergo, context.artifacts["prototype-confirmation"], report);
+          const validationDirectory = path.join(outputDirectory, "09-validation");
+          await mkdir(validationDirectory, { recursive: true });
+          await Promise.all([
+            writeFile(path.join(validationDirectory, "prd-traceability.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8"),
+            writeFile(path.join(validationDirectory, "prd-traceability.md"), renderPrdTraceabilityReport(report), "utf8"),
+            writeFile(path.join(validationDirectory, "delivery-consistency-report.json"), `${JSON.stringify(deliveryConsistency, null, 2)}\n`, "utf8"),
+            writeFile(path.join(validationDirectory, "delivery-consistency-report.md"), renderDeliveryConsistencyReport(deliveryConsistency), "utf8"),
+          ]);
+        }
         stages.push({
           id: stage,
           status: "completed",
@@ -263,6 +307,15 @@ export class ProductDesignWorkflow {
               "06-prototype/prototype-manifest.json",
               "06-prototype/mastergo-data.json",
               "06-prototype/preview/",
+              "05-page-plan/page-plan.json",
+              "05-page-plan/design-context.json",
+              "05-page-plan/interaction-map.json",
+              "05-page-plan/validation-report.json",
+              "05-page-plan/validation-report.md",
+              "05-page-plan/design-consistency-report.json",
+              "05-page-plan/design-consistency-report.md",
+              "05-page-plan/interaction-consistency-report.json",
+              "05-page-plan/interaction-consistency-report.md",
             ],
           };
         }
@@ -276,12 +329,16 @@ export class ProductDesignWorkflow {
             ],
           };
         }
+        if (stage.id === "prd") {
+          return { ...stage, type: "file", relatedFiles: ["09-validation/prd-traceability.json", "09-validation/prd-traceability.md", "09-validation/delivery-consistency-report.json", "09-validation/delivery-consistency-report.md"] };
+        }
         return {
           ...stage,
           type: "file",
         };
       }),
       debugArtifacts: await collectDebugArtifacts(outputDirectory),
+      deliveryConsistency,
     }, null, 2);
 
     await writeFile(path.join(outputDirectory, "manifest.json"), `${manifestContent}\n`, "utf8");
