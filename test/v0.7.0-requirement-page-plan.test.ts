@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { DesignConsistencyReport, PrototypeDsl, RequirementDesignContext, RequirementInteractionMap, RequirementPagePlan, PagePlanValidationReport } from "../src/domain/types.js";
+import type { DesignConsistencyReport, InteractionConsistencyReport, PrototypeDsl, RequirementDesignContext, RequirementInteractionMap, RequirementPagePlan, PagePlanValidationReport } from "../src/domain/types.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { validateRequirementPagePlan } from "../src/planning/page-plan-validator.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 import { validateDesignConsistency } from "../src/planning/design-consistency-validator.js";
+import { validateInteractionConsistency } from "../src/planning/interaction-consistency-validator.js";
 
 const test = (globalThis as any).test ?? (await import("node:test")).default;
 const readJson = async <T>(file: string): Promise<T> => JSON.parse(await readFile(file, "utf8")) as T;
@@ -123,4 +124,42 @@ test("TC-070-002: 页面规划输出具有确定性且不存在重复页面", as
   const b = await readJson<RequirementPagePlan>(path.join(second, "05-page-plan", "page-plan.json"));
   assert.deepEqual(a, b);
   assert.equal(new Set(a.pages.map((page) => page.id)).size, a.pages.length);
+});
+
+test("TC-070-007: 工作流输出页面交互一致性报告", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-interaction-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "requirement.md", title: "测试", content: "# 测试\n\n创建并审批申请。" }, output);
+  const report = await readJson<InteractionConsistencyReport>(path.join(output, "05-page-plan", "interaction-consistency-report.json"));
+  assert.equal(report.schemaVersion, "0.7");
+  assert.ok(report.summary.checkedPageCount > 0);
+  assert.ok(report.summary.checkedInteractionCount > 0);
+  assert.equal(report.valid, true);
+});
+
+test("TC-070-008: 交互检查识别无效触发器、冲突目标和规划关系偏差", () => {
+  const prototype: PrototypeDsl = {
+    schemaVersion: "0.2", product: { name: "测试", description: "测试" }, rules: [],
+    designTokens: { colors: {}, spacing: {}, radius: {}, typography: { fontSize: {}, fontWeight: {}, lineHeight: {} } },
+    navigation: [{ label: "列表", pageId: "P1" }],
+    pages: [
+      { id: "P1", name: "列表", route: "/list", pattern: "list", fields: [], actions: [{ id: "view", label: "查看", kind: "primary" }] },
+      { id: "P2", name: "详情", route: "/detail", pattern: "detail", fields: [], actions: [] },
+      { id: "P3", name: "编辑", route: "/edit", pattern: "form", fields: [], actions: [] },
+    ], transitions: [],
+  };
+  const page = (id: string, downstreamPageIds: string[] = []): RequirementPagePlan["pages"][number] => ({
+    id, name: id, type: "list", objective: "测试", route: `/${id}`, upstreamPageIds: [], downstreamPageIds, triggerActions: [], roles: [], status: "GENERATED",
+  });
+  const plan: RequirementPagePlan = { schemaVersion: "0.7", pages: [page("P1", ["P2"]), page("P2"), page("P3")] };
+  const map: RequirementInteractionMap = { schemaVersion: "0.7", interactions: [
+    { sourcePageId: "P1", triggerType: "action", triggerId: "missing", triggerLabel: "打开", targetPageId: "P2" },
+    { sourcePageId: "P1", triggerType: "action", triggerId: "missing", triggerLabel: "打开", targetPageId: "P3" },
+    { sourcePageId: "global-navigation", triggerType: "navigation", triggerId: "P404", triggerLabel: "错误入口", targetPageId: "P2" },
+  ] };
+  const report = validateInteractionConsistency(prototype, plan, map);
+  assert.equal(report.valid, false);
+  assert.ok(report.issues.some((issue) => issue.code === "MISSING_ACTION_TRIGGER"));
+  assert.ok(report.issues.some((issue) => issue.code === "CONFLICTING_TRIGGER_TARGET"));
+  assert.ok(report.issues.some((issue) => issue.code === "MISSING_NAVIGATION_TRIGGER"));
+  assert.ok(report.issues.some((issue) => issue.code === "PLAN_RELATION_MISMATCH"));
 });

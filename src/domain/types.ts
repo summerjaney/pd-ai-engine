@@ -166,6 +166,23 @@ export interface DesignConsistencyReport {
   issues: DesignConsistencyIssue[];
 }
 
+export type InteractionConsistencySeverity = "error" | "warning";
+
+export interface InteractionConsistencyIssue {
+  code: "DUPLICATE_TRIGGER" | "CONFLICTING_TRIGGER_TARGET" | "MISSING_ACTION_TRIGGER" | "MISSING_NAVIGATION_TRIGGER" | "PLAN_RELATION_MISMATCH";
+  severity: InteractionConsistencySeverity;
+  message: string;
+  pageId?: string;
+  triggerId?: string;
+}
+
+export interface InteractionConsistencyReport {
+  schemaVersion: "0.7";
+  valid: boolean;
+  summary: { checkedInteractionCount: number; checkedPageCount: number; errorCount: number; warningCount: number };
+  issues: InteractionConsistencyIssue[];
+}
+
 export interface PrototypePageManifest {
   id: string;
   name: string;

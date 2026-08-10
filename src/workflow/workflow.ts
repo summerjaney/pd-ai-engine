@@ -15,6 +15,7 @@ import {
 import { buildRequirementPlanningArtifacts } from "../planning/requirement-page-plan.js";
 import { renderPagePlanValidationReport, validateRequirementPagePlan } from "../planning/page-plan-validator.js";
 import { renderDesignConsistencyReport, validateDesignConsistency } from "../planning/design-consistency-validator.js";
+import { renderInteractionConsistencyReport, validateInteractionConsistency } from "../planning/interaction-consistency-validator.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -171,6 +172,7 @@ export class ProductDesignWorkflow {
           const planning = buildRequirementPlanningArtifacts(prototype, requirement);
           const planningValidation = validateRequirementPagePlan(planning.pagePlan, planning.interactionMap, prototype.navigation);
           const designConsistency = validateDesignConsistency(prototype, planning.designContext);
+          const interactionConsistency = validateInteractionConsistency(prototype, planning.pagePlan, planning.interactionMap);
           const pagePlanDirectory = path.join(outputDirectory, "05-page-plan");
 
           await Promise.all([
@@ -185,6 +187,8 @@ export class ProductDesignWorkflow {
             writeFile(path.join(pagePlanDirectory, "validation-report.md"), renderPagePlanValidationReport(planningValidation), "utf8"),
             writeFile(path.join(pagePlanDirectory, "design-consistency-report.json"), `${JSON.stringify(designConsistency, null, 2)}\n`, "utf8"),
             writeFile(path.join(pagePlanDirectory, "design-consistency-report.md"), renderDesignConsistencyReport(designConsistency), "utf8"),
+            writeFile(path.join(pagePlanDirectory, "interaction-consistency-report.json"), `${JSON.stringify(interactionConsistency, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "interaction-consistency-report.md"), renderInteractionConsistencyReport(interactionConsistency), "utf8"),
           ]);
           await writeFile(path.join(bundleDirectory, "prototype.json"), `${JSON.stringify(prototype, null, 2)}\n`, "utf8");
           await writeFile(
@@ -290,6 +294,8 @@ export class ProductDesignWorkflow {
               "05-page-plan/validation-report.md",
               "05-page-plan/design-consistency-report.json",
               "05-page-plan/design-consistency-report.md",
+              "05-page-plan/interaction-consistency-report.json",
+              "05-page-plan/interaction-consistency-report.md",
             ],
           };
         }
