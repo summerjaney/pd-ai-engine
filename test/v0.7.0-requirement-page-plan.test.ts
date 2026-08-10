@@ -14,6 +14,26 @@ import { generateAcceptanceReport, runDeliveryCheck } from "../src/planning/deli
 
 const test = (globalThis as any).test ?? (await import("node:test")).default;
 
+test("TC-070-019: 真实用户管理需求生成对应六页面且页面规划闭环", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-user-management-"));
+  const content = `# 基础平台用户管理
+
+## 功能范围
+
+- 支持新增、编辑、查看用户。
+- 支持用户授权和批量导入。
+- 支持启用、停用和批量停用。`;
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "user-management.md", title: "基础平台用户管理", content }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-070", requirementName: "user-management", revision: 1,
+  });
+  const prototype = await readJson<PrototypeDsl>(path.join(output, "06-prototype", "prototype.json"));
+  const validation = await readJson<PagePlanValidationReport>(path.join(output, "05-page-plan", "validation-report.json"));
+  assert.deepEqual(prototype.pages.map((page) => page.name), ["用户列表", "新增/编辑用户", "用户详情", "用户授权", "批量导入用户", "导入结果"]);
+  assert.equal(validation.valid, true);
+  assert.ok(prototype.rules.some((rule) => rule.id === "account-unique"));
+  assert.ok(prototype.pages.find((page) => page.id === "P1-user-list")?.actions.some((action) => action.id === "batch-disable" && action.confirmation));
+});
+
 test("TC-070-017: CLI 交付检查服务可从需求目录重建并落盘一致性报告", async () => {
   const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-check-"));
   await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "requirement.md", title: "测试", content: "# 测试\n\n创建并审批申请。" }, output, {
