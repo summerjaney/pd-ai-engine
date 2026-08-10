@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -11,17 +11,31 @@ import { OpenAiProvider } from "./llm/openai-provider.js";
 import { ProductDesignWorkflow } from "./workflow/workflow.js";
 import { prepareRequirementOutput } from "./output/requirement-output.js";
 import { readEngineVersion } from "./version.js";
+import { preparePrototypePush } from "./prototype-execution/execution-service.js";
+import { loadMasterGoMcpConfig } from "./integrations/mastergo/config.js";
+import { diagnoseMasterGo } from "./integrations/mastergo/doctor.js";
+import { StdioMasterGoConnection } from "./integrations/mastergo/stdio-connection.js";
+import { executeMasterGoPagePipeline } from "./integrations/mastergo/page-pipeline.js";
+import { verifyMasterGoCanvas } from "./integrations/mastergo/verification.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
 用法：
   pae requirement create <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
   pae run <需求文件> [--out <输出目录>] [选项]
+  pae prototype push <需求目录> --dry-run
+  pae prototype push <需求目录> --write --confirm-write
+  pae prototype verify <需求目录> --pass --evidence <证据说明>
+  pae mastergo doctor
+  pae mastergo tools [--json <文件>]
   pae --help
 
 示例：
   pae requirement create examples/b2b-requirement.md --project hr-system --id REQ-001 --name leave-request
   pae run examples/b2b-requirement.md --out output/legacy-example --project hr-system --id REQ-001 --name leave-request
+  pae prototype push output/hr-system/requirements/REQ-001-leave-request --dry-run
+  pae mastergo doctor
+  pae mastergo tools
 
 选项：
   --project <标识>            项目唯一标识（requirement create 必填，run 可选）
@@ -35,6 +49,12 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --provider <名称>          LLM Provider：mock（默认）或 openai
   --model <名称>             模型名称；openai 模式必填
   --knowledge-mode <模式>   知识模式：auto（默认）或 off（A/B 对照基线）
+  --dry-run                 只生成 MasterGo 操作计划，不修改画布
+  --write                   执行真实 MasterGo 页面写入
+  --confirm-write           显式确认本次写入（必须与 --write 同时使用）
+  --pass                    将已人工核验的 MasterGo 画布回写为 PASS
+  --evidence <说明>         人工画布验收证据说明（verify 必填）
+  --json <文件>             保存 MasterGo 完整工具契约（不会调用工具）
 `;
 
 async function buildHelp(): Promise<string> {
@@ -67,6 +87,7 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
+  "--dry-run", "--json", "--write", "--confirm-write", "--pass", "--evidence",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -100,6 +121,92 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     console.log(await buildHelp());
+    return;
+  }
+
+  const isPrototypePush = args[0] === "prototype" && args[1] === "push" && Boolean(args[2]);
+  if (isPrototypePush) {
+    validateArgs(args);
+    if (args.includes("--dry-run")) {
+      const output = await preparePrototypePush(path.resolve(args[2]), { dryRun: true });
+      console.log("MasterGo 操作计划已生成（dry-run，未修改画布）。");
+      console.log(`操作数：${output.result.totalOperations}`);
+      console.log(`操作计划：${output.planPath}`);
+      console.log(`执行结果：${output.resultPath}`);
+      return;
+    }
+    if (!args.includes("--write") || !args.includes("--confirm-write")) {
+      throw new Error("真实写入必须同时使用 --write --confirm-write；仅预览请使用 --dry-run。");
+    }
+    const loaded = await loadMasterGoMcpConfig();
+    if (!loaded) throw new Error("未找到 MasterGo MCP 配置。请先运行 pae mastergo doctor。");
+    const output = await executeMasterGoPagePipeline(path.resolve(args[2]), new StdioMasterGoConnection(loaded.config, { timeoutMs: 120_000 }), { confirmedWrite: true });
+    console.log(`MasterGo 真实写入：${output.status}`);
+    if (output.status === "PENDING_VERIFICATION") console.log("MasterGo 已受理逐页写入，仍需在画布中核验最终渲染结果；当前不判定为 PASS。");
+    console.log(`写入计划：${output.planPath}`);
+    console.log(`执行结果：${output.resultPath}`);
+    if (output.status === "FAIL") process.exitCode = 1;
+    return;
+  }
+
+  const isPrototypeVerify = args[0] === "prototype" && args[1] === "verify" && Boolean(args[2]);
+  if (isPrototypeVerify) {
+    validateArgs(args);
+    if (!args.includes("--pass")) throw new Error("人工画布验收回写必须显式使用 --pass。");
+    const evidence = option(args, "--evidence");
+    if (!evidence) throw new Error("人工画布验收回写必须提供 --evidence <证据说明>。");
+    const output = await verifyMasterGoCanvas(path.resolve(args[2]), evidence);
+    console.log(`MasterGo 人工画布验收：${output.status}`);
+    console.log(`执行结果：${output.resultPath}`);
+    return;
+  }
+
+  const isMasterGoDoctor = args[0] === "mastergo" && args[1] === "doctor" && args.length === 2;
+  if (isMasterGoDoctor) {
+    const loaded = await loadMasterGoMcpConfig();
+    const report = await diagnoseMasterGo(loaded, loaded ? {
+      connectionFactory: async () => new StdioMasterGoConnection(loaded.config),
+    } : undefined);
+    console.log(`MasterGo MCP 诊断：${report.status}`);
+    for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
+    if (report.connection?.serverName) {
+      console.log(`Server：${report.connection.serverName}${report.connection.serverVersion ? ` ${report.connection.serverVersion}` : ""}`);
+    }
+    if (report.nextAction) console.log(`下一步：${report.nextAction}`);
+    if (report.status !== "READY") process.exitCode = 1;
+    return;
+  }
+
+  const isMasterGoTools = args[0] === "mastergo" && args[1] === "tools";
+  if (isMasterGoTools) {
+    validateArgs(args);
+    const jsonPath = option(args, "--json");
+    const loaded = await loadMasterGoMcpConfig();
+    if (!loaded) throw new Error("未找到 MasterGo MCP 配置。请先运行 pae mastergo doctor。");
+    const connection = new StdioMasterGoConnection(loaded.config);
+    try {
+      const info = await connection.probe();
+      if (!info.capabilities.includes("tools")) throw new Error("MasterGo MCP Server 未声明 tools 能力。");
+      const discovery = await connection.listTools();
+      if (jsonPath) {
+        const report = {
+          schemaVersion: "0.1",
+          capturedAt: new Date().toISOString(),
+          server: info,
+          tools: discovery.tools,
+          requiredWritePipeline: ["design_page", "submit_page_to_canvas"],
+        };
+        await writeFile(path.resolve(jsonPath), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+      }
+      console.log(`MasterGo MCP 工具：${discovery.tools.length} 个`);
+      for (const tool of discovery.tools) {
+        const tags = [tool.inputSchema ? "schema" : "no-schema", discovery.writableTools.includes(tool.name) ? "write-candidate" : "read/unknown"];
+        console.log(`- ${tool.name} [${tags.join(", ")}]${tool.description ? `：${tool.description}` : ""}`);
+      }
+      console.log(`画布写入候选：${discovery.writableTools.length ? discovery.writableTools.join("、") : "未识别"}`);
+      if (jsonPath) console.log(`完整工具契约：${path.resolve(jsonPath)}`);
+      if (!discovery.hasCanvasWriteCapability) process.exitCode = 2;
+    } finally { await connection.close(); }
     return;
   }
 

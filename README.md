@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前正式版本为 `v0.5.0`，聚焦知识驱动的 B 端产品设计，并坚持 **Prototype First**。本版本在真实 LLM 执行链路基础上新增结构化知识目录、确定性知识选择、按阶段注入、Prototype 合规门禁和跨成果物知识追踪。
+当前候选版本为 `v0.6.0`，在 v0.5.0 知识驱动设计能力上新增 MasterGo MCP 真实连接、合规画布 HTML、逐页写入、失败诊断和人工画布验收闭环。
 
 ## 成果物组织模型
 
@@ -85,6 +85,38 @@ npm run dev -- requirement create path/to/requirement.md \
 npm run dev -- --help
 ```
 
+### MasterGo 执行预检（v0.6.0）
+
+先配置 MasterGo MCP，再运行诊断：
+
+```bash
+export PAE_MASTERGO_MCP_CONFIG=/absolute/path/to/mcp.json
+npm run dev -- mastergo doctor
+```
+
+配置文件既支持标准的 `mcpServers.mastergo` 结构，也支持直接提供 `{ "command": "...", "args": [...] }`。还可以用 `PAE_MASTERGO_MCP_COMMAND` 和 JSON 数组格式的 `PAE_MASTERGO_MCP_ARGS` 配置。
+
+可先安全生成操作计划，不修改真实画布：
+
+```bash
+npm run dev -- prototype push output/<project>/requirements/<requirement> --dry-run
+```
+
+确认计划后，使用双重门禁执行真实写入：
+
+```bash
+npm run dev -- prototype push output/<project>/requirements/<requirement> --write --confirm-write
+```
+
+MasterGo 返回 `accepted` 时，PAE 会记录为 `PENDING_VERIFICATION`。人工核验画布中的页面完整且可编辑后，再回写最终结果：
+
+```bash
+npm run dev -- prototype verify output/<project>/requirements/<requirement> \
+  --pass --evidence "P1 用户列表页与 P2 用户表单/详情页人工核验通过"
+```
+
+doctor 会分别报告配置、启动命令和 MCP 连接状态，并通过标准输入输出向 MCP Server 发出真实 `initialize` 探测；只有握手成功才会把连接检查标记为 `PASS`。
+
 为兼容 v0.2.0，旧命令仍可使用：
 
 ```bash
@@ -112,7 +144,7 @@ Rule constrains Component
 
 ## 当前边界
 
-MVP 暂不包含：多 Agent、MCP、插件市场、企业知识库、开放 API、自动开发与部署、多人协作。
+MVP 暂不包含：多 Agent、插件市场、企业知识库、开放 API、自动开发与部署、多人协作。MasterGo MCP 已支持受控的真实画布写入，其他设计工具尚未接入。
 
 ## 原型产物说明
 
@@ -124,7 +156,7 @@ MVP 暂不包含：多 Agent、MCP、插件市场、企业知识库、开放 API
 - `mastergo-data.json` 提供面向设计工具的适配数据，可作为后续接入 MasterGo 写入能力的中间层。
 - `preview/*.svg` 为每个页面输出静态预览图，便于目录浏览和外部引用。
 
-当前已经实现的是“DSL + 可交互 HTML 原型 + MasterGo 适配数据”。如果要直接在 MasterGo 画布中生成可编辑设计稿，仍需要后续开发 MasterGo 插件或接入其写入能力。
+当前已经实现“DSL + 可交互 HTML 原型 + MasterGo 适配数据 + MasterGo 可编辑画布逐页写入”。真实写入必须经过预演、双重确认和人工画布验收。
 
 ## 下一步
 
