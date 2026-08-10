@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { DeliveryConsistencyReport, DesignConsistencyReport, InteractionConsistencyReport, MasterGoData, PrdTraceabilityReport, PrototypeDsl, RequirementDesignContext, RequirementInteractionMap, RequirementPagePlan, PagePlanValidationReport } from "../src/domain/types.js";
@@ -55,6 +55,23 @@ test("TC-070-018: 正式验收报告区分待画布验收与发布通过", async
   const content = await readFile(result.reportPath, "utf8");
   assert.match(content, /验收结论：PENDING/);
   assert.match(content, /待完成 MasterGo 真实画布验收/);
+});
+
+test("TC-070-021: 交付检查优先采用真实写入及逐页验收结果", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-real-write-check-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "requirement.md", title: "测试", content: "# 测试\n\n创建并审批申请。" }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "1.0.0", requirementId: "REQ-070", requirementName: "user-management", revision: 1,
+  });
+  const data = await readJson<MasterGoData>(path.join(output, "07-mastergo", "mastergo-data.json"));
+  await writeFile(path.join(output, "07-mastergo", "mastergo-write-result.json"), JSON.stringify({
+    schemaVersion: "0.4", status: "PASS", completedAt: "2026-08-10T03:00:00.000Z", verificationRequired: false,
+    pages: data.screens.map((screen) => ({ screenId: screen.id, screenName: screen.name, status: "VERIFIED" })),
+  }));
+  const checked = await runDeliveryCheck(output);
+  assert.equal(checked.report.valid, true);
+  assert.equal(checked.report.checks.masterGoSubmission, "PASS");
+  assert.equal(checked.report.summary.createdPageCount, data.screens.length);
+  assert.equal((await generateAcceptanceReport(output, checked.report)).status, "PASS");
 });
 
 test("TC-070-015: 工作流输出需求、原型、MasterGo 与 PRD 完整交付一致性报告", async () => {

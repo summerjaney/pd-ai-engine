@@ -15,7 +15,9 @@ export async function runDeliveryCheck(requirementDirectory: string): Promise<De
   const root = path.resolve(requirementDirectory);
   const prototype = await readJson<PrototypeDsl>(path.join(root, "06-prototype", "prototype.json"));
   const data = await readJson<MasterGoData>(path.join(root, "07-mastergo", "mastergo-data.json"));
-  const result = await readOptionalJson<MasterGoResult>(path.join(root, "07-mastergo", "mastergo-result.json"));
+  const writeResult = await readOptionalJson<MasterGoWriteResult>(path.join(root, "07-mastergo", "mastergo-write-result.json"));
+  const legacyResult = await readOptionalJson<MasterGoResult>(path.join(root, "07-mastergo", "mastergo-result.json"));
+  const result = normalizeMasterGoResult(writeResult, legacyResult);
   const confirmation = await readOptionalJson<NonNullable<WorkflowArtifacts["prototype-confirmation"]>>(path.join(root, "08-prototype-confirmation.json"));
   const traceability = await readJson<PrdTraceabilityReport>(path.join(root, "09-validation", "prd-traceability.json"));
   const report = validateDeliveryConsistency(prototype, { data, result }, confirmation, traceability);
@@ -28,6 +30,36 @@ export async function runDeliveryCheck(requirementDirectory: string): Promise<De
     writeFile(markdownPath, renderDeliveryConsistencyReport(report), "utf8"),
   ]);
   return { report, jsonPath, markdownPath };
+}
+
+interface MasterGoWriteResult {
+  status?: string;
+  completedAt?: string;
+  pages?: Array<{ screenId?: string; screenName?: string; status?: string }>;
+}
+
+function normalizeMasterGoResult(writeResult?: MasterGoWriteResult, legacyResult?: MasterGoResult): MasterGoResult | undefined {
+  if (writeResult) {
+    const pages = Array.isArray(writeResult.pages) ? writeResult.pages : [];
+    const successfulPages = pages.filter((page) => ["PASS", "VERIFIED"].includes(String(page.status)));
+    const status = writeResult.status === "PASS"
+      ? "confirmed"
+      : writeResult.status === "FAIL" ? "rejected" : "pending";
+    return {
+      schemaVersion: "0.2",
+      status,
+      createdAt: writeResult.completedAt ?? new Date(0).toISOString(),
+      confirmedAt: status === "confirmed" ? writeResult.completedAt : undefined,
+      confirmedBy: status === "confirmed" ? "mastergo-manual-canvas-review" : undefined,
+      createdPages: successfulPages.map((page) => ({
+        pageId: String(page.screenId ?? ""),
+        pageName: String(page.screenName ?? page.screenId ?? ""),
+        nodeId: `mastergo:${String(page.screenId ?? "unknown")}`,
+      })).filter((page) => page.pageId),
+    };
+  }
+  if (legacyResult && Array.isArray(legacyResult.createdPages)) return legacyResult;
+  return undefined;
 }
 
 async function readOptionalJson<T>(file: string): Promise<T | undefined> {

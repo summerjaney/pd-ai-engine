@@ -25,8 +25,12 @@ export async function verifyMasterGoCanvas(
     throw new Error("存在未受理或失败页面，禁止回写 PASS。");
   }
   const verifiedAt = now().toISOString();
+  const matchesPageId = (page: Record<string, unknown>, requestedId: string): boolean => {
+    const screenId = String(page.screenId ?? "");
+    return screenId === requestedId || screenId.startsWith(`${requestedId}-`);
+  };
   const selected = pageId
-    ? (pages as Array<Record<string, unknown>>).filter((page) => page.screenId === pageId)
+    ? (pages as Array<Record<string, unknown>>).filter((page) => matchesPageId(page, pageId))
     : (pages as Array<Record<string, unknown>>).filter((page) => page.status === "PENDING_VERIFICATION");
   if (selected.length === 0) throw new Error(`未找到待验收页面：${pageId}`);
   if (selected.some((page) => page.status !== "PENDING_VERIFICATION")) throw new Error(`页面 ${pageId ?? ""} 不是 PENDING_VERIFICATION，禁止重复验收。`);

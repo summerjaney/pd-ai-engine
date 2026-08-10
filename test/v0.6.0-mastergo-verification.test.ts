@@ -59,3 +59,18 @@ test("TC-070-012: 支持逐页验收并仅在全部页面完成后汇总 PASS", 
   assert.equal(result.verificationRequired, false);
   assert.deepEqual(result.pages.map((page: any) => page.status), ["VERIFIED", "VERIFIED"]);
 });
+
+test("TC-070-020: 逐页验收支持 P1 简写匹配 P1-user-list", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-mastergo-page-alias-"));
+  const directory = path.join(root, "07-mastergo");
+  await mkdir(directory);
+  await writeFile(path.join(directory, "mastergo-write-result.json"), JSON.stringify({
+    schemaVersion: "0.4", status: "PENDING_VERIFICATION", verificationRequired: true,
+    pages: [{ screenId: "P1-user-list", screenName: "用户列表", status: "PENDING_VERIFICATION" }],
+  }));
+  const output = await verifyMasterGoCanvas(root, "P1 画布核验通过", () => new Date("2026-08-10T02:00:00.000Z"), "P1");
+  assert.equal(output.status, "PASS");
+  const result = JSON.parse(await readFile(output.resultPath, "utf8"));
+  assert.equal(result.pages[0].screenId, "P1-user-list");
+  assert.equal(result.pages[0].status, "VERIFIED");
+});
