@@ -91,6 +91,42 @@ export interface PrototypeTransition {
   targetPageId: string;
 }
 
+export type PageDeliveryStatus = "PLANNED" | "GENERATED" | "PREVIEWED" | "SUBMITTED" | "PENDING_VERIFICATION" | "VERIFIED" | "FAILED";
+
+export interface RequirementPagePlan {
+  schemaVersion: "0.7";
+  requirementId?: string;
+  pages: Array<{
+    id: string;
+    name: string;
+    type: PrototypePage["pattern"];
+    objective: string;
+    route: string;
+    upstreamPageIds: string[];
+    downstreamPageIds: string[];
+    triggerActions: string[];
+    roles: string[];
+    status: PageDeliveryStatus;
+  }>;
+}
+
+export interface RequirementDesignContext {
+  schemaVersion: "0.7";
+  frame: { width: number; height: number; layout: "horizontal" | "vertical"; gap: number };
+  tokens: DesignTokens;
+  conventions: {
+    pageHeader: boolean;
+    formLabelWidth: number;
+    primaryActionLimit: number;
+    destructiveActionRequiresConfirmation: boolean;
+  };
+}
+
+export interface RequirementInteractionMap {
+  schemaVersion: "0.7";
+  interactions: PrototypeTransition[];
+}
+
 export interface PrototypePageManifest {
   id: string;
   name: string;

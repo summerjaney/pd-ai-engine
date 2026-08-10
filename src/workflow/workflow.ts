@@ -12,6 +12,7 @@ import {
   renderInteractivePrototypeHtml,
   renderPreviewSvg,
 } from "../prototype/bundle.js";
+import { buildRequirementPlanningArtifacts } from "../planning/requirement-page-plan.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -32,6 +33,7 @@ const MANAGED_OUTPUT_PATHS = [
   "03-product-architecture.md",
   "04-core-flow.md",
   "05-page-structure.md",
+  "05-page-plan",
   "06-prototype",
   "06-prototype.json",
   "07-mastergo",
@@ -164,8 +166,18 @@ export class ProductDesignWorkflow {
 
           const prototypeManifest = buildPrototypeManifest(prototype);
           const masterGoData = buildMasterGoData(prototype);
+          const planning = buildRequirementPlanningArtifacts(prototype, requirement);
+          const pagePlanDirectory = path.join(outputDirectory, "05-page-plan");
 
-          await mkdir(previewDirectory, { recursive: true });
+          await Promise.all([
+            mkdir(previewDirectory, { recursive: true }),
+            mkdir(pagePlanDirectory, { recursive: true }),
+          ]);
+          await Promise.all([
+            writeFile(path.join(pagePlanDirectory, "page-plan.json"), `${JSON.stringify(planning.pagePlan, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "design-context.json"), `${JSON.stringify(planning.designContext, null, 2)}\n`, "utf8"),
+            writeFile(path.join(pagePlanDirectory, "interaction-map.json"), `${JSON.stringify(planning.interactionMap, null, 2)}\n`, "utf8"),
+          ]);
           await writeFile(path.join(bundleDirectory, "prototype.json"), `${JSON.stringify(prototype, null, 2)}\n`, "utf8");
           await writeFile(
             path.join(bundleDirectory, "prototype-manifest.json"),
@@ -263,6 +275,9 @@ export class ProductDesignWorkflow {
               "06-prototype/prototype-manifest.json",
               "06-prototype/mastergo-data.json",
               "06-prototype/preview/",
+              "05-page-plan/page-plan.json",
+              "05-page-plan/design-context.json",
+              "05-page-plan/interaction-map.json",
             ],
           };
         }
