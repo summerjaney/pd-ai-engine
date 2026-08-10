@@ -207,6 +207,37 @@ export interface PrdTraceabilityReport {
   items: PrdTraceabilityItem[];
 }
 
+export type DeliveryConsistencySeverity = "error" | "warning";
+
+export interface DeliveryConsistencyIssue {
+  code: "PROTOTYPE_PAGE_MISSING_IN_MASTERGO" | "MASTERGO_SCREEN_WITHOUT_PROTOTYPE" | "MASTERGO_NODE_MISMATCH" | "MASTERGO_PAGE_NOT_CREATED" | "MASTERGO_PENDING_VERIFICATION" | "PROTOTYPE_NOT_CONFIRMED" | "PRD_TRACEABILITY_GAP";
+  severity: DeliveryConsistencySeverity;
+  message: string;
+  pageId?: string;
+  sourceId?: string;
+}
+
+export interface DeliveryConsistencyReport {
+  schemaVersion: "0.7";
+  requirementId?: string;
+  valid: boolean;
+  summary: {
+    prototypePageCount: number;
+    mastergoScreenCount: number;
+    createdPageCount: number;
+    prdTraceabilityCount: number;
+    errorCount: number;
+    warningCount: number;
+  };
+  checks: {
+    prototypeToMasterGo: "PASS" | "FAIL";
+    masterGoSubmission: "PASS" | "FAIL" | "PENDING";
+    prototypeConfirmation: "PASS" | "FAIL";
+    prdTraceability: "PASS" | "FAIL";
+  };
+  issues: DeliveryConsistencyIssue[];
+}
+
 export interface PrototypePageManifest {
   id: string;
   name: string;

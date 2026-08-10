@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { STAGE_IDS, type KnowledgeMode, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
+import { STAGE_IDS, type DeliveryConsistencyReport, type KnowledgeMode, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
 import { readEngineVersion } from "../version.js";
 import { KnowledgeLoader } from "../knowledge/loader.js";
 import { KnowledgeSelector } from "../knowledge/selector.js";
@@ -17,6 +17,7 @@ import { renderPagePlanValidationReport, validateRequirementPagePlan } from "../
 import { renderDesignConsistencyReport, validateDesignConsistency } from "../planning/design-consistency-validator.js";
 import { renderInteractionConsistencyReport, validateInteractionConsistency } from "../planning/interaction-consistency-validator.js";
 import { buildPrdTraceabilityReport, renderPrdTraceabilityReport } from "../planning/prd-traceability.js";
+import { renderDeliveryConsistencyReport, validateDeliveryConsistency } from "../planning/delivery-consistency-validator.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -112,6 +113,7 @@ export class ProductDesignWorkflow {
       generation?: StageResult["generationMetadata"];
     }> = [];
     let hasFailed = false;
+    let deliveryConsistency: DeliveryConsistencyReport | undefined;
 
     for (const stage of STAGE_IDS) {
       if (hasFailed) {
@@ -245,11 +247,16 @@ export class ProductDesignWorkflow {
           const prototype = context.artifacts.prototype;
           if (!prototype || typeof result.artifact !== "string") throw new Error("PRD 追踪矩阵必须依赖 Prototype DSL 和文本 PRD");
           const report = buildPrdTraceabilityReport(prototype, result.artifact, requirement);
+          const mastergo = context.artifacts.mastergo;
+          if (!mastergo) throw new Error("完整交付一致性检查必须依赖 MasterGo 产物");
+          deliveryConsistency = validateDeliveryConsistency(prototype, mastergo, context.artifacts["prototype-confirmation"], report);
           const validationDirectory = path.join(outputDirectory, "09-validation");
           await mkdir(validationDirectory, { recursive: true });
           await Promise.all([
             writeFile(path.join(validationDirectory, "prd-traceability.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8"),
             writeFile(path.join(validationDirectory, "prd-traceability.md"), renderPrdTraceabilityReport(report), "utf8"),
+            writeFile(path.join(validationDirectory, "delivery-consistency-report.json"), `${JSON.stringify(deliveryConsistency, null, 2)}\n`, "utf8"),
+            writeFile(path.join(validationDirectory, "delivery-consistency-report.md"), renderDeliveryConsistencyReport(deliveryConsistency), "utf8"),
           ]);
         }
         stages.push({
@@ -323,7 +330,7 @@ export class ProductDesignWorkflow {
           };
         }
         if (stage.id === "prd") {
-          return { ...stage, type: "file", relatedFiles: ["09-validation/prd-traceability.json", "09-validation/prd-traceability.md"] };
+          return { ...stage, type: "file", relatedFiles: ["09-validation/prd-traceability.json", "09-validation/prd-traceability.md", "09-validation/delivery-consistency-report.json", "09-validation/delivery-consistency-report.md"] };
         }
         return {
           ...stage,
@@ -331,6 +338,7 @@ export class ProductDesignWorkflow {
         };
       }),
       debugArtifacts: await collectDebugArtifacts(outputDirectory),
+      deliveryConsistency,
     }, null, 2);
 
     await writeFile(path.join(outputDirectory, "manifest.json"), `${manifestContent}\n`, "utf8");

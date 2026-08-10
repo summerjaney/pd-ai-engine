@@ -2,15 +2,49 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { DesignConsistencyReport, InteractionConsistencyReport, PrdTraceabilityReport, PrototypeDsl, RequirementDesignContext, RequirementInteractionMap, RequirementPagePlan, PagePlanValidationReport } from "../src/domain/types.js";
+import type { DeliveryConsistencyReport, DesignConsistencyReport, InteractionConsistencyReport, MasterGoData, PrdTraceabilityReport, PrototypeDsl, RequirementDesignContext, RequirementInteractionMap, RequirementPagePlan, PagePlanValidationReport } from "../src/domain/types.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { validateRequirementPagePlan } from "../src/planning/page-plan-validator.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 import { validateDesignConsistency } from "../src/planning/design-consistency-validator.js";
 import { validateInteractionConsistency } from "../src/planning/interaction-consistency-validator.js";
 import { buildPrdTraceabilityReport } from "../src/planning/prd-traceability.js";
+import { validateDeliveryConsistency } from "../src/planning/delivery-consistency-validator.js";
 
 const test = (globalThis as any).test ?? (await import("node:test")).default;
+
+test("TC-070-015: 工作流输出需求、原型、MasterGo 与 PRD 完整交付一致性报告", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-delivery-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "requirement.md", title: "测试", content: "# 测试\n\n创建并审批申请。" }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "1.0.0", requirementId: "REQ-070", requirementName: "user-management", revision: 1,
+  });
+  const report = await readJson<DeliveryConsistencyReport>(path.join(output, "09-validation", "delivery-consistency-report.json"));
+  const manifest = await readJson<{ deliveryConsistency: DeliveryConsistencyReport }>(path.join(output, "manifest.json"));
+  assert.equal(report.schemaVersion, "0.7");
+  assert.equal(report.requirementId, "REQ-070");
+  assert.equal(report.valid, true);
+  assert.equal(report.checks.prototypeToMasterGo, "PASS");
+  assert.equal(report.checks.masterGoSubmission, "PENDING");
+  assert.equal(report.checks.prototypeConfirmation, "PASS");
+  assert.equal(report.checks.prdTraceability, "PASS");
+  assert.deepEqual(manifest.deliveryConsistency, report);
+});
+
+test("TC-070-016: 完整交付检查识别 MasterGo 页面节点缺失和 PRD 追踪缺口", () => {
+  const prototype: PrototypeDsl = {
+    schemaVersion: "0.2", product: { name: "测试", description: "测试" }, navigation: [], transitions: [],
+    pages: [{ id: "P1", name: "用户列表", route: "/users", pattern: "list", fields: [{ id: "name", label: "姓名", type: "text", required: true }], actions: [{ id: "create", label: "新建", kind: "primary" }] }],
+    rules: [], designTokens: { colors: {}, spacing: {}, radius: {}, typography: { fontSize: {}, fontWeight: {}, lineHeight: {} } },
+  };
+  const data: MasterGoData = { schemaVersion: "0.2", product: prototype.product, tokens: { color: {}, spacing: {}, radius: {} }, screens: [{ id: "P1", name: "用户列表", route: "/users", pattern: "list", frame: { width: 1440, height: 900 }, nodes: [], interactions: [] }] };
+  const trace = buildPrdTraceabilityReport(prototype, "# PRD\n\n用户列表，路由 /users。\n");
+  const report = validateDeliveryConsistency(prototype, { data, result: { schemaVersion: "0.2", createdPages: [], createdAt: new Date(0).toISOString(), status: "confirmed" } }, { status: "pending" }, trace);
+  assert.equal(report.valid, false);
+  assert.ok(report.issues.some((issue) => issue.code === "MASTERGO_NODE_MISMATCH"));
+  assert.ok(report.issues.some((issue) => issue.code === "MASTERGO_PAGE_NOT_CREATED"));
+  assert.ok(report.issues.some((issue) => issue.code === "PROTOTYPE_NOT_CONFIRMED"));
+  assert.ok(report.issues.some((issue) => issue.code === "PRD_TRACEABILITY_GAP"));
+});
 
 test("TC-070-013: 工作流输出 PRD 页面、字段、规则和验收标准追踪矩阵", async () => {
   const output = await mkdtemp(path.join(os.tmpdir(), "pae-v070-prd-trace-"));
