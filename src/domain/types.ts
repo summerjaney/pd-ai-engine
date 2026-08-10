@@ -127,6 +127,25 @@ export interface RequirementInteractionMap {
   interactions: PrototypeTransition[];
 }
 
+export type PagePlanValidationSeverity = "error" | "warning";
+
+export interface PagePlanValidationIssue {
+  code: "DUPLICATE_PAGE_ID" | "INVALID_SOURCE_PAGE" | "INVALID_TARGET_PAGE" | "ISOLATED_PAGE" | "UNREACHABLE_PAGE" | "MISSING_FLOW_ENTRY" | "MISSING_FLOW_EXIT";
+  severity: PagePlanValidationSeverity;
+  message: string;
+  pageId?: string;
+  transitionId?: string;
+}
+
+export interface PagePlanValidationReport {
+  schemaVersion: "0.7";
+  valid: boolean;
+  summary: { pageCount: number; interactionCount: number; errorCount: number; warningCount: number };
+  entryPageIds: string[];
+  exitPageIds: string[];
+  issues: PagePlanValidationIssue[];
+}
+
 export interface PrototypePageManifest {
   id: string;
   name: string;
