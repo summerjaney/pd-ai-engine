@@ -117,6 +117,27 @@ test("TC-060-018A: MasterGo 协议校验在 MCP 调用前拒绝不兼容 HTML", 
   );
 });
 
+test("TC-080-011: 组织结构画布渲染组织树和组织字段而非用户列表", () => {
+  const data = { schemaVersion: "0.2", product: { name: "组织结构管理" }, tokens: { color: {}, spacing: {}, radius: {} }, screens: [] } as any;
+  const html = renderMasterGoScreenHtml(data, {
+    id: "P1-organization-tree", name: "组织结构", route: "/organizations", pattern: "list", frame: { width: 1440, height: 900 },
+    nodes: [
+      { id: "P1-organization-tree.field.keyword", name: "组织名称/编码", type: "field", component: "text-input", description: "" },
+      { id: "P1-organization-tree.field.status", name: "组织状态", type: "field", component: "select", description: "" },
+      { id: "P1-organization-tree.action.search", name: "查询", type: "action", component: "primary-button", description: "" },
+      { id: "P1-organization-tree.action.reset", name: "重置", type: "action", component: "secondary-button", description: "" },
+      { id: "P1-organization-tree.action.create-child", name: "新增下级组织", type: "action", component: "secondary-button", description: "" },
+    ], interactions: [],
+  });
+  assert.match(html, /组织层级/);
+  assert.match(html, /集团总部/);
+  assert.match(html, /组织编码/);
+  assert.match(html, /组织负责人/);
+  assert.match(html, /新增下级组织/);
+  assert.doesNotMatch(html, /用户列表|张伟|user001/);
+  assert.doesNotThrow(() => validateMasterGoHtml(html));
+});
+
 test("TC-060-019: 写入失败时保存原始响应、失败阶段和提交 HTML", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pae-mastergo-evidence-"));
   const directory = path.join(root, "07-mastergo");

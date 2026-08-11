@@ -249,6 +249,10 @@ function createOrganizationManagementPrototype(title: string): PrototypeDsl {
       fields: [
         { id: "keyword", label: "组织名称/编码", type: "text", required: false },
         { id: "status", label: "组织状态", type: "select", required: false },
+        { id: "organizationName", label: "组织名称", type: "text", required: false },
+        { id: "organizationCode", label: "组织编码", type: "text", required: false },
+        { id: "organizationType", label: "组织类型", type: "select", required: false },
+        { id: "leader", label: "组织负责人", type: "select", required: false },
       ],
       actions: [
         { id: "search", label: "查询", kind: "primary", roles: allRoles },
@@ -258,7 +262,7 @@ function createOrganizationManagementPrototype(title: string): PrototypeDsl {
         { id: "view", label: "查看详情", kind: "secondary", roles: allRoles },
         { id: "move", label: "移动组织", kind: "secondary", roles: platformOnly },
       ],
-      tableColumns: ["keyword", "status"], pagination: { enabled: true, pageSize: 20 },
+      tableColumns: ["organizationName", "organizationCode", "organizationType", "leader", "status"], pagination: { enabled: true, pageSize: 20 },
       emptyState: { description: "暂无组织，请新增根组织或调整查询条件。", actionId: "create-root" },
     },
     {

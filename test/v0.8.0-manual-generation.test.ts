@@ -208,6 +208,7 @@ test("TC-080-010: 组织结构操作权限、危险操作和层级规则保持�
   assert.equal(checked.report.valid, true);
   assert.deepEqual(tree.actions.find((action: any) => action.id === "create-root").roles, ["平台管理员"]);
   assert.deepEqual(tree.actions.find((action: any) => action.id === "create-child").roles, ["平台管理员", "组织管理员"]);
+  assert.deepEqual(tree.tableColumns, ["organizationName", "organizationCode", "organizationType", "leader", "status"]);
   assert.equal(detail.actions.find((action: any) => action.id === "delete").confirmation, true);
   assert.equal(move.actions.find((action: any) => action.id === "confirm-move").confirmation, true);
   assert.ok(prototype.rules.some((rule: any) => rule.id === "delete-empty-only"));
