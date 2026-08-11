@@ -119,3 +119,24 @@ export interface ManualConsistencyReport {
   };
   issues: ManualConsistencyIssue[];
 }
+
+export interface DeliveryPackageManifest {
+  schemaVersion: "0.8";
+  requirementId?: string;
+  generatedAt: string;
+  status: "PASS" | "PENDING" | "FAIL";
+  checks: {
+    designDelivery: "PASS" | "PENDING" | "FAIL";
+    manualConsistency: "PASS" | "FAIL";
+    artifactIntegrity: "PASS" | "FAIL";
+  };
+  artifacts: Array<{
+    id: string;
+    path: string;
+    required: boolean;
+    exists: boolean;
+    sha256?: string;
+    size?: number;
+  }>;
+  summary: { requiredCount: number; presentCount: number; missingCount: number };
+}

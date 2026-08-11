@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -10,6 +10,7 @@ import { runManualCheck } from "../src/manual/service.js";
 import { validateManualConsistency } from "../src/manual/validator.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 import type { PrototypeDsl } from "../src/domain/types.js";
+import { packageDelivery } from "../src/delivery/package.js";
 
 const readJson = async <T>(file: string): Promise<T> => JSON.parse(await readFile(file, "utf8")) as T;
 
@@ -134,4 +135,35 @@ test("TC-080-006: 增量更新按稳定 ID 保留手工补充并移除失效章�
   assert.ok(updated.report.preservedManualNotes.includes(preservedId));
   assert.equal(regenerated.modules.some((item: any) => item.id === `module:${removedPageId}`), false);
   assert.match(await readFile(path.join(output, "10-product-manual", "product-manual.md"), "utf8"), /产品经理人工补充/);
+});
+
+test("TC-080-007: 生成含哈希、完整性状态和正式验收结论的交付包", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v080-package-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "organization.md", title: "组织结构管理", content: "# 组织结构管理\n\n支持维护组织上下级关系。" }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-084", requirementName: "organization-management", revision: 1,
+  });
+  await generateManualDelivery(output);
+  const packaged = await packageDelivery(output);
+  assert.equal(packaged.manifest.schemaVersion, "0.8");
+  assert.equal(packaged.manifest.checks.artifactIntegrity, "PASS");
+  assert.equal(packaged.manifest.checks.manualConsistency, "PASS");
+  assert.ok(["PASS", "PENDING"].includes(packaged.manifest.status));
+  assert.equal(packaged.manifest.summary.missingCount, 0);
+  assert.ok(packaged.manifest.artifacts.every((item) => item.sha256?.length === 64));
+  assert.match(await readFile(packaged.acceptanceReportPath, "utf8"), /PAE v0\.8\.0 正式验收报告/);
+});
+
+test("TC-080-008: 交付包对缺失成果生成 FAIL 清单而不中断", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v080-package-fail-"));
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "organization.md", title: "组织结构管理", content: "# 组织结构管理\n\n支持维护组织上下级关系。" }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-085", requirementName: "organization-management", revision: 1,
+  });
+  await generateManualDelivery(output);
+  await rm(path.join(output, "11-operation-manual", "operation-manual.json"));
+  const packaged = await packageDelivery(output);
+  assert.equal(packaged.manifest.status, "FAIL");
+  assert.equal(packaged.manifest.checks.artifactIntegrity, "FAIL");
+  assert.equal(packaged.manifest.checks.manualConsistency, "FAIL");
+  assert.ok(packaged.manifest.artifacts.some((item) => item.path === "11-operation-manual/operation-manual.json" && !item.exists));
+  assert.match(await readFile(packaged.acceptanceReportPath, "utf8"), /暂不满足交付门槛/);
 });

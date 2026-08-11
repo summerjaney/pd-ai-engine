@@ -19,6 +19,7 @@ import { executeMasterGoPagePipeline } from "./integrations/mastergo/page-pipeli
 import { verifyMasterGoCanvas } from "./integrations/mastergo/verification.js";
 import { generateAcceptanceReport, runDeliveryCheck } from "./planning/delivery-check.js";
 import { generateManualDelivery, runManualCheck, updateManualDelivery } from "./manual/service.js";
+import { packageDelivery } from "./delivery/package.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -30,6 +31,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae prototype push <需求目录> --write --confirm-write --resume
   pae prototype verify <需求目录> --pass --evidence <证据说明>
   pae delivery check <需求目录>
+  pae delivery package <需求目录>
   pae manual generate <需求目录>
   pae manual check <需求目录>
   pae manual update <需求目录>
@@ -197,6 +199,17 @@ async function main(): Promise<void> {
     console.log(`MasterGo 写入：${output.report.checks.masterGoSubmission}`);
     console.log(`检查报告：${output.markdownPath}`);
     if (!output.report.valid) process.exitCode = 1;
+    return;
+  }
+
+  const isDeliveryPackage = args[0] === "delivery" && args[1] === "package" && Boolean(args[2]);
+  if (isDeliveryPackage) {
+    const output = await packageDelivery(path.resolve(args[2]));
+    console.log(`完整交付包：${output.manifest.status}`);
+    console.log(`交付清单：${output.manifestPath}`);
+    console.log(`交付检查：${output.checkReportPath}`);
+    console.log(`正式验收：${output.acceptanceReportPath}`);
+    if (output.manifest.status === "FAIL") process.exitCode = 1;
     return;
   }
 
