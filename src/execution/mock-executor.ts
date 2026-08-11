@@ -240,11 +240,123 @@ function createUserManagementPrototype(title: string): PrototypeDsl {
   };
 }
 
+function createOrganizationManagementPrototype(title: string): PrototypeDsl {
+  const allRoles = ["平台管理员", "组织管理员"];
+  const platformOnly = ["平台管理员"];
+  const pages: PrototypeDsl["pages"] = [
+    {
+      id: "P1-organization-tree", name: "组织结构", route: "/organizations", pattern: "list",
+      fields: [
+        { id: "keyword", label: "组织名称/编码", type: "text", required: false },
+        { id: "status", label: "组织状态", type: "select", required: false },
+        { id: "organizationName", label: "组织名称", type: "text", required: false },
+        { id: "organizationCode", label: "组织编码", type: "text", required: false },
+        { id: "organizationType", label: "组织类型", type: "select", required: false },
+        { id: "leader", label: "组织负责人", type: "select", required: false },
+      ],
+      actions: [
+        { id: "search", label: "查询", kind: "primary", roles: allRoles },
+        { id: "reset", label: "重置", kind: "secondary", roles: allRoles },
+        { id: "create-root", label: "新增根组织", kind: "secondary", roles: platformOnly },
+        { id: "create-child", label: "新增下级组织", kind: "secondary", roles: allRoles },
+        { id: "view", label: "查看详情", kind: "secondary", roles: allRoles },
+        { id: "move", label: "移动组织", kind: "secondary", roles: platformOnly },
+      ],
+      tableColumns: ["organizationName", "organizationCode", "organizationType", "leader", "status"], pagination: { enabled: true, pageSize: 20 },
+      emptyState: { description: "暂无组织，请新增根组织或调整查询条件。", actionId: "create-root" },
+    },
+    {
+      id: "P2-organization-form", name: "新增/编辑组织", route: "/organizations/form", pattern: "form",
+      fields: [
+        { id: "parentOrganization", label: "上级组织", type: "select", required: false },
+        { id: "organizationName", label: "组织名称", type: "text", required: true },
+        { id: "organizationCode", label: "组织编码", type: "text", required: true },
+        { id: "organizationType", label: "组织类型", type: "select", required: true },
+        { id: "leader", label: "组织负责人", type: "select", required: false },
+        { id: "sortOrder", label: "排序号", type: "text", required: false },
+        { id: "status", label: "组织状态", type: "select", required: true },
+      ],
+      actions: [
+        { id: "save", label: "保存", kind: "primary", roles: allRoles },
+        { id: "cancel", label: "取消", kind: "secondary", roles: allRoles },
+      ],
+    },
+    {
+      id: "P3-organization-detail", name: "组织详情", route: "/organizations/detail", pattern: "detail",
+      fields: [
+        { id: "parentOrganization", label: "上级组织", type: "select", required: false },
+        { id: "organizationName", label: "组织名称", type: "text", required: false },
+        { id: "organizationCode", label: "组织编码", type: "text", required: false },
+        { id: "organizationType", label: "组织类型", type: "select", required: false },
+        { id: "leader", label: "组织负责人", type: "select", required: false },
+        { id: "status", label: "组织状态", type: "select", required: false },
+      ],
+      actions: [
+        { id: "edit", label: "编辑", kind: "primary", roles: allRoles },
+        { id: "disable", label: "停用", kind: "danger", confirmation: true, confirmationMessage: "停用后组织及其用户的可用范围可能受影响，请确认。", roles: allRoles },
+        { id: "delete", label: "删除", kind: "danger", confirmation: true, confirmationMessage: "删除后不可恢复，请确认组织下无子组织和用户。", roles: platformOnly },
+        { id: "back", label: "返回", kind: "secondary", roles: allRoles },
+      ],
+    },
+    {
+      id: "P4-organization-move", name: "移动组织", route: "/organizations/move", pattern: "form",
+      fields: [
+        { id: "targetParent", label: "目标上级组织", type: "select", required: true },
+        { id: "moveReason", label: "调整原因", type: "textarea", required: true },
+      ],
+      actions: [
+        { id: "confirm-move", label: "确认移动", kind: "danger", confirmation: true, confirmationMessage: "移动将改变组织层级与数据权限范围，请确认。", roles: platformOnly },
+        { id: "cancel-move", label: "取消", kind: "secondary", roles: platformOnly },
+      ],
+    },
+  ];
+  return {
+    schemaVersion: "0.2",
+    product: { name: title, description: `依据“${title}”真实需求生成的组织结构管理原型模型。` },
+    navigation: [{ label: "系统管理 / 组织结构", pageId: "P1-organization-tree", roles: allRoles }],
+    pages,
+    rules: [
+      { id: "organization-code-unique", description: "组织编码在平台内必须唯一。", appliesTo: ["organizationCode"] },
+      { id: "organization-scope", description: "组织管理员只能维护授权组织及其下级组织。", appliesTo: ["parentOrganization", "save", "disable"] },
+      { id: "root-platform-only", description: "只有平台管理员可以新增根组织、移动组织或删除组织。", appliesTo: ["create-root", "move", "delete"] },
+      { id: "delete-empty-only", description: "存在子组织或关联用户时禁止删除组织。", appliesTo: ["delete"] },
+      { id: "hierarchy-no-cycle", description: "移动组织时目标上级不得为当前组织或其下级，防止层级循环。", appliesTo: ["targetParent", "confirm-move"] },
+      { id: "danger-confirmation", description: "停用、删除和移动组织前必须二次确认并说明影响。", appliesTo: ["disable", "delete", "confirm-move"] },
+    ],
+    transitions: [
+      { sourcePageId: "P1-organization-tree", triggerType: "action", triggerId: "create-root", triggerLabel: "新增根组织", targetPageId: "P2-organization-form" },
+      { sourcePageId: "P1-organization-tree", triggerType: "action", triggerId: "create-child", triggerLabel: "新增下级组织", targetPageId: "P2-organization-form" },
+      { sourcePageId: "P1-organization-tree", triggerType: "action", triggerId: "view", triggerLabel: "查看详情", targetPageId: "P3-organization-detail" },
+      { sourcePageId: "P1-organization-tree", triggerType: "action", triggerId: "move", triggerLabel: "移动组织", targetPageId: "P4-organization-move" },
+      { sourcePageId: "P2-organization-form", triggerType: "action", triggerId: "save", triggerLabel: "保存", targetPageId: "P1-organization-tree" },
+      { sourcePageId: "P2-organization-form", triggerType: "action", triggerId: "cancel", triggerLabel: "取消", targetPageId: "P1-organization-tree" },
+      { sourcePageId: "P3-organization-detail", triggerType: "action", triggerId: "edit", triggerLabel: "编辑", targetPageId: "P2-organization-form" },
+      { sourcePageId: "P3-organization-detail", triggerType: "action", triggerId: "back", triggerLabel: "返回", targetPageId: "P1-organization-tree" },
+      { sourcePageId: "P4-organization-move", triggerType: "action", triggerId: "confirm-move", triggerLabel: "确认移动", targetPageId: "P1-organization-tree" },
+      { sourcePageId: "P4-organization-move", triggerType: "action", triggerId: "cancel-move", triggerLabel: "取消", targetPageId: "P1-organization-tree" },
+    ],
+    errorFeedback: {
+      validationMessage: "组织编码重复、层级循环或字段校验失败时明确提示并保留已填写内容。",
+      operationFailureMessage: "越权、存在下级组织或关联用户时拒绝操作并说明原因。",
+      recoveryAction: "允许修正层级或清理关联关系后重试，失败时不改变原组织结构。",
+    },
+    designTokens: {
+      colors: { primary: "#3B82F6", success: "#10B981", danger: "#EF4444", warning: "#F59E0B", bgPage: "#F6F7FB", bgCard: "#FFFFFF", textPrimary: "#111827", textSecondary: "#6B7280", border: "#E5E7EB" },
+      spacing: { s8: 8, s12: 12, s16: 16, s20: 20, s24: 24, s32: 32, s40: 40 },
+      radius: { r8: 8, r12: 12, r16: 16, r24: 24 },
+      typography: { fontSize: { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, xxl: 28 }, fontWeight: { normal: 400, medium: 500, semibold: 600, bold: 700 }, lineHeight: { xs: 16, sm: 20, md: 24, lg: 28, xl: 32, xxl: 36 } },
+    },
+  };
+}
+
 function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
   const parsed = parseRequirement(context.input.content);
   const title = parsed.title;
   if (/用户管理|用户账号|账号管理/.test(`${title}\n${context.input.content}`)) {
     return createUserManagementPrototype(title);
+  }
+  if (/组织结构管理|组织机构管理/.test(`${title}\n${context.input.content}`)) {
+    return createOrganizationManagementPrototype(title);
   }
   const actionRoles = parsed.roles.map((role) => role.name);
   if (actionRoles.length === 0) actionRoles.push("管理员");

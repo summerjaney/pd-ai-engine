@@ -18,6 +18,8 @@ import { StdioMasterGoConnection } from "./integrations/mastergo/stdio-connectio
 import { executeMasterGoPagePipeline } from "./integrations/mastergo/page-pipeline.js";
 import { verifyMasterGoCanvas } from "./integrations/mastergo/verification.js";
 import { generateAcceptanceReport, runDeliveryCheck } from "./planning/delivery-check.js";
+import { generateManualDelivery, runManualCheck, updateManualDelivery } from "./manual/service.js";
+import { packageDelivery } from "./delivery/package.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -29,6 +31,10 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae prototype push <需求目录> --write --confirm-write --resume
   pae prototype verify <需求目录> --pass --evidence <证据说明>
   pae delivery check <需求目录>
+  pae delivery package <需求目录>
+  pae manual generate <需求目录>
+  pae manual check <需求目录>
+  pae manual update <需求目录>
   pae acceptance report <需求目录>
   pae mastergo doctor
   pae mastergo tools [--json <文件>]
@@ -193,6 +199,45 @@ async function main(): Promise<void> {
     console.log(`MasterGo 写入：${output.report.checks.masterGoSubmission}`);
     console.log(`检查报告：${output.markdownPath}`);
     if (!output.report.valid) process.exitCode = 1;
+    return;
+  }
+
+  const isDeliveryPackage = args[0] === "delivery" && args[1] === "package" && Boolean(args[2]);
+  if (isDeliveryPackage) {
+    const output = await packageDelivery(path.resolve(args[2]));
+    console.log(`完整交付包：${output.manifest.status}`);
+    console.log(`交付清单：${output.manifestPath}`);
+    console.log(`交付检查：${output.checkReportPath}`);
+    console.log(`正式验收：${output.acceptanceReportPath}`);
+    if (output.manifest.status === "FAIL") process.exitCode = 1;
+    return;
+  }
+
+  const isManualGenerate = args[0] === "manual" && args[1] === "generate" && Boolean(args[2]);
+  if (isManualGenerate) {
+    const output = await generateManualDelivery(path.resolve(args[2]));
+    console.log("产品手册与操作手册已生成。");
+    console.log(`产品手册：${output.productManualPath}`);
+    console.log(`操作手册：${output.operationManualPath}`);
+    console.log(`追踪矩阵：${output.traceabilityPath}`);
+    return;
+  }
+
+  const isManualCheck = args[0] === "manual" && args[1] === "check" && Boolean(args[2]);
+  if (isManualCheck) {
+    const output = await runManualCheck(path.resolve(args[2]));
+    console.log(`手册一致性检查：${output.report.valid ? "PASS" : "FAIL"}`);
+    console.log(`检查报告：${output.markdownPath}`);
+    if (!output.report.valid) process.exitCode = 1;
+    return;
+  }
+
+  const isManualUpdate = args[0] === "manual" && args[1] === "update" && Boolean(args[2]);
+  if (isManualUpdate) {
+    const output = await updateManualDelivery(path.resolve(args[2]));
+    console.log(`手册增量更新：${output.report.changed ? "已更新" : "无来源变化"}`);
+    console.log(`保留手工补充：${output.report.preservedManualNotes.length} 处`);
+    console.log(`影响报告：${output.reportPath}`);
     return;
   }
 
