@@ -25,6 +25,8 @@ import { buildFormalDelivery } from "./delivery/formal-package.js";
 import { validateFormalDelivery } from "./delivery/formal-validator.js";
 import type { DocumentFormat } from "./document/types.js";
 import { loadPaeConfig } from "./config/loader.js";
+import { diagnosePae } from "./diagnostics/doctor.js";
+import { runReleaseQualityGate } from "./delivery/quality-gate.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -47,6 +49,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae mastergo doctor
   pae mastergo tools [--json <文件>]
   pae config show
+  pae doctor
+  pae validate <需求目录> --level release
   pae --help
 
 示例：
@@ -109,7 +113,7 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
-  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format",
+  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -150,6 +154,24 @@ async function main(): Promise<void> {
     const loaded = await loadPaeConfig();
     console.log(`PAE 配置：${loaded.path ?? "系统默认值"}`);
     console.log(JSON.stringify(loaded.config, null, 2));
+    return;
+  }
+
+  if (args[0] === "doctor" && args.length === 1) {
+    const report = await diagnosePae();
+    console.log(`PAE 环境诊断：${report.status}`);
+    for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
+    if (report.status === "NOT_READY") process.exitCode = 1;
+    return;
+  }
+
+  if (args[0] === "validate" && Boolean(args[1])) {
+    validateArgs(args);
+    if ((option(args, "--level") ?? "release") !== "release") throw new Error("--level 当前仅支持 release。");
+    const output = await runReleaseQualityGate(path.resolve(args[1]));
+    console.log(`Release 质量门禁：${output.report.status}`);
+    console.log(`质量报告：${output.markdownPath}`);
+    if (output.report.status !== "PASS") process.exitCode = 1;
     return;
   }
 
@@ -432,9 +454,12 @@ async function main(): Promise<void> {
       const manualCheck = await runManualCheck(outputDirectory);
       if (!manualCheck.report.valid) throw new Error(`手册一致性检查失败：${manualCheck.markdownPath}`);
       const delivery = await buildFormalDelivery(outputDirectory);
+      const qualityGate = await runReleaseQualityGate(outputDirectory);
+      if (qualityGate.report.status !== "PASS") throw new Error(`Release 质量门禁失败：${qualityGate.markdownPath}`);
       console.log("PAE 正式交付：PASS");
       console.log(`正式交付包: ${delivery.zipPath}`);
       console.log(`严格检查: ${delivery.validationReportPath}`);
+      console.log(`交付总览: ${qualityGate.summaryPath}`);
     }
   }
 }

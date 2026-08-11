@@ -85,6 +85,15 @@ npm run dev -- deliver path/to/requirement.md \
 
 中断后可追加 `--resume` 继续执行。PAE 会校验需求内容 SHA-256，仅复用同一输入下已经成功的阶段；输入变化时自动将旧成果视为失效并完整重建。`pae.config.json` 的 `execution.retries` 可设置阶段失败后的自动重试次数。
 
+交付前可检查本机环境，交付完成后可独立复跑 Release 级质量门禁：
+
+```bash
+npm run dev -- doctor
+npm run dev -- validate output/<project>/requirements/<requirement> --level release
+```
+
+环境诊断覆盖 Node.js、PAE 配置、输出权限、LLM、Git 和 GitHub CLI。Release 门禁统一核对端到端运行状态、追踪完整性、DOCX/PDF 文件签名、SHA-256、元数据与内容安全，并在 `12-delivery/` 生成质量报告、正式验收报告、追踪矩阵和 `delivery-summary.md`。
+
 也可以使用自己的需求文件：
 
 ```bash
