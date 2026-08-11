@@ -3,7 +3,7 @@
   "$id": "https://pae.dev/schemas/v1.0/run.schema.json",
   "title": "PAE Run State",
   "type": "object",
-  "required": ["schemaVersion", "runId", "engineVersion", "status", "startedAt", "stages"],
+  "required": ["schemaVersion", "runId", "engineVersion", "status", "startedAt", "inputHash", "stages"],
   "properties": {
     "schemaVersion": { "const": "1.0" },
     "runId": { "type": "string", "minLength": 1 },
@@ -12,6 +12,8 @@
     "startedAt": { "type": "string", "format": "date-time" },
     "finishedAt": { "type": "string", "format": "date-time" },
     "currentStage": { "type": "string" },
+    "inputHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "resumedFromRunId": { "type": "string" },
     "stages": { "type": "array", "items": { "type": "object", "required": ["id", "status"] } }
   },
   "additionalProperties": false

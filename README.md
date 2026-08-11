@@ -83,6 +83,8 @@ npm run dev -- deliver path/to/requirement.md \
 
 执行成功时终端输出 `PAE 正式交付：PASS`，正式交付包位于需求目录的 `12-delivery/formal-delivery-package.zip`。任一生成步骤或质量门禁失败都会阻止正式交付并返回非零退出码。
 
+中断后可追加 `--resume` 继续执行。PAE 会校验需求内容 SHA-256，仅复用同一输入下已经成功的阶段；输入变化时自动将旧成果视为失效并完整重建。`pae.config.json` 的 `execution.retries` 可设置阶段失败后的自动重试次数。
+
 也可以使用自己的需求文件：
 
 ```bash
