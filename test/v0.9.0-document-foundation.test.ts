@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -17,13 +17,38 @@ test("TC-090-001: Markdown 成果物统一转换为 Document DSL", async () => {
   assert.ok(dsl.sources[0].blocks.some((block) => block.type === "code" && block.language === "mermaid"));
 });
 
-test("TC-090-002: DOCX/PDF 共用文档模型并生成可追踪导出计划", async () => {
+test("TC-090-002: DOCX/PDF 共用文档模型并生成可追踪导出结果", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pae-v090-export-"));
   await writeFile(path.join(root, "09-prd.md"), "# PRD\n\n正式交付内容。\n");
   const output = await prepareDocumentExport(root, ["docx", "pdf"]);
-  assert.equal(output.manifest.status, "PLANNED");
+  assert.equal(output.manifest.status, "PARTIAL");
   assert.deepEqual(output.manifest.requestedFormats, ["docx", "pdf"]);
   assert.equal(output.manifest.results.length, 2);
   assert.match(await readFile(output.documentModelPath, "utf8"), /\"schemaVersion\": \"0\.9\"/);
-  assert.match(await readFile(output.manifestPath, "utf8"), /not-configured/);
+  assert.equal(output.manifest.results[0].status, "GENERATED");
+  assert.equal(output.manifest.results[1].status, "PLANNED");
+  assert.match(await readFile(output.manifestPath, "utf8"), /pae-docx/);
+});
+
+test("TC-090-003: 标准 DOCX 包含封面、目录、标题、列表与表格", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-v090-docx-"));
+  await writeFile(path.join(root, "requirement.json"), JSON.stringify({ projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-090" }));
+  await writeFile(path.join(root, "09-prd.md"), "# 组织管理 PRD\n\n## 功能列表\n\n- 新增组织\n- 编辑组织\n\n| 字段 | 必填 |\n|---|---|\n| 组织名称 | 是 |\n");
+  const output = await prepareDocumentExport(root, ["docx"]);
+  const file = output.manifest.results[0].outputPath;
+  const buffer = await readFile(file);
+  assert.equal(output.manifest.status, "GENERATED");
+  assert.equal(buffer.subarray(0, 2).toString(), "PK");
+  assert.ok((await stat(file)).size > 5_000);
+});
+
+test("TC-090-004: DOCX 可嵌入本地 PNG 图片", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-v090-image-"));
+  await mkdir(path.join(root, "assets"));
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  await writeFile(path.join(root, "assets", "page.png"), png);
+  await writeFile(path.join(root, "09-prd.md"), "# PRD\n\n![页面预览](assets/page.png)\n");
+  const output = await prepareDocumentExport(root, ["docx"]);
+  assert.equal(output.manifest.status, "GENERATED");
+  assert.ok((await stat(output.manifest.results[0].outputPath)).size > 5_000);
 });

@@ -7,7 +7,8 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - 启动 v0.9.0 正式文档与交付包迭代，新增统一 Document DSL、标准模板元数据、渲染器接口及文档导出清单。
-- 新增 `pae document export <需求目录> --format docx|pdf|all` 命令骨架。
+- 新增 `pae document export <需求目录> --format docx|pdf|all` 命令；DOCX 已支持真实渲染，PDF 保留统一渲染接口。
+- DOCX 标准模板支持封面、自动目录、多级标题、页眉页脚、页码、列表、表格、代码块和 PNG/JPEG 图片。
 
 ## [0.8.0] - 2026-08-11
 

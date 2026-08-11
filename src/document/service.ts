@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readEngineVersion } from "../version.js";
 import type { DocumentBlock, DocumentDsl, DocumentExportManifest, DocumentFormat, DocumentRenderer, DocumentSource } from "./types.js";
+import { DocxRenderer } from "./docx-renderer.js";
 
 const SOURCES = [
   ["requirement-analysis", "01-requirement-analysis.md"],
@@ -25,7 +26,8 @@ function markdownBlocks(content: string): DocumentBlock[] {
     if (text) blocks.push({ type: "paragraph", text });
     paragraph = [];
   };
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
     const fence = line.match(/^```(.*)$/);
     if (fence) {
       if (code) {
@@ -50,6 +52,34 @@ function markdownBlocks(content: string): DocumentBlock[] {
     if (image) {
       flushParagraph();
       blocks.push({ type: "image", alt: image[1], source: image[2] });
+      continue;
+    }
+    const listItem = line.match(/^\s*(?:(\d+)\.|[-*+])\s+(.+)$/);
+    if (listItem) {
+      flushParagraph();
+      const ordered = Boolean(listItem[1]);
+      const items = [listItem[2].trim()];
+      while (index + 1 < lines.length) {
+        const next = lines[index + 1].match(/^\s*(?:(\d+)\.|[-*+])\s+(.+)$/);
+        if (!next || Boolean(next[1]) !== ordered) break;
+        items.push(next[2].trim());
+        index++;
+      }
+      blocks.push({ type: "list", ordered, items });
+      continue;
+    }
+    if (/^\s*\|.*\|\s*$/.test(line) && index + 1 < lines.length && /^\s*\|?(?:\s*:?-+:?\s*\|)+\s*$/.test(lines[index + 1])) {
+      flushParagraph();
+      const cells = (value: string) => value.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+      const headers = cells(line);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) {
+        rows.push(cells(lines[index]));
+        index++;
+      }
+      index--;
+      blocks.push({ type: "table", headers, rows });
       continue;
     }
     if (!line.trim()) flushParagraph();
@@ -95,7 +125,7 @@ export async function buildDocumentDsl(requirementDirectory: string): Promise<Do
   };
 }
 
-export async function prepareDocumentExport(requirementDirectory: string, formats: DocumentFormat[], renderers: DocumentRenderer[] = []): Promise<{ manifest: DocumentExportManifest; manifestPath: string; documentModelPath: string }> {
+export async function prepareDocumentExport(requirementDirectory: string, formats: DocumentFormat[], renderers: DocumentRenderer[] = [new DocxRenderer()]): Promise<{ manifest: DocumentExportManifest; manifestPath: string; documentModelPath: string }> {
   const root = path.resolve(requirementDirectory);
   const directory = path.join(root, "12-delivery", "documents");
   await mkdir(directory, { recursive: true });

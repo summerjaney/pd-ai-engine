@@ -3,6 +3,8 @@ export type DocumentFormat = "docx" | "pdf";
 export type DocumentBlock =
   | { type: "heading"; level: number; text: string }
   | { type: "paragraph"; text: string }
+  | { type: "list"; ordered: boolean; items: string[] }
+  | { type: "table"; headers: string[]; rows: string[][] }
   | { type: "code"; language?: string; content: string }
   | { type: "image"; alt: string; source: string };
 

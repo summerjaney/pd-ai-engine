@@ -212,7 +212,8 @@ async function main(): Promise<void> {
     if (!['docx', 'pdf', 'all'].includes(format)) throw new Error("--format 仅支持 docx、pdf 或 all。");
     const formats: DocumentFormat[] = format === "all" ? ["docx", "pdf"] : [format as DocumentFormat];
     const output = await prepareDocumentExport(path.resolve(args[2]), formats);
-    console.log(`正式文档导出计划：${output.manifest.status}`);
+    console.log(`正式文档导出：${output.manifest.status}`);
+    for (const result of output.manifest.results) console.log(`${result.format.toUpperCase()}：${result.status} — ${result.outputPath}`);
     console.log(`Document DSL：${output.documentModelPath}`);
     console.log(`导出清单：${output.manifestPath}`);
     return;
