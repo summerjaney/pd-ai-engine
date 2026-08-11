@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-11
+
+### Added
+
+- 启动 v0.9.0 正式文档与交付包迭代，新增统一 Document DSL、标准模板元数据、渲染器接口及文档导出清单。
+- 新增 `pae document export <需求目录> --format docx|pdf|all` 命令；DOCX 与 PDF 均支持真实渲染并共用 Document DSL。
+- 新增嵌入式中文 PDF 字体、分页、页码、列表与表格渲染，避免依赖操作系统字体。
+- `pae delivery package <需求目录>` 可生成 DOCX/PDF、带 SHA-256 的正式包清单和 ZIP 交付包。
+- 新增正式交付严格一致性检查，覆盖文档签名、清单哈希、需求元数据、本地绝对路径和未处理模板占位符；阻断错误会拒绝交付。
+- DOCX 标准模板支持封面、自动目录、多级标题、页眉页脚、页码、列表、表格、代码块和 PNG/JPEG 图片。
+
+## [0.8.0] - 2026-08-11
+
+### Added
+
+- 新增产品手册、操作手册、手册追踪矩阵、需求变更影响分析和增量更新。
+- 新增手册一致性检查、完整交付清单、文件哈希与正式验收报告。
+
+### Validation
+
+- 自动化测试：186/186 通过；TypeScript 构建与检查通过。
+- 基础平台组织结构管理真实需求、MasterGo 画布验收及最终交付检查均通过。
+
 ## [0.7.0] - 2026-08-10
 
 ### Added

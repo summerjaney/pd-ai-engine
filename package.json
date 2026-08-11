@@ -1,6 +1,6 @@
 {
   "name": "pd-ai-engine",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "面向产品经理的 AI 产品设计工作流引擎",
   "type": "module",
   "bin": {
@@ -32,9 +32,17 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/node": "^24.0.0",
+    "@types/pdfkit": "^0.17.6",
     "tsx": "^4.20.0",
     "typescript": "^5.8.0",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@openfonts/noto-sans-sc_chinese-simplified": "^1.44.10",
+    "archiver": "^8.0.0",
+    "docx": "^9.7.1",
+    "pdfkit": "^0.19.1"
   }
 }

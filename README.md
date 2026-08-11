@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v0.7.0`，已从单页 MasterGo 真实写入升级到真实业务需求端到端交付：需求级页面规划、多页面统一生成与串行写入、失败续跑、逐页画布验收、PRD 稳定追踪和交付一致性检查。
+当前版本为 `v0.9.0`。PAE 已支持统一 Document DSL、Word/PDF 正式文档导出、严格一致性检查和可归档 ZIP 交付包。
 
 ## 成果物组织模型
 
@@ -126,6 +126,10 @@ npm run dev -- prototype verify output/<project>/requirements/<requirement> \
 
 ```bash
 npm run dev -- delivery check output/<project>/requirements/<requirement>
+npm run build
+node dist/cli.js document export output/<project>/requirements/<requirement> --format all
+node dist/cli.js delivery package output/<project>/requirements/<requirement>
+node dist/cli.js delivery validate output/<project>/requirements/<requirement>
 npm run dev -- acceptance report output/<project>/requirements/<requirement>
 ```
 
