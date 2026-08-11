@@ -68,6 +68,21 @@ npm run example
 
 产物位于 `output/example-product/requirements/REQ-001-leave-request/`。
 
+### 一键正式交付（v1.0.0）
+
+`deliver` 会依次完成 10 阶段产品设计、产品手册与操作手册生成、手册一致性检查、DOCX/PDF 导出、正式 ZIP 打包和严格一致性校验：
+
+```bash
+npm run dev -- deliver path/to/requirement.md \
+  --project hr-management-system \
+  --project-name 人力资源管理系统 \
+  --id REQ-003 \
+  --name employee-entry \
+  --product-version 1.2.0
+```
+
+执行成功时终端输出 `PAE 正式交付：PASS`，正式交付包位于需求目录的 `12-delivery/formal-delivery-package.zip`。任一生成步骤或质量门禁失败都会阻止正式交付并返回非零退出码。
+
 也可以使用自己的需求文件：
 
 ```bash

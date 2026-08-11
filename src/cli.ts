@@ -30,6 +30,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
 用法：
   pae requirement create <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
+  pae deliver <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
   pae run <需求文件> [--out <输出目录>] [选项]
   pae prototype push <需求目录> --dry-run
   pae prototype push <需求目录> --write --confirm-write
@@ -50,6 +51,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
 示例：
   pae requirement create examples/b2b-requirement.md --project hr-system --id REQ-001 --name leave-request
+  pae deliver examples/b2b-requirement.md --project hr-system --id REQ-001 --name leave-request
   pae run examples/b2b-requirement.md --out output/legacy-example --project hr-system --id REQ-001 --name leave-request
   pae prototype push output/hr-system/requirements/REQ-001-leave-request --dry-run
   pae mastergo doctor
@@ -111,7 +113,7 @@ const VALID_OPTIONS = new Set([
 ]);
 
 function validateArgs(args: string[]): void {
-  const positionalArgs = ["requirement", "create", "run"];
+  const positionalArgs = ["requirement", "create", "deliver", "run"];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg.startsWith("--") || arg.startsWith("-")) {
@@ -323,8 +325,9 @@ async function main(): Promise<void> {
   }
 
   const isRequirementCreate = args[0] === "requirement" && args[1] === "create" && Boolean(args[2]);
+  const isDeliver = args[0] === "deliver" && Boolean(args[1]);
   const isLegacyRun = args[0] === "run" && Boolean(args[1]);
-  if (!isRequirementCreate && !isLegacyRun) throw new Error(`命令格式错误。\n\n${await buildHelp()}`);
+  if (!isRequirementCreate && !isDeliver && !isLegacyRun) throw new Error(`命令格式错误。\n\n${await buildHelp()}`);
   const sourceArgument = isRequirementCreate ? args[2] : args[1];
   const sourcePath = path.resolve(sourceArgument);
   const content = await readFile(sourcePath, "utf8");
@@ -361,7 +364,7 @@ async function main(): Promise<void> {
   ));
   let outputDirectory: string;
   let context;
-  if (isRequirementCreate) {
+  if (isRequirementCreate || isDeliver) {
     const projectId = option(args, "--project") ?? paeConfig.project?.id;
     const requirementId = option(args, "--id");
     const requirementName = option(args, "--name");
@@ -422,6 +425,16 @@ async function main(): Promise<void> {
     console.log(`PAE 已完成 10 个阶段。`);
     console.log(`Run ID: ${context.runId}`);
     console.log(`需求设计包: ${outputDirectory}`);
+    if (isDeliver) {
+      console.log("正在生成产品手册与操作手册……");
+      await generateManualDelivery(outputDirectory);
+      const manualCheck = await runManualCheck(outputDirectory);
+      if (!manualCheck.report.valid) throw new Error(`手册一致性检查失败：${manualCheck.markdownPath}`);
+      const delivery = await buildFormalDelivery(outputDirectory);
+      console.log("PAE 正式交付：PASS");
+      console.log(`正式交付包: ${delivery.zipPath}`);
+      console.log(`严格检查: ${delivery.validationReportPath}`);
+    }
   }
 }
 
