@@ -3,6 +3,7 @@ import path from "node:path";
 import { readEngineVersion } from "../version.js";
 import type { DocumentBlock, DocumentDsl, DocumentExportManifest, DocumentFormat, DocumentRenderer, DocumentSource } from "./types.js";
 import { DocxRenderer } from "./docx-renderer.js";
+import { PdfRenderer } from "./pdf-renderer.js";
 
 const SOURCES = [
   ["requirement-analysis", "01-requirement-analysis.md"],
@@ -125,7 +126,7 @@ export async function buildDocumentDsl(requirementDirectory: string): Promise<Do
   };
 }
 
-export async function prepareDocumentExport(requirementDirectory: string, formats: DocumentFormat[], renderers: DocumentRenderer[] = [new DocxRenderer()]): Promise<{ manifest: DocumentExportManifest; manifestPath: string; documentModelPath: string }> {
+export async function prepareDocumentExport(requirementDirectory: string, formats: DocumentFormat[], renderers: DocumentRenderer[] = [new DocxRenderer(), new PdfRenderer()]): Promise<{ manifest: DocumentExportManifest; manifestPath: string; documentModelPath: string }> {
   const root = path.resolve(requirementDirectory);
   const directory = path.join(root, "12-delivery", "documents");
   await mkdir(directory, { recursive: true });

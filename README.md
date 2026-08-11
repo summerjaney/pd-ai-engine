@@ -126,6 +126,9 @@ npm run dev -- prototype verify output/<project>/requirements/<requirement> \
 
 ```bash
 npm run dev -- delivery check output/<project>/requirements/<requirement>
+npm run build
+node dist/cli.js document export output/<project>/requirements/<requirement> --format all
+node dist/cli.js delivery package output/<project>/requirements/<requirement>
 npm run dev -- acceptance report output/<project>/requirements/<requirement>
 ```
 

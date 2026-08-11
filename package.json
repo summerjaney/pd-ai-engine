@@ -32,12 +32,17 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/node": "^24.0.0",
+    "@types/pdfkit": "^0.17.6",
     "tsx": "^4.20.0",
     "typescript": "^5.8.0",
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "docx": "^9.7.1"
+    "@openfonts/noto-sans-sc_chinese-simplified": "^1.44.10",
+    "archiver": "^8.0.0",
+    "docx": "^9.7.1",
+    "pdfkit": "^0.19.1"
   }
 }

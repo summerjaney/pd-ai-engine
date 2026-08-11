@@ -21,6 +21,7 @@ import { generateAcceptanceReport, runDeliveryCheck } from "./planning/delivery-
 import { generateManualDelivery, runManualCheck, updateManualDelivery } from "./manual/service.js";
 import { packageDelivery } from "./delivery/package.js";
 import { prepareDocumentExport } from "./document/service.js";
+import { buildFormalDelivery } from "./delivery/formal-package.js";
 import type { DocumentFormat } from "./document/types.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
@@ -221,12 +222,12 @@ async function main(): Promise<void> {
 
   const isDeliveryPackage = args[0] === "delivery" && args[1] === "package" && Boolean(args[2]);
   if (isDeliveryPackage) {
-    const output = await packageDelivery(path.resolve(args[2]));
-    console.log(`完整交付包：${output.manifest.status}`);
-    console.log(`交付清单：${output.manifestPath}`);
-    console.log(`交付检查：${output.checkReportPath}`);
-    console.log(`正式验收：${output.acceptanceReportPath}`);
-    if (output.manifest.status === "FAIL") process.exitCode = 1;
+    const output = await buildFormalDelivery(path.resolve(args[2]));
+    console.log("完整交付包：GENERATED");
+    console.log(`交付目录：${output.directory}`);
+    console.log(`ZIP：${output.zipPath}`);
+    console.log(`文档清单：${output.documentManifestPath}`);
+    console.log(`交付清单：${output.deliveryManifestPath}`);
     return;
   }
 
