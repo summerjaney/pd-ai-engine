@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-11
+
 ### Added
 
 - 启动 v0.9.0 正式文档与交付包迭代，新增统一 Document DSL、标准模板元数据、渲染器接口及文档导出清单。

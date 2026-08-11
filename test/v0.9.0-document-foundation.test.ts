@@ -9,6 +9,7 @@ import { validateFormalDelivery } from "../src/delivery/formal-validator.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { generateManualDelivery } from "../src/manual/service.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
+import { readEngineVersion } from "../src/version.js";
 
 async function completeRequirement(root: string, requirementId: string): Promise<void> {
   await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath: "organization.md", title: "组织结构管理", content: "# 组织结构管理\n\n支持维护组织上下级关系。" }, root, {
@@ -120,4 +121,17 @@ test("TC-090-004: DOCX 可嵌入本地 PNG 图片", async () => {
   const output = await prepareDocumentExport(root, ["docx"]);
   assert.equal(output.manifest.status, "GENERATED");
   assert.ok((await stat(output.manifest.results[0].outputPath)).size > 5_000);
+});
+
+test("TC-090-011: 发布版本与正式交付契约保持一致", async () => {
+  assert.equal(await readEngineVersion(), "0.9.0");
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-v090-release-"));
+  await completeRequirement(root, "REQ-090-011");
+  const output = await buildFormalDelivery(root);
+  const documentModel = JSON.parse(await readFile(path.join(output.directory, "documents", "document-model.json"), "utf8")) as { schemaVersion: string; metadata: { engineVersion: string } };
+  const formalManifest = JSON.parse(await readFile(path.join(output.directory, "formal-package-manifest.json"), "utf8")) as { schemaVersion: string; documents: unknown[] };
+  assert.equal(documentModel.schemaVersion, "0.9");
+  assert.equal(documentModel.metadata.engineVersion, "0.9.0");
+  assert.equal(formalManifest.schemaVersion, "0.9");
+  assert.equal(formalManifest.documents.length, 2);
 });

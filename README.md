@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前开发版本为 `v0.9.0`。v0.8.0 已完成产品手册、操作手册、影响分析和交付打包；v0.9.0 正在建设统一 Document DSL、Word/PDF 正式文档导出和可归档交付包。
+当前版本为 `v0.9.0`。PAE 已支持统一 Document DSL、Word/PDF 正式文档导出、严格一致性检查和可归档 ZIP 交付包。
 
 ## 成果物组织模型
 
