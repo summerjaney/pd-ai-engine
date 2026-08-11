@@ -18,6 +18,7 @@ import { renderDesignConsistencyReport, validateDesignConsistency } from "../pla
 import { renderInteractionConsistencyReport, validateInteractionConsistency } from "../planning/interaction-consistency-validator.js";
 import { buildPrdTraceabilityReport, renderPrdTraceabilityReport } from "../planning/prd-traceability.js";
 import { renderDeliveryConsistencyReport, validateDeliveryConsistency } from "../planning/delivery-consistency-validator.js";
+import { RunStateRecorder, type RunState } from "../execution/run-state.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -48,6 +49,8 @@ const MANAGED_OUTPUT_PATHS = [
   "10-review.md",
   "99-debug",
   "manifest.json",
+  "run.json",
+  "run-events.jsonl",
 ] as const;
 
 async function collectDebugArtifacts(outputDirectory: string): Promise<string[]> {
@@ -104,6 +107,18 @@ export class ProductDesignWorkflow {
       rm(path.join(outputDirectory, target), { recursive: true, force: true })
     ));
 
+    const engineVersion = await readEngineVersion();
+    const runState: RunState = {
+      schemaVersion: "1.0",
+      runId: context.runId,
+      engineVersion,
+      status: "PENDING",
+      startedAt: context.startedAt,
+      stages: STAGE_IDS.map((id) => ({ id, status: "PENDING" })),
+    };
+    const recorder = new RunStateRecorder(outputDirectory, runState);
+    await recorder.start();
+
     const stages: Array<{
       id: StageId;
       status: "completed" | "failed" | "skipped";
@@ -119,8 +134,11 @@ export class ProductDesignWorkflow {
       if (hasFailed) {
         stages.push({ id: stage, status: "skipped" });
         context.stageResults!.push({ id: stage, status: "skipped" });
+        await recorder.stageFinished(stage, "SKIPPED");
         continue;
       }
+
+      await recorder.stageStarted(stage);
 
       let result;
       try {
@@ -158,6 +176,7 @@ export class ProductDesignWorkflow {
         const errorMessage = error instanceof Error ? error.message : String(error);
         stages.push({ id: stage, status: "failed", error: errorMessage });
         context.stageResults!.push({ id: stage, status: "failed", error: errorMessage });
+        await recorder.stageFinished(stage, "FAILED", errorMessage);
         hasFailed = true;
         continue;
       }
@@ -215,6 +234,7 @@ export class ProductDesignWorkflow {
             generation: result.generationMetadata,
           });
           context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
+          await recorder.stageFinished(stage, "SUCCEEDED");
           continue;
         }
 
@@ -236,6 +256,7 @@ export class ProductDesignWorkflow {
             generation: result.generationMetadata,
           });
           context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
+          await recorder.stageFinished(stage, "SUCCEEDED");
           continue;
         }
 
@@ -267,17 +288,19 @@ export class ProductDesignWorkflow {
           generation: result.generationMetadata,
         });
         context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
+        await recorder.stageFinished(stage, "SUCCEEDED");
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         stages.push({ id: stage, status: "failed", file, error: errorMessage });
         context.stageResults!.push({ id: stage, status: "failed", file, error: errorMessage });
+        await recorder.stageFinished(stage, "FAILED", errorMessage);
         hasFailed = true;
       }
     }
 
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
-      version: await readEngineVersion(),
+      version: engineVersion,
       runId: context.runId,
       startedAt: context.startedAt,
       finishedAt: new Date().toISOString(),
@@ -342,6 +365,7 @@ export class ProductDesignWorkflow {
     }, null, 2);
 
     await writeFile(path.join(outputDirectory, "manifest.json"), `${manifestContent}\n`, "utf8");
+    await recorder.finish(hasFailed ? "FAILED" : "SUCCEEDED");
 
     if (hasFailed) {
       throw new Error("工作流执行失败，部分阶段未能完成");

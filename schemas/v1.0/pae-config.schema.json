@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pae.dev/schemas/v1.0/pae-config.schema.json",
+  "title": "PAE Project Configuration",
+  "type": "object",
+  "required": ["schemaVersion"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "project": { "type": "object" },
+    "llm": { "type": "object" },
+    "knowledge": { "type": "object" },
+    "mastergo": { "type": "object" },
+    "delivery": { "type": "object" },
+    "execution": { "type": "object" }
+  },
+  "additionalProperties": false
+}

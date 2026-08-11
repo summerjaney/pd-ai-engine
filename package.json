@@ -9,6 +9,7 @@
   "files": [
     "dist/",
     "knowledge/",
+    "schemas/",
     "README.md",
     "LICENSE",
     "package.json"

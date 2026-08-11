@@ -24,6 +24,7 @@ import { prepareDocumentExport } from "./document/service.js";
 import { buildFormalDelivery } from "./delivery/formal-package.js";
 import { validateFormalDelivery } from "./delivery/formal-validator.js";
 import type { DocumentFormat } from "./document/types.js";
+import { loadPaeConfig } from "./config/loader.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -44,6 +45,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae acceptance report <需求目录>
   pae mastergo doctor
   pae mastergo tools [--json <文件>]
+  pae config show
   pae --help
 
 示例：
@@ -139,6 +141,13 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     console.log(await buildHelp());
+    return;
+  }
+
+  if (args[0] === "config" && args[1] === "show" && args.length === 2) {
+    const loaded = await loadPaeConfig();
+    console.log(`PAE 配置：${loaded.path ?? "系统默认值"}`);
+    console.log(JSON.stringify(loaded.config, null, 2));
     return;
   }
 
@@ -325,14 +334,15 @@ async function main(): Promise<void> {
   validateArgs(args);
 
   const input = { sourcePath: storedSourcePath, content, title: getTitle(content, sourcePath) };
-  const knowledgeMode = option(args, "--knowledge-mode") ?? "auto";
+  const paeConfig = (await loadPaeConfig()).config;
+  const knowledgeMode = option(args, "--knowledge-mode") ?? paeConfig.knowledge?.mode ?? "auto";
   if (knowledgeMode !== "auto" && knowledgeMode !== "off") {
     throw new Error("--knowledge-mode 仅支持 auto 或 off。");
   }
 
   const llmConfig = loadLlmConfig(process.env, {
-    provider: option(args, "--provider"),
-    model: option(args, "--model"),
+    provider: option(args, "--provider") ?? paeConfig.llm?.provider,
+    model: option(args, "--model") ?? paeConfig.llm?.model,
   });
   const fallbackExecutor = new MockStageExecutor();
   const provider = llmConfig.provider === "openai"
@@ -352,7 +362,7 @@ async function main(): Promise<void> {
   let outputDirectory: string;
   let context;
   if (isRequirementCreate) {
-    const projectId = option(args, "--project");
+    const projectId = option(args, "--project") ?? paeConfig.project?.id;
     const requirementId = option(args, "--id");
     const requirementName = option(args, "--name");
     if (!projectId || !requirementId || !requirementName) throw new Error(`缺少 --project、--id 或 --name。\n\n${await buildHelp()}`);
@@ -364,8 +374,8 @@ async function main(): Promise<void> {
     const prepared = await prepareRequirementOutput({
       outputRoot: option(args, "--output-root") ?? "output",
       projectId,
-      projectName: option(args, "--project-name") ?? projectId,
-      productVersion: option(args, "--product-version") ?? "0.1.0",
+      projectName: option(args, "--project-name") ?? paeConfig.project?.name ?? projectId,
+      productVersion: option(args, "--product-version") ?? paeConfig.project?.productVersion ?? "0.1.0",
       requirementId,
       requirementName,
       revision,
