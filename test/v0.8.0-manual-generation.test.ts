@@ -167,3 +167,49 @@ test("TC-080-008: 交付包对缺失成果生成 FAIL 清单而不中断", async
   assert.ok(packaged.manifest.artifacts.some((item) => item.path === "11-operation-manual/operation-manual.json" && !item.exists));
   assert.match(await readFile(packaged.acceptanceReportPath, "utf8"), /暂不满足交付门槛/);
 });
+
+test("TC-080-009: 组织结构管理真实需求完成端到端文档交付", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v080-organization-e2e-"));
+  const sourcePath = path.join(process.cwd(), "test", "fixtures", "v0.8.0", "organization-management.md");
+  const content = await readFile(sourcePath, "utf8");
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath, title: "组织结构管理", content }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-080-ORG", requirementName: "organization-management", revision: 1,
+  });
+  await generateManualDelivery(output);
+  const packaged = await packageDelivery(output);
+  const prototype = await readJson<any>(path.join(output, "06-prototype", "prototype.json"));
+  const product = await readJson<any>(path.join(output, "10-product-manual", "product-manual.json"));
+  const operation = await readJson<any>(path.join(output, "11-operation-manual", "operation-manual.json"));
+  const trace = await readJson<any>(path.join(output, "10-product-manual", "traceability-matrix.json"));
+  assert.deepEqual(prototype.pages.map((page: any) => page.name), ["组织结构", "新增/编辑组织", "组织详情", "移动组织"]);
+  assert.equal(product.modules.length, 4);
+  assert.equal(trace.summary.missingCount, 0);
+  assert.equal(packaged.manifest.checks.manualConsistency, "PASS");
+  assert.equal(packaged.manifest.checks.artifactIntegrity, "PASS");
+  assert.equal(packaged.manifest.status, "PENDING");
+  assert.match(JSON.stringify(operation), /新增下级组织/);
+  assert.match(JSON.stringify(operation), /确认移动/);
+  assert.match(await readFile(packaged.acceptanceReportPath, "utf8"), /仍待完成 MasterGo 真实画布验收/);
+});
+
+test("TC-080-010: 组织结构操作权限、危险操作和层级规则保持一致", async () => {
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v080-organization-rules-"));
+  const sourcePath = path.join(process.cwd(), "test", "fixtures", "v0.8.0", "organization-management.md");
+  const content = await readFile(sourcePath, "utf8");
+  await new ProductDesignWorkflow(new MockStageExecutor()).run({ sourcePath, title: "组织结构管理", content }, output, {
+    projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-080-ORG", requirementName: "organization-management", revision: 1,
+  });
+  await generateManualDelivery(output);
+  const checked = await runManualCheck(output);
+  const prototype = await readJson<any>(path.join(output, "06-prototype", "prototype.json"));
+  const tree = prototype.pages.find((page: any) => page.id === "P1-organization-tree");
+  const detail = prototype.pages.find((page: any) => page.id === "P3-organization-detail");
+  const move = prototype.pages.find((page: any) => page.id === "P4-organization-move");
+  assert.equal(checked.report.valid, true);
+  assert.deepEqual(tree.actions.find((action: any) => action.id === "create-root").roles, ["平台管理员"]);
+  assert.deepEqual(tree.actions.find((action: any) => action.id === "create-child").roles, ["平台管理员", "组织管理员"]);
+  assert.equal(detail.actions.find((action: any) => action.id === "delete").confirmation, true);
+  assert.equal(move.actions.find((action: any) => action.id === "confirm-move").confirmation, true);
+  assert.ok(prototype.rules.some((rule: any) => rule.id === "delete-empty-only"));
+  assert.ok(prototype.rules.some((rule: any) => rule.id === "hierarchy-no-cycle"));
+});
