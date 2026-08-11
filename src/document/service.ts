@@ -148,6 +148,10 @@ export async function prepareDocumentExport(requirementDirectory: string, format
     documentModelPath: path.relative(root, documentModelPath), requestedFormats: formats, results, status,
   };
   const manifestPath = path.join(directory, "document-export-manifest.json");
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  const persistedManifest = {
+    ...manifest,
+    results: manifest.results.map((result) => ({ ...result, outputPath: path.relative(root, result.outputPath) })),
+  };
+  await writeFile(manifestPath, `${JSON.stringify(persistedManifest, null, 2)}\n`, "utf8");
   return { manifest, manifestPath, documentModelPath };
 }

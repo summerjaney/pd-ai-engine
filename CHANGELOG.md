@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - 新增 `pae document export <需求目录> --format docx|pdf|all` 命令；DOCX 与 PDF 均支持真实渲染并共用 Document DSL。
 - 新增嵌入式中文 PDF 字体、分页、页码、列表与表格渲染，避免依赖操作系统字体。
 - `pae delivery package <需求目录>` 可生成 DOCX/PDF、带 SHA-256 的正式包清单和 ZIP 交付包。
+- 新增正式交付严格一致性检查，覆盖文档签名、清单哈希、需求元数据、本地绝对路径和未处理模板占位符；阻断错误会拒绝交付。
 - DOCX 标准模板支持封面、自动目录、多级标题、页眉页脚、页码、列表、表格、代码块和 PNG/JPEG 图片。
 
 ## [0.8.0] - 2026-08-11

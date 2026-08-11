@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ZipArchive } from "archiver";
 import { prepareDocumentExport } from "../document/service.js";
 import { packageDelivery } from "./package.js";
+import { validateFormalDelivery } from "./formal-validator.js";
 
-export async function buildFormalDelivery(requirementDirectory: string): Promise<{ directory: string; zipPath: string; documentManifestPath: string; deliveryManifestPath: string }> {
+export async function buildFormalDelivery(requirementDirectory: string): Promise<{ directory: string; zipPath: string; documentManifestPath: string; deliveryManifestPath: string; validationReportPath: string }> {
   const root = path.resolve(requirementDirectory);
   const directory = path.join(root, "12-delivery");
   await mkdir(directory, { recursive: true });
@@ -33,5 +34,10 @@ export async function buildFormalDelivery(requirementDirectory: string): Promise
   }));
   await writeFile(packageStatePath, `${JSON.stringify({ schemaVersion: "0.9", generatedAt: new Date().toISOString(), archive: { path: path.basename(zipPath), size: metadata.size, sha256: createHash("sha256").update(zip).digest("hex") }, documents: documentEntries }, null, 2)}\n`, "utf8");
   if (zip.subarray(0, 2).toString() !== "PK") throw new Error("ZIP 交付包结构无效。");
-  return { directory, zipPath, documentManifestPath: documents.manifestPath, deliveryManifestPath: delivery.manifestPath };
+  const validation = await validateFormalDelivery(root);
+  if (!validation.report.valid) {
+    await rm(zipPath, { force: true });
+    throw new Error(`正式交付一致性检查失败，已阻止交付：${validation.markdownPath}`);
+  }
+  return { directory, zipPath, documentManifestPath: documents.manifestPath, deliveryManifestPath: delivery.manifestPath, validationReportPath: validation.markdownPath };
 }

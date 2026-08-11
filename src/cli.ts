@@ -22,6 +22,7 @@ import { generateManualDelivery, runManualCheck, updateManualDelivery } from "./
 import { packageDelivery } from "./delivery/package.js";
 import { prepareDocumentExport } from "./document/service.js";
 import { buildFormalDelivery } from "./delivery/formal-package.js";
+import { validateFormalDelivery } from "./delivery/formal-validator.js";
 import type { DocumentFormat } from "./document/types.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
@@ -35,6 +36,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae prototype verify <需求目录> --pass --evidence <证据说明>
   pae delivery check <需求目录>
   pae delivery package <需求目录>
+  pae delivery validate <需求目录>
   pae document export <需求目录> --format docx|pdf|all
   pae manual generate <需求目录>
   pae manual check <需求目录>
@@ -228,6 +230,16 @@ async function main(): Promise<void> {
     console.log(`ZIP：${output.zipPath}`);
     console.log(`文档清单：${output.documentManifestPath}`);
     console.log(`交付清单：${output.deliveryManifestPath}`);
+    console.log(`严格检查：${output.validationReportPath}`);
+    return;
+  }
+
+  const isDeliveryValidate = args[0] === "delivery" && args[1] === "validate" && Boolean(args[2]);
+  if (isDeliveryValidate) {
+    const output = await validateFormalDelivery(path.resolve(args[2]));
+    console.log(`正式交付一致性检查：${output.report.valid ? "PASS" : "FAIL"}`);
+    console.log(`检查报告：${output.markdownPath}`);
+    if (!output.report.valid) process.exitCode = 1;
     return;
   }
 
