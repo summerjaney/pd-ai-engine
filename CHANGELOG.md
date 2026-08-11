@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- 启动 v0.9.0 正式文档与交付包迭代，新增统一 Document DSL、标准模板元数据、渲染器接口及文档导出清单。
+- 新增 `pae document export <需求目录> --format docx|pdf|all` 命令骨架。
+
+## [0.8.0] - 2026-08-11
+
+### Added
+
+- 新增产品手册、操作手册、手册追踪矩阵、需求变更影响分析和增量更新。
+- 新增手册一致性检查、完整交付清单、文件哈希与正式验收报告。
+
+### Validation
+
+- 自动化测试：186/186 通过；TypeScript 构建与检查通过。
+- 基础平台组织结构管理真实需求、MasterGo 画布验收及最终交付检查均通过。
+
 ## [0.7.0] - 2026-08-10
 
 ### Added

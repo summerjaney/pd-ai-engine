@@ -20,6 +20,8 @@ import { verifyMasterGoCanvas } from "./integrations/mastergo/verification.js";
 import { generateAcceptanceReport, runDeliveryCheck } from "./planning/delivery-check.js";
 import { generateManualDelivery, runManualCheck, updateManualDelivery } from "./manual/service.js";
 import { packageDelivery } from "./delivery/package.js";
+import { prepareDocumentExport } from "./document/service.js";
+import type { DocumentFormat } from "./document/types.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -32,6 +34,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae prototype verify <需求目录> --pass --evidence <证据说明>
   pae delivery check <需求目录>
   pae delivery package <需求目录>
+  pae document export <需求目录> --format docx|pdf|all
   pae manual generate <需求目录>
   pae manual check <需求目录>
   pae manual update <需求目录>
@@ -99,7 +102,7 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
-  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page",
+  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -199,6 +202,19 @@ async function main(): Promise<void> {
     console.log(`MasterGo 写入：${output.report.checks.masterGoSubmission}`);
     console.log(`检查报告：${output.markdownPath}`);
     if (!output.report.valid) process.exitCode = 1;
+    return;
+  }
+
+  const isDocumentExport = args[0] === "document" && args[1] === "export" && Boolean(args[2]);
+  if (isDocumentExport) {
+    validateArgs(args);
+    const format = option(args, "--format") ?? "all";
+    if (!['docx', 'pdf', 'all'].includes(format)) throw new Error("--format 仅支持 docx、pdf 或 all。");
+    const formats: DocumentFormat[] = format === "all" ? ["docx", "pdf"] : [format as DocumentFormat];
+    const output = await prepareDocumentExport(path.resolve(args[2]), formats);
+    console.log(`正式文档导出计划：${output.manifest.status}`);
+    console.log(`Document DSL：${output.documentModelPath}`);
+    console.log(`导出清单：${output.manifestPath}`);
     return;
   }
 
