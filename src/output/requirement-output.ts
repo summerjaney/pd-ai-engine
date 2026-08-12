@@ -5,6 +5,7 @@ import type { RequirementContext, RequirementInput } from "../domain/types.js";
 export interface RequirementOutputOptions extends Omit<RequirementContext, "revision"> {
   outputRoot: string;
   revision?: number;
+  resume?: boolean;
 }
 
 function safeSegment(value: string, field: string): string {
@@ -138,6 +139,10 @@ export async function prepareRequirementOutput(
   // 1. 首次生成默认 revision = 1
   // 2. 用户传入 revision 时，不得小于现有 revision（防止版本倒退）
   // 3. 未传入且需求已存在时，自动递增
+  let sameInput = false;
+  if (options.resume && existingRevision > 0) {
+    try { sameInput = (await readFile(path.join(requirementDirectory, "00-requirement-input.md"), "utf8")) === input.content; } catch {}
+  }
   let revision: number;
   if (options.revision !== undefined) {
     if (!Number.isInteger(options.revision) || options.revision < 1) {
@@ -147,6 +152,8 @@ export async function prepareRequirementOutput(
       throw new Error(`revision 必须大于当前版本 (${existingRevision})。`);
     }
     revision = options.revision;
+  } else if (sameInput) {
+    revision = existingRevision;
   } else {
     revision = existingRevision > 0 ? existingRevision + 1 : 1;
   }
@@ -161,7 +168,7 @@ export async function prepareRequirementOutput(
   };
 
   // 重跑前保存上一 revision 的完整设计包，避免成果物和知识追踪被覆盖。
-  if (existingRevision > 0) {
+  if (existingRevision > 0 && !sameInput) {
     const archiveDirectory = path.join(requirementDirectory, "revisions", `revision-${existingRevision}`);
     await mkdir(archiveDirectory, { recursive: true });
     const entries = await readdir(requirementDirectory);

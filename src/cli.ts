@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -24,11 +25,15 @@ import { prepareDocumentExport } from "./document/service.js";
 import { buildFormalDelivery } from "./delivery/formal-package.js";
 import { validateFormalDelivery } from "./delivery/formal-validator.js";
 import type { DocumentFormat } from "./document/types.js";
+import { loadPaeConfig } from "./config/loader.js";
+import { diagnosePae } from "./diagnostics/doctor.js";
+import { runReleaseQualityGate } from "./delivery/quality-gate.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
 用法：
   pae requirement create <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
+  pae deliver <需求文件> --project <项目标识> --id <需求编号> --name <需求标识> [选项]
   pae run <需求文件> [--out <输出目录>] [选项]
   pae prototype push <需求目录> --dry-run
   pae prototype push <需求目录> --write --confirm-write
@@ -44,10 +49,14 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae acceptance report <需求目录>
   pae mastergo doctor
   pae mastergo tools [--json <文件>]
+  pae config show
+  pae doctor
+  pae validate <需求目录> --level release
   pae --help
 
 示例：
   pae requirement create examples/b2b-requirement.md --project hr-system --id REQ-001 --name leave-request
+  pae deliver examples/b2b-requirement.md --project hr-system --id REQ-001 --name leave-request
   pae run examples/b2b-requirement.md --out output/legacy-example --project hr-system --id REQ-001 --name leave-request
   pae prototype push output/hr-system/requirements/REQ-001-leave-request --dry-run
   pae mastergo doctor
@@ -105,11 +114,11 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
-  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format",
+  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level",
 ]);
 
 function validateArgs(args: string[]): void {
-  const positionalArgs = ["requirement", "create", "run"];
+  const positionalArgs = ["requirement", "create", "deliver", "run"];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg.startsWith("--") || arg.startsWith("-")) {
@@ -139,6 +148,31 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     console.log(await buildHelp());
+    return;
+  }
+
+  if (args[0] === "config" && args[1] === "show" && args.length === 2) {
+    const loaded = await loadPaeConfig();
+    console.log(`PAE 配置：${loaded.path ?? "系统默认值"}`);
+    console.log(JSON.stringify(loaded.config, null, 2));
+    return;
+  }
+
+  if (args[0] === "doctor" && args.length === 1) {
+    const report = await diagnosePae();
+    console.log(`PAE 环境诊断：${report.status}`);
+    for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
+    if (report.status === "NOT_READY") process.exitCode = 1;
+    return;
+  }
+
+  if (args[0] === "validate" && Boolean(args[1])) {
+    validateArgs(args);
+    if ((option(args, "--level") ?? "release") !== "release") throw new Error("--level 当前仅支持 release。");
+    const output = await runReleaseQualityGate(path.resolve(args[1]));
+    console.log(`Release 质量门禁：${output.report.status}`);
+    console.log(`质量报告：${output.markdownPath}`);
+    if (output.report.status !== "PASS") process.exitCode = 1;
     return;
   }
 
@@ -314,8 +348,9 @@ async function main(): Promise<void> {
   }
 
   const isRequirementCreate = args[0] === "requirement" && args[1] === "create" && Boolean(args[2]);
+  const isDeliver = args[0] === "deliver" && Boolean(args[1]);
   const isLegacyRun = args[0] === "run" && Boolean(args[1]);
-  if (!isRequirementCreate && !isLegacyRun) throw new Error(`命令格式错误。\n\n${await buildHelp()}`);
+  if (!isRequirementCreate && !isDeliver && !isLegacyRun) throw new Error(`命令格式错误。\n\n${await buildHelp()}`);
   const sourceArgument = isRequirementCreate ? args[2] : args[1];
   const sourcePath = path.resolve(sourceArgument);
   const content = await readFile(sourcePath, "utf8");
@@ -325,14 +360,15 @@ async function main(): Promise<void> {
   validateArgs(args);
 
   const input = { sourcePath: storedSourcePath, content, title: getTitle(content, sourcePath) };
-  const knowledgeMode = option(args, "--knowledge-mode") ?? "auto";
+  const paeConfig = (await loadPaeConfig()).config;
+  const knowledgeMode = option(args, "--knowledge-mode") ?? paeConfig.knowledge?.mode ?? "auto";
   if (knowledgeMode !== "auto" && knowledgeMode !== "off") {
     throw new Error("--knowledge-mode 仅支持 auto 或 off。");
   }
 
   const llmConfig = loadLlmConfig(process.env, {
-    provider: option(args, "--provider"),
-    model: option(args, "--model"),
+    provider: option(args, "--provider") ?? paeConfig.llm?.provider,
+    model: option(args, "--model") ?? paeConfig.llm?.model,
   });
   const fallbackExecutor = new MockStageExecutor();
   const provider = llmConfig.provider === "openai"
@@ -351,8 +387,8 @@ async function main(): Promise<void> {
   ));
   let outputDirectory: string;
   let context;
-  if (isRequirementCreate) {
-    const projectId = option(args, "--project");
+  if (isRequirementCreate || isDeliver) {
+    const projectId = option(args, "--project") ?? paeConfig.project?.id;
     const requirementId = option(args, "--id");
     const requirementName = option(args, "--name");
     if (!projectId || !requirementId || !requirementName) throw new Error(`缺少 --project、--id 或 --name。\n\n${await buildHelp()}`);
@@ -364,14 +400,15 @@ async function main(): Promise<void> {
     const prepared = await prepareRequirementOutput({
       outputRoot: option(args, "--output-root") ?? "output",
       projectId,
-      projectName: option(args, "--project-name") ?? projectId,
-      productVersion: option(args, "--product-version") ?? "0.1.0",
+      projectName: option(args, "--project-name") ?? paeConfig.project?.name ?? projectId,
+      productVersion: option(args, "--product-version") ?? paeConfig.project?.productVersion ?? "0.1.0",
       requirementId,
       requirementName,
       revision,
+      resume: args.includes("--resume") || paeConfig.execution?.resume,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries });
   } else {
     const outputPath = option(args, "--out") ?? "output/latest";
     const resolvedOutput = path.resolve(outputPath);
@@ -398,7 +435,7 @@ async function main(): Promise<void> {
       revision: option(args, "--revision") !== undefined ? Number(option(args, "--revision")) : undefined,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries });
   }
 
   const failedStages = context.stageResults?.filter(s => s.status === "failed") || [];
@@ -412,12 +449,34 @@ async function main(): Promise<void> {
     console.log(`PAE 已完成 10 个阶段。`);
     console.log(`Run ID: ${context.runId}`);
     console.log(`需求设计包: ${outputDirectory}`);
+    if (isDeliver) {
+      console.log("正在生成产品手册与操作手册……");
+      await generateManualDelivery(outputDirectory);
+      const manualCheck = await runManualCheck(outputDirectory);
+      if (!manualCheck.report.valid) throw new Error(`手册一致性检查失败：${manualCheck.markdownPath}`);
+      const delivery = await buildFormalDelivery(outputDirectory);
+      const qualityGate = await runReleaseQualityGate(outputDirectory);
+      if (qualityGate.report.status !== "PASS") throw new Error(`Release 质量门禁失败：${qualityGate.markdownPath}`);
+      console.log("PAE 正式交付：PASS");
+      console.log(`正式交付包: ${delivery.zipPath}`);
+      console.log(`严格检查: ${delivery.validationReportPath}`);
+      console.log(`交付总览: ${qualityGate.summaryPath}`);
+    }
   }
 }
 
-const isMainModule = import.meta.url.startsWith("file:")
-  && (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)
-    || path.basename(process.argv[1] ?? "") === path.basename(fileURLToPath(import.meta.url)));
+export function isCliEntry(argvPath: string | undefined, moduleUrl: string): boolean {
+  if (!argvPath || !moduleUrl.startsWith("file:")) return false;
+  const modulePath = fileURLToPath(moduleUrl);
+  try {
+    return realpathSync(argvPath) === realpathSync(modulePath);
+  } catch {
+    return path.resolve(argvPath) === modulePath
+      || path.basename(argvPath) === path.basename(modulePath);
+  }
+}
+
+const isMainModule = isCliEntry(process.argv[1], import.meta.url);
 
 if (isMainModule) {
   main().catch((error: unknown) => {

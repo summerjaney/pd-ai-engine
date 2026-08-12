@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "project": {
+    "id": "base-platform",
+    "name": "基础平台",
+    "productVersion": "3.0.0"
+  },
+  "llm": {
+    "provider": "mock"
+  },
+  "knowledge": {
+    "mode": "auto"
+  },
+  "mastergo": {
+    "enabled": true,
+    "write": false
+  },
+  "delivery": {
+    "formats": ["docx", "pdf"],
+    "qualityGate": "standard"
+  },
+  "execution": {
+    "retries": 0,
+    "resume": false
+  }
+}

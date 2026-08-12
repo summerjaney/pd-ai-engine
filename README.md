@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v0.9.0`。PAE 已支持统一 Document DSL、Word/PDF 正式文档导出、严格一致性检查和可归档 ZIP 交付包。
+当前版本为 `v1.0.0`。PAE 已形成“一个需求、一个命令、一个正式交付包”的稳定闭环，支持断点续跑、环境诊断、Release 质量门禁和可追踪验收。
 
 ## 成果物组织模型
 
@@ -67,6 +67,32 @@ npm run example
 ```
 
 产物位于 `output/example-product/requirements/REQ-001-leave-request/`。
+
+### 一键正式交付（v1.0.0）
+
+`deliver` 会依次完成 10 阶段产品设计、产品手册与操作手册生成、手册一致性检查、DOCX/PDF 导出、正式 ZIP 打包和严格一致性校验：
+
+```bash
+npm run dev -- deliver path/to/requirement.md \
+  --project hr-management-system \
+  --project-name 人力资源管理系统 \
+  --id REQ-003 \
+  --name employee-entry \
+  --product-version 1.2.0
+```
+
+执行成功时终端输出 `PAE 正式交付：PASS`，正式交付包位于需求目录的 `12-delivery/formal-delivery-package.zip`。任一生成步骤或质量门禁失败都会阻止正式交付并返回非零退出码。
+
+中断后可追加 `--resume` 继续执行。PAE 会校验需求内容 SHA-256，仅复用同一输入下已经成功的阶段；输入变化时自动将旧成果视为失效并完整重建。`pae.config.json` 的 `execution.retries` 可设置阶段失败后的自动重试次数。
+
+交付前可检查本机环境，交付完成后可独立复跑 Release 级质量门禁：
+
+```bash
+npm run dev -- doctor
+npm run dev -- validate output/<project>/requirements/<requirement> --level release
+```
+
+环境诊断覆盖 Node.js、PAE 配置、输出权限、LLM、Git 和 GitHub CLI。Release 门禁统一核对端到端运行状态、追踪完整性、DOCX/PDF 文件签名、SHA-256、元数据与内容安全，并在 `12-delivery/` 生成质量报告、正式验收报告、追踪矩阵和 `delivery-summary.md`。
 
 也可以使用自己的需求文件：
 

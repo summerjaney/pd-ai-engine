@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { STAGE_IDS, type DeliveryConsistencyReport, type KnowledgeMode, type MasterGoData, type MasterGoResult, type PrototypeDsl, type RequirementContext, type StageExecutor, type StageId, type StageResult, type WorkflowContext } from "../domain/types.js";
 import { readEngineVersion } from "../version.js";
@@ -18,6 +18,7 @@ import { renderDesignConsistencyReport, validateDesignConsistency } from "../pla
 import { renderInteractionConsistencyReport, validateInteractionConsistency } from "../planning/interaction-consistency-validator.js";
 import { buildPrdTraceabilityReport, renderPrdTraceabilityReport } from "../planning/prd-traceability.js";
 import { renderDeliveryConsistencyReport, validateDeliveryConsistency } from "../planning/delivery-consistency-validator.js";
+import { RunStateRecorder, type RunState } from "../execution/run-state.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -48,6 +49,8 @@ const MANAGED_OUTPUT_PATHS = [
   "10-review.md",
   "99-debug",
   "manifest.json",
+  "run.json",
+  "run-events.jsonl",
 ] as const;
 
 async function collectDebugArtifacts(outputDirectory: string): Promise<string[]> {
@@ -71,7 +74,7 @@ export class ProductDesignWorkflow {
     private readonly complianceValidator = new KnowledgeComplianceValidator(),
   ) {}
 
-  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode } = {}): Promise<WorkflowContext> {
+  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number } = {}): Promise<WorkflowContext> {
     this.validateInput(input);
     
     const context: WorkflowContext = {
@@ -100,9 +103,31 @@ export class ProductDesignWorkflow {
     };
 
     await mkdir(outputDirectory, { recursive: true });
-    await Promise.all(MANAGED_OUTPUT_PATHS.map((target) =>
-      rm(path.join(outputDirectory, target), { recursive: true, force: true })
-    ));
+    const inputHash = createHash("sha256").update(input.content).digest("hex");
+    let previousRun: RunState | undefined;
+    if (options.resume) {
+      try { previousRun = JSON.parse(await readFile(path.join(outputDirectory, "run.json"), "utf8")) as RunState; } catch {}
+    }
+    const canResume = previousRun?.inputHash === inputHash;
+    if (!canResume) {
+      await Promise.all(MANAGED_OUTPUT_PATHS.map((target) =>
+        rm(path.join(outputDirectory, target), { recursive: true, force: true })
+      ));
+    }
+
+    const engineVersion = await readEngineVersion();
+    const runState: RunState = {
+      schemaVersion: "1.0",
+      runId: context.runId,
+      engineVersion,
+      status: "PENDING",
+      startedAt: context.startedAt,
+      inputHash,
+      resumedFromRunId: canResume ? previousRun?.runId : undefined,
+      stages: STAGE_IDS.map((id) => ({ id, status: "PENDING", attempts: 0 })),
+    };
+    const recorder = new RunStateRecorder(outputDirectory, runState);
+    await recorder.start();
 
     const stages: Array<{
       id: StageId;
@@ -115,16 +140,53 @@ export class ProductDesignWorkflow {
     let hasFailed = false;
     let deliveryConsistency: DeliveryConsistencyReport | undefined;
 
-    for (const stage of STAGE_IDS) {
+    const resumeUntil = canResume ? previousRun!.stages.findIndex((stage) => !["SUCCEEDED", "SKIPPED"].includes(stage.status)) : 0;
+    const reusableCount = resumeUntil < 0 ? STAGE_IDS.length : resumeUntil;
+
+    const loadArtifact = async (stage: StageId): Promise<unknown> => {
+      if (stage === "prototype") return JSON.parse(await readFile(path.join(outputDirectory, "06-prototype/prototype.json"), "utf8"));
+      if (stage === "mastergo") {
+        const data = JSON.parse(await readFile(path.join(outputDirectory, "07-mastergo/mastergo-data.json"), "utf8"));
+        let result: unknown; try { result = JSON.parse(await readFile(path.join(outputDirectory, "07-mastergo/mastergo-result.json"), "utf8")); } catch {}
+        return { data, result };
+      }
+      const raw = await readFile(path.join(outputDirectory, OUTPUT_FILES[stage]), "utf8");
+      return stage === "prototype-confirmation" ? JSON.parse(raw) : raw;
+    };
+
+    for (const [stageIndex, stage] of STAGE_IDS.entries()) {
       if (hasFailed) {
         stages.push({ id: stage, status: "skipped" });
         context.stageResults!.push({ id: stage, status: "skipped" });
+        await recorder.stageFinished(stage, "SKIPPED");
         continue;
       }
 
+      if (stageIndex < reusableCount) {
+        context.artifacts[stage] = await loadArtifact(stage) as never;
+        stages.push({ id: stage, status: "skipped", file: OUTPUT_FILES[stage] });
+        context.stageResults!.push({ id: stage, status: "skipped", file: OUTPUT_FILES[stage] });
+        await recorder.stageFinished(stage, "SKIPPED");
+        continue;
+      }
+
+      await recorder.stageStarted(stage);
+
       let result;
       try {
-        result = await this.executor.execute(stage, context);
+        const maxAttempts = Math.max(1, (options.retries ?? 0) + 1);
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            result = await this.executor.execute(stage, context);
+            runState.stages.find((item) => item.id === stage)!.attempts = attempt;
+            break;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (attempt >= maxAttempts) throw error;
+            await recorder.stageRetried(stage, attempt + 1, message);
+          }
+        }
+        if (!result) throw new Error(`阶段 ${stage} 未返回结果`);
         if (stage === "prototype") {
           const compliance = this.complianceValidator.validatePrototype(
             result.artifact as PrototypeDsl,
@@ -158,6 +220,7 @@ export class ProductDesignWorkflow {
         const errorMessage = error instanceof Error ? error.message : String(error);
         stages.push({ id: stage, status: "failed", error: errorMessage });
         context.stageResults!.push({ id: stage, status: "failed", error: errorMessage });
+        await recorder.stageFinished(stage, "FAILED", errorMessage);
         hasFailed = true;
         continue;
       }
@@ -215,6 +278,7 @@ export class ProductDesignWorkflow {
             generation: result.generationMetadata,
           });
           context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
+          await recorder.stageFinished(stage, "SUCCEEDED");
           continue;
         }
 
@@ -236,6 +300,7 @@ export class ProductDesignWorkflow {
             generation: result.generationMetadata,
           });
           context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
+          await recorder.stageFinished(stage, "SUCCEEDED");
           continue;
         }
 
@@ -267,17 +332,19 @@ export class ProductDesignWorkflow {
           generation: result.generationMetadata,
         });
         context.stageResults!.push({ id: stage, status: "completed", file, warnings: result.warnings });
+        await recorder.stageFinished(stage, "SUCCEEDED");
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         stages.push({ id: stage, status: "failed", file, error: errorMessage });
         context.stageResults!.push({ id: stage, status: "failed", file, error: errorMessage });
+        await recorder.stageFinished(stage, "FAILED", errorMessage);
         hasFailed = true;
       }
     }
 
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
-      version: await readEngineVersion(),
+      version: engineVersion,
       runId: context.runId,
       startedAt: context.startedAt,
       finishedAt: new Date().toISOString(),
@@ -342,6 +409,7 @@ export class ProductDesignWorkflow {
     }, null, 2);
 
     await writeFile(path.join(outputDirectory, "manifest.json"), `${manifestContent}\n`, "utf8");
+    await recorder.finish(hasFailed ? "FAILED" : "SUCCEEDED");
 
     if (hasFailed) {
       throw new Error("工作流执行失败，部分阶段未能完成");
