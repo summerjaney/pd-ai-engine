@@ -28,6 +28,7 @@ import type { DocumentFormat } from "./document/types.js";
 import { loadPaeConfig } from "./config/loader.js";
 import { diagnosePae } from "./diagnostics/doctor.js";
 import { runReleaseQualityGate } from "./delivery/quality-gate.js";
+import { establishInitialProductBaseline } from "./product-baseline/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -446,6 +447,13 @@ async function main(): Promise<void> {
     console.log(`需求设计包: ${outputDirectory}`);
     process.exitCode = 1;
   } else {
+    if (context.requirement) {
+      const projectDirectory = path.dirname(path.dirname(outputDirectory));
+      const baseline = await establishInitialProductBaseline(projectDirectory, outputDirectory, context.requirement);
+      console.log(baseline.created
+        ? `产品基线已建立：${path.join(projectDirectory, "product", "product-baseline.json")}`
+        : `产品基线已保护：普通运行未覆盖现有基线 #${baseline.baseline.baseline.sequence}`);
+    }
     console.log(`PAE 已完成 10 个阶段。`);
     console.log(`Run ID: ${context.runId}`);
     console.log(`需求设计包: ${outputDirectory}`);

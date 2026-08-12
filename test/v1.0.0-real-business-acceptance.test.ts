@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
+import { readEngineVersion } from "../src/version.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -50,6 +51,6 @@ test("TC-100-015: 流程审批类真实需求可完成 v1.0.0 正式交付", asy
     status: string;
   };
   assert.equal(gate.status, "PASS");
-  assert.equal(run.engineVersion, "1.0.0");
+  assert.equal(run.engineVersion, await readEngineVersion());
   assert.equal(run.status, "SUCCEEDED");
 });
