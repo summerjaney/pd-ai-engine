@@ -1,14 +1,25 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
+import { isCliEntry } from "../src/cli.js";
 import { loadPaeConfig } from "../src/config/loader.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import type { StageExecutor } from "../src/domain/types.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 
 const input = { sourcePath: "requirement.md", title: "组织结构管理", content: "# 组织结构管理\n\n支持维护组织上下级关系。" };
+
+test("TC-100-016: npm bin 符号链接可识别为 CLI 主入口", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-v100-bin-"));
+  const target = path.join(root, "cli.js");
+  const bin = path.join(root, "pae");
+  await writeFile(target, "#!/usr/bin/env node\n", "utf8");
+  await symlink(target, bin);
+  assert.equal(isCliEntry(bin, pathToFileURL(target).href), true);
+});
 
 test("TC-100-001: 缺少项目配置时加载安全默认值", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pae-v100-config-default-"));

@@ -124,14 +124,15 @@ test("TC-090-004: DOCX 可嵌入本地 PNG 图片", async () => {
 });
 
 test("TC-090-011: 发布版本与正式交付契约保持一致", async () => {
-  assert.equal(await readEngineVersion(), "0.9.0");
+  const engineVersion = await readEngineVersion();
+  assert.equal(engineVersion, "1.0.0");
   const root = await mkdtemp(path.join(os.tmpdir(), "pae-v090-release-"));
   await completeRequirement(root, "REQ-090-011");
   const output = await buildFormalDelivery(root);
   const documentModel = JSON.parse(await readFile(path.join(output.directory, "documents", "document-model.json"), "utf8")) as { schemaVersion: string; metadata: { engineVersion: string } };
   const formalManifest = JSON.parse(await readFile(path.join(output.directory, "formal-package-manifest.json"), "utf8")) as { schemaVersion: string; documents: unknown[] };
   assert.equal(documentModel.schemaVersion, "0.9");
-  assert.equal(documentModel.metadata.engineVersion, "0.9.0");
+  assert.equal(documentModel.metadata.engineVersion, engineVersion);
   assert.equal(formalManifest.schemaVersion, "0.9");
   assert.equal(formalManifest.documents.length, 2);
 });

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -464,9 +465,18 @@ async function main(): Promise<void> {
   }
 }
 
-const isMainModule = import.meta.url.startsWith("file:")
-  && (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)
-    || path.basename(process.argv[1] ?? "") === path.basename(fileURLToPath(import.meta.url)));
+export function isCliEntry(argvPath: string | undefined, moduleUrl: string): boolean {
+  if (!argvPath || !moduleUrl.startsWith("file:")) return false;
+  const modulePath = fileURLToPath(moduleUrl);
+  try {
+    return realpathSync(argvPath) === realpathSync(modulePath);
+  } catch {
+    return path.resolve(argvPath) === modulePath
+      || path.basename(argvPath) === path.basename(modulePath);
+  }
+}
+
+const isMainModule = isCliEntry(process.argv[1], import.meta.url);
 
 if (isMainModule) {
   main().catch((error: unknown) => {
