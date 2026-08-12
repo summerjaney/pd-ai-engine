@@ -19,6 +19,7 @@ import { renderInteractionConsistencyReport, validateInteractionConsistency } fr
 import { buildPrdTraceabilityReport, renderPrdTraceabilityReport } from "../planning/prd-traceability.js";
 import { renderDeliveryConsistencyReport, validateDeliveryConsistency } from "../planning/delivery-consistency-validator.js";
 import { RunStateRecorder, type RunState } from "../execution/run-state.js";
+import { loadRelevantProductContext } from "../product-context/service.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -101,6 +102,14 @@ export class ProductDesignWorkflow {
         } : undefined,
       }),
     };
+    if (requirement) {
+      const projectDirectory = path.dirname(path.dirname(outputDirectory));
+      context.productContext = await loadRelevantProductContext(projectDirectory, input);
+      if (context.productContext) {
+        context.productContext.query.requirementId = requirement.requirementId;
+        context.productContext.query.requirementRevision = requirement.revision;
+      }
+    }
 
     await mkdir(outputDirectory, { recursive: true });
     const inputHash = createHash("sha256").update(input.content).digest("hex");
@@ -357,6 +366,13 @@ export class ProductDesignWorkflow {
         selectedKnowledge: context.knowledge.selection.selectedKnowledge,
         compliance: context.knowledgeCompliance,
       },
+      productContext: context.productContext ? {
+        schemaVersion: context.productContext.schemaVersion,
+        baseline: context.productContext.baseline,
+        query: context.productContext.query,
+        selected: context.productContext.selected,
+        omittedCount: context.productContext.omittedCount,
+      } : undefined,
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {
           return { id: stage.id, status: "skipped" };

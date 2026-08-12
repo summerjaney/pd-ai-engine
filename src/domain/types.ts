@@ -345,6 +345,7 @@ export interface WorkflowContext {
   outputDirectory?: string;
   knowledge?: import("../knowledge/types.js").WorkflowKnowledgeContext;
   knowledgeCompliance?: import("../knowledge/compliance-validator.js").KnowledgeComplianceResult;
+  productContext?: import("../product-context/types.js").ProductContextSelection;
 }
 
 export type KnowledgeMode = "auto" | "off";

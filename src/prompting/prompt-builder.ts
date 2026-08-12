@@ -146,6 +146,7 @@ export class PromptBuilder {
 
     const schemaBlock = stage === "prototype" ? PROTOTYPE_DSL_SCHEMA : "";
     const knowledgeBlock = this.buildKnowledgeBlock(stage, context);
+    const productContextBlock = this.buildProductContextBlock(context);
     const prototypeKnowledgeChecklist = stage === "prototype"
       ? this.buildPrototypeKnowledgeChecklist(context)
       : "";
@@ -163,11 +164,26 @@ export class PromptBuilder {
         "# 原始需求",
         context.input.content.trim(),
         previousArtifacts ? `# 前序成果物\n${previousArtifacts}` : "",
+        productContextBlock,
         knowledgeBlock,
         prototypeKnowledgeChecklist,
         schemaBlock,
       ].filter(Boolean).join("\n\n"),
     };
+  }
+
+  private buildProductContextBlock(context: Readonly<WorkflowContext>): string {
+    const productContext = context.productContext;
+    if (!productContext) return "";
+    const items = productContext.selected.map((item) =>
+      `- [${item.kind}] ${item.id}｜${item.name}${item.parentId ? `｜所属 ${item.parentId}` : ""}｜来源 ${item.source.requirementId} r${item.source.requirementRevision}`
+    );
+    return [
+      `# 已确认产品上下文（基线 #${productContext.baseline.sequence}）`,
+      `产品版本：${productContext.baseline.productVersion}`,
+      "以下内容来自已接受产品基线，只能作为现状事实使用；不得无依据地重命名、删除或覆盖。没有列出的历史内容不得推断为不存在。",
+      items.length ? items.join("\n") : "本次需求未匹配到相关历史业务项。",
+    ].join("\n");
   }
 
   prototypeSchemaConstraints(): string {
