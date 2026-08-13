@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pae.local/schemas/v1.2/extension.schema.json",
+  "title": "PAE Extension Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "type", "version", "compatibleWith", "provides"],
+  "properties": {
+    "schemaVersion": { "const": "1.2" },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "type": { "enum": ["domain", "product", "workflow", "deliverable", "adapter"] },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$" },
+    "description": { "type": "string" },
+    "compatibleWith": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pae"],
+      "properties": { "pae": { "type": "string", "minLength": 1 } }
+    },
+    "extends": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "provides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "knowledge": { "$ref": "#/$defs/paths" },
+        "rules": { "$ref": "#/$defs/paths" },
+        "patterns": { "$ref": "#/$defs/paths" },
+        "workflows": { "$ref": "#/$defs/paths" },
+        "templates": { "$ref": "#/$defs/paths" },
+        "terminology": { "$ref": "#/$defs/paths" }
+      }
+    }
+  },
+  "$defs": {
+    "paths": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+  }
+}

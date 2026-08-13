@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.2",
+  "id": "lowcode-platform",
+  "name": "低代码平台领域扩展",
+  "type": "domain",
+  "version": "1.0.0",
+  "description": "低代码平台产品设计的领域对象、边界规则、页面模式和工作流。",
+  "compatibleWith": { "pae": ">=1.2.0 <2.0.0" },
+  "provides": {
+    "knowledge": ["knowledge/domain-model.json"],
+    "rules": ["rules/platform-boundary.json", "rules/model-form-relationship.json", "rules/lifecycle-compatibility.json"],
+    "patterns": ["patterns/designer-page.json"],
+    "workflows": ["workflows/platform-feature-iteration.json"],
+    "terminology": ["terminology/glossary.json"]
+  }
+}

@@ -29,6 +29,7 @@ import { loadPaeConfig } from "./config/loader.js";
 import { diagnosePae } from "./diagnostics/doctor.js";
 import { runReleaseQualityGate } from "./delivery/quality-gate.js";
 import { acceptProductBaseline, establishInitialProductBaseline, loadProductBaseline } from "./product-baseline/service.js";
+import { composeExtensionContext, loadExtension } from "./extensions/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -55,6 +56,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae validate <需求目录> --level release
   pae product status --project-dir <项目目录>
   pae product accept <需求目录>
+  pae extension validate <扩展目录>
+  pae extension compose <扩展目录> [更多扩展目录...]
   pae --help
 
 示例：
@@ -166,6 +169,24 @@ async function main(): Promise<void> {
     console.log(`PAE 环境诊断：${report.status}`);
     for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
     if (report.status === "NOT_READY") process.exitCode = 1;
+    return;
+  }
+
+  if (args[0] === "extension" && args[1] === "validate" && Boolean(args[2])) {
+    const extension = await loadExtension(path.resolve(args[2]));
+    console.log(`扩展校验：PASS`);
+    console.log(`扩展：${extension.manifest.name}（${extension.manifest.id}@${extension.manifest.version}）`);
+    console.log(`类型：${extension.manifest.type}；资源：${extension.resources.length}`);
+    return;
+  }
+
+  if (args[0] === "extension" && args[1] === "compose" && args.length >= 3) {
+    const extensions = await Promise.all(args.slice(2).map((directory) => loadExtension(path.resolve(directory))));
+    const context = composeExtensionContext(extensions);
+    console.log(`扩展组合：PASS`);
+    console.log(`加载顺序：${context.extensions.map((item) => `${item.id}@${item.version}`).join(" → ")}`);
+    console.log(`有效资源：${context.resources.length}；显式冲突：${context.conflicts.length}`);
+    for (const conflict of context.conflicts) console.log(`[覆盖] ${conflict.resourceType}/${conflict.resourceId}：${conflict.previous.extensionId} → ${conflict.selected.extensionId}`);
     return;
   }
 

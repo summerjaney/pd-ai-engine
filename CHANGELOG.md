@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.0] - Unreleased
+
+### Added
+
+- 建立 PAE 扩展清单、发现、校验、依赖排序和上下文组合基础能力。
+- 支持领域与产品扩展对同名资源进行可追踪覆盖，禁止缺失及循环依赖。
+- 新增首个 `lowcode-platform` 领域扩展，包含领域对象、平台边界、模型与表单、生命周期、设计器模式及功能迭代工作流。
+- 新增 `pae extension validate` 与 `pae extension compose` 命令。
+
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]

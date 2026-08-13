@@ -1,0 +1,19 @@
+{
+  "id": "lowcode.platform-feature-iteration",
+  "name": "低代码平台功能迭代",
+  "stages": [
+    "requirement-standardization",
+    "current-capability-retrieval",
+    "platform-boundary-decision",
+    "product-solution",
+    "detailed-design-and-delivery",
+    "review-and-change",
+    "knowledge-feedback"
+  ],
+  "gates": [
+    "平台现状及来源已确认",
+    "平台化判断已经人工确认",
+    "原型与 PRD 一致",
+    "知识回流候选已经人工审核"
+  ]
+}
