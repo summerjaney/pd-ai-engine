@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v1.0.0`。PAE 已形成“一个需求、一个命令、一个正式交付包”的稳定闭环，支持断点续跑、环境诊断、Release 质量门禁和可追踪验收。
+当前开发版本为 `v1.1.0`。PAE 在 v1.0.0 单需求稳定交付基础上，新增产品上下文、变更影响分析和显式接受的产品增量演进闭环。
 
 ## 成果物组织模型
 
@@ -16,7 +16,10 @@ output/
     │   ├── product-overview.md
     │   ├── product-architecture.md
     │   ├── product-roadmap.md
-    │   └── requirement-index.md
+    │   ├── requirement-index.md
+    │   ├── change-log.md
+    │   ├── product-baseline.json
+    │   └── history/
     └── requirements/
         └── {requirement-id}-{requirement-name}/
             ├── requirement.json
@@ -30,6 +33,26 @@ output/
 - `requirements/` 保存每次需求迭代的完整上下文和成果物。
 - 同一项目下的不同需求使用独立目录，运行新需求不会覆盖旧需求。
 - PAE 引擎版本、产品版本、需求修订版本分别记录，不再共用一个版本字段。
+
+## 产品增量演进（v1.1.0）
+
+项目首次成功运行会建立带哈希和来源追踪的正式产品基线。后续需求自动加载相关历史事实，并在需求目录生成：
+
+- `11-change-impact/change-impact-report.json`：结构化变更、冲突和成果物影响。
+- `11-change-impact/change-impact-report.md`：面向评审的影响报告。
+- `11-change-impact/product-diff.json`：当前基线与本次设计的产品 Diff。
+
+普通运行只预览影响，不修改正式产品基线。确认需求成果和冲突处理后，显式接受：
+
+```bash
+npm run dev -- product accept output/<project>/requirements/<requirement>
+```
+
+接受操作会拒绝 `ERROR`、过期报告和重复修订，保存旧基线快照，递增基线序号，并更新产品概览、总体架构、路线图、需求索引和变更日志。查看当前产品状态：
+
+```bash
+npm run dev -- product status --project-dir output/<project>
+```
 
 ## MVP 工作流
 

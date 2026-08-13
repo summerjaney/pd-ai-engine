@@ -19,6 +19,9 @@ import { renderInteractionConsistencyReport, validateInteractionConsistency } fr
 import { buildPrdTraceabilityReport, renderPrdTraceabilityReport } from "../planning/prd-traceability.js";
 import { renderDeliveryConsistencyReport, validateDeliveryConsistency } from "../planning/delivery-consistency-validator.js";
 import { RunStateRecorder, type RunState } from "../execution/run-state.js";
+import { loadRelevantProductContext } from "../product-context/service.js";
+import { analyzeChangeImpact, renderChangeImpactReport } from "../change-impact/service.js";
+import { loadProductBaseline } from "../product-baseline/service.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -47,6 +50,7 @@ const MANAGED_OUTPUT_PATHS = [
   "09-prd.md",
   "09-validation",
   "10-review.md",
+  "11-change-impact",
   "99-debug",
   "manifest.json",
   "run.json",
@@ -101,6 +105,14 @@ export class ProductDesignWorkflow {
         } : undefined,
       }),
     };
+    if (requirement) {
+      const projectDirectory = path.dirname(path.dirname(outputDirectory));
+      context.productContext = await loadRelevantProductContext(projectDirectory, input);
+      if (context.productContext) {
+        context.productContext.query.requirementId = requirement.requirementId;
+        context.productContext.query.requirementRevision = requirement.revision;
+      }
+    }
 
     await mkdir(outputDirectory, { recursive: true });
     const inputHash = createHash("sha256").update(input.content).digest("hex");
@@ -342,6 +354,21 @@ export class ProductDesignWorkflow {
       }
     }
 
+    if (!hasFailed && requirement && context.artifacts.prototype) {
+      const projectDirectory = path.dirname(path.dirname(outputDirectory));
+      const baseline = await loadProductBaseline(projectDirectory);
+      if (baseline) {
+        context.changeImpact = analyzeChangeImpact(baseline, context.artifacts.prototype, input, requirement);
+        const impactDirectory = path.join(outputDirectory, "11-change-impact");
+        await mkdir(impactDirectory, { recursive: true });
+        await Promise.all([
+          writeFile(path.join(impactDirectory, "change-impact-report.json"), `${JSON.stringify(context.changeImpact, null, 2)}\n`, "utf8"),
+          writeFile(path.join(impactDirectory, "change-impact-report.md"), renderChangeImpactReport(context.changeImpact), "utf8"),
+          writeFile(path.join(impactDirectory, "product-diff.json"), `${JSON.stringify({ schemaVersion: "1.1", baseline: context.changeImpact.baseline, changes: context.changeImpact.changes }, null, 2)}\n`, "utf8"),
+        ]);
+      }
+    }
+
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
       version: engineVersion,
@@ -357,6 +384,14 @@ export class ProductDesignWorkflow {
         selectedKnowledge: context.knowledge.selection.selectedKnowledge,
         compliance: context.knowledgeCompliance,
       },
+      productContext: context.productContext ? {
+        schemaVersion: context.productContext.schemaVersion,
+        baseline: context.productContext.baseline,
+        query: context.productContext.query,
+        selected: context.productContext.selected,
+        omittedCount: context.productContext.omittedCount,
+      } : undefined,
+      changeImpact: context.changeImpact,
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {
           return { id: stage.id, status: "skipped" };
