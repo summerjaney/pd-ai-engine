@@ -81,3 +81,11 @@ export interface ProductBaselineValidationResult {
   valid: boolean;
   issues: ProductBaselineValidationIssue[];
 }
+
+export interface ProductBaselineAcceptanceResult {
+  previousSequence: number;
+  sequence: number;
+  baselinePath: string;
+  snapshotPath: string;
+  updatedArtifacts: string[];
+}

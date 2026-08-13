@@ -28,7 +28,7 @@ import type { DocumentFormat } from "./document/types.js";
 import { loadPaeConfig } from "./config/loader.js";
 import { diagnosePae } from "./diagnostics/doctor.js";
 import { runReleaseQualityGate } from "./delivery/quality-gate.js";
-import { establishInitialProductBaseline } from "./product-baseline/service.js";
+import { acceptProductBaseline, establishInitialProductBaseline, loadProductBaseline } from "./product-baseline/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -53,6 +53,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae config show
   pae doctor
   pae validate <需求目录> --level release
+  pae product status --project-dir <项目目录>
+  pae product accept <需求目录>
   pae --help
 
 示例：
@@ -115,7 +117,7 @@ const VALID_OPTIONS = new Set([
   "--project", "--project-name", "--id", "--name",
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
-  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level",
+  "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -164,6 +166,23 @@ async function main(): Promise<void> {
     console.log(`PAE 环境诊断：${report.status}`);
     for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
     if (report.status === "NOT_READY") process.exitCode = 1;
+    return;
+  }
+
+  if (args[0] === "product" && args[1] === "status") {
+    validateArgs(args);
+    const projectDirectory = option(args, "--project-dir");
+    if (!projectDirectory) throw new Error("product status 必须提供 --project-dir <项目目录>。");
+    const baseline = await loadProductBaseline(path.resolve(projectDirectory));
+    if (!baseline) throw new Error("项目尚未建立正式产品基线。");
+    console.log(`产品：${baseline.product.name}`); console.log(`产品版本：${baseline.product.version}`); console.log(`正式基线：#${baseline.baseline.sequence}`); console.log(`已接受需求：${baseline.requirements.length}`); console.log(`页面：${baseline.pages.length}；模块：${baseline.modules.length}；规则：${baseline.rules.length}`);
+    return;
+  }
+
+  if (args[0] === "product" && args[1] === "accept" && Boolean(args[2])) {
+    validateArgs(args);
+    const output = await acceptProductBaseline(path.resolve(args[2]));
+    console.log(`产品基线已接受：#${output.previousSequence} → #${output.sequence}`); console.log(`正式基线：${output.baselinePath}`); console.log(`历史快照：${output.snapshotPath}`); console.log(`更新成果：${output.updatedArtifacts.join("、")}`);
     return;
   }
 
