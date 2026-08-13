@@ -209,6 +209,39 @@ Component references Rule
 Rule constrains Component
 ```
 
+## 定制化扩展与产品工作空间（v1.2.0）
+
+PAE Core 保持领域无关。领域知识、具体产品规则和交付方式通过扩展组合，不再混入统一 Prompt。
+
+验证低代码领域扩展：
+
+```bash
+npm run build
+node dist/cli.js extension validate domains/lowcode-platform
+```
+
+验证脱敏的基础平台工作空间：
+
+```bash
+node dist/cli.js workspace validate examples/base-platform-workspace/pae.workspace.json
+```
+
+在项目的 `pae.config.json` 中启用：
+
+```json
+{
+  "schemaVersion": "1.0",
+  "extensions": {
+    "enabled": true,
+    "workspace": "path/to/private-base-platform/pae.workspace.json"
+  }
+}
+```
+
+执行需求时，PAE 会将领域扩展和产品扩展按依赖顺序组合，注入各设计阶段，并在需求 `manifest.json` 的 `extensionContext` 中记录扩展版本、资源来源和覆盖冲突。不配置扩展时保持 v1.1.0 通用行为。
+
+`examples/base-platform-workspace` 只用于展示目录和最小知识骨架，不应存放公司真实资料。真实基础平台工作空间建议使用独立私有仓库或私有目录。
+
 ## 当前边界
 
 MVP 暂不包含：多 Agent、插件市场、企业知识库、开放 API、自动开发与部署、多人协作。MasterGo MCP 已支持受控的真实画布写入，其他设计工具尚未接入。

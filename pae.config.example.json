@@ -11,6 +11,11 @@
   "knowledge": {
     "mode": "auto"
   },
+  "extensions": {
+    "enabled": true,
+    "workspace": "examples/base-platform-workspace/pae.workspace.json",
+    "directories": []
+  },
   "mastergo": {
     "enabled": true,
     "write": false

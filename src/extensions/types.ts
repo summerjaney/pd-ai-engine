@@ -60,3 +60,18 @@ export interface ComposedExtensionContext {
   resources: ExtensionResource[];
   conflicts: ExtensionConflict[];
 }
+
+export interface ExtensionWorkspace {
+  schemaVersion: typeof EXTENSION_SCHEMA_VERSION;
+  id: string;
+  name: string;
+  product: { name: string; version: string; description?: string };
+  extensionDirectories: string[];
+}
+
+export interface LoadedExtensionWorkspace {
+  path: string;
+  workspace: ExtensionWorkspace;
+  extensionDirectories: string[];
+  context: ComposedExtensionContext;
+}

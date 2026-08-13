@@ -1,0 +1,10 @@
+{
+  "id": "lowcode.model-form-relationship",
+  "name": "基础平台数据表与表单关系",
+  "statements": [
+    "必须先在数据表中新增字段并确定字段类型",
+    "表单设计器只能选择数据表中已经存在的字段",
+    "字段类型决定表单中的基础组件类型"
+  ],
+  "status": "confirmed-product-rule"
+}

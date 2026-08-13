@@ -147,6 +147,7 @@ export class PromptBuilder {
     const schemaBlock = stage === "prototype" ? PROTOTYPE_DSL_SCHEMA : "";
     const knowledgeBlock = this.buildKnowledgeBlock(stage, context);
     const productContextBlock = this.buildProductContextBlock(context);
+    const extensionContextBlock = this.buildExtensionContextBlock(context);
     const prototypeKnowledgeChecklist = stage === "prototype"
       ? this.buildPrototypeKnowledgeChecklist(context)
       : "";
@@ -165,6 +166,7 @@ export class PromptBuilder {
         context.input.content.trim(),
         previousArtifacts ? `# 前序成果物\n${previousArtifacts}` : "",
         productContextBlock,
+        extensionContextBlock,
         knowledgeBlock,
         prototypeKnowledgeChecklist,
         schemaBlock,
@@ -184,6 +186,27 @@ export class PromptBuilder {
       "以下内容来自已接受产品基线，只能作为现状事实使用；不得无依据地重命名、删除或覆盖。没有列出的历史内容不得推断为不存在。",
       items.length ? items.join("\n") : "本次需求未匹配到相关历史业务项。",
     ].join("\n");
+  }
+
+  private buildExtensionContextBlock(context: Readonly<WorkflowContext>): string {
+    const extensionContext = context.extensionContext;
+    if (!extensionContext) return "";
+    const extensions = extensionContext.extensions.map((item) => `${item.id}@${item.version}（${item.type}）`).join(" → ");
+    const resources = extensionContext.resources.map((resource) => {
+      const label = resource.id ?? resource.source.path;
+      const body = typeof resource.value === "string" ? resource.value.trim() : JSON.stringify(resource.value);
+      return `## [${resource.source.resourceType}] ${label}\n来源：${resource.source.extensionId}@${resource.source.extensionVersion}/${resource.source.path}\n${body}`;
+    });
+    const conflicts = extensionContext.conflicts.length
+      ? extensionContext.conflicts.map((item) => `- ${item.resourceType}/${item.resourceId}：采用 ${item.selected.extensionId}，覆盖 ${item.previous.extensionId}`).join("\n")
+      : "无资源覆盖冲突。";
+    return [
+      "# 已加载定制化扩展",
+      `加载顺序：${extensions}`,
+      "以下内容是当前领域和产品的设计约束。事实与规则必须保留来源；产品扩展覆盖领域默认值时，以冲突记录中的采用项为准。不得把推断写成已确认产品事实。",
+      `## 覆盖记录\n${conflicts}`,
+      ...resources,
+    ].join("\n\n");
   }
 
   prototypeSchemaConstraints(): string {

@@ -22,6 +22,7 @@ import { RunStateRecorder, type RunState } from "../execution/run-state.js";
 import { loadRelevantProductContext } from "../product-context/service.js";
 import { analyzeChangeImpact, renderChangeImpactReport } from "../change-impact/service.js";
 import { loadProductBaseline } from "../product-baseline/service.js";
+import { composeExtensionContext, loadExtension } from "../extensions/service.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -78,7 +79,7 @@ export class ProductDesignWorkflow {
     private readonly complianceValidator = new KnowledgeComplianceValidator(),
   ) {}
 
-  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number } = {}): Promise<WorkflowContext> {
+  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number; extensionDirectories?: string[] } = {}): Promise<WorkflowContext> {
     this.validateInput(input);
     
     const context: WorkflowContext = {
@@ -105,6 +106,10 @@ export class ProductDesignWorkflow {
         } : undefined,
       }),
     };
+    if (options.extensionDirectories?.length) {
+      const loadedExtensions = await Promise.all(options.extensionDirectories.map((directory) => loadExtension(path.resolve(directory))));
+      context.extensionContext = composeExtensionContext(loadedExtensions);
+    }
     if (requirement) {
       const projectDirectory = path.dirname(path.dirname(outputDirectory));
       context.productContext = await loadRelevantProductContext(projectDirectory, input);
@@ -391,6 +396,7 @@ export class ProductDesignWorkflow {
         selected: context.productContext.selected,
         omittedCount: context.productContext.omittedCount,
       } : undefined,
+      extensionContext: context.extensionContext,
       changeImpact: context.changeImpact,
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {

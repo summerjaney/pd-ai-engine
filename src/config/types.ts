@@ -16,6 +16,11 @@ export interface PaeConfig {
   knowledge?: {
     mode?: "auto" | "off";
   };
+  extensions?: {
+    enabled?: boolean;
+    workspace?: string;
+    directories?: string[];
+  };
   mastergo?: {
     enabled?: boolean;
     write?: boolean;

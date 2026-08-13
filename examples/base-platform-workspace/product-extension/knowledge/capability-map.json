@@ -1,0 +1,7 @@
+{
+  "id": "base-platform.capability-map",
+  "capabilities": [
+    { "id": "data-table-field", "name": "数据表字段定义", "module": "表单", "status": "available" },
+    { "id": "form-field-selection", "name": "表单选择已有字段", "module": "表单", "status": "available" }
+  ]
+}

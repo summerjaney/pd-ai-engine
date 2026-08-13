@@ -8,6 +8,8 @@
 - 支持领域与产品扩展对同名资源进行可追踪覆盖，禁止缺失及循环依赖。
 - 新增首个 `lowcode-platform` 领域扩展，包含领域对象、平台边界、模型与表单、生命周期、设计器模式及功能迭代工作流。
 - 新增 `pae extension validate` 与 `pae extension compose` 命令。
+- 支持通过 `pae.workspace.json` 组合领域扩展和具体产品扩展，并提供脱敏基础平台工作空间示例。
+- 扩展上下文已接入工作流、阶段 Prompt 与需求 manifest，可重现每次设计使用的规则及来源。
 
 All notable changes to this project will be documented in this file.
 

@@ -30,6 +30,7 @@ import { diagnosePae } from "./diagnostics/doctor.js";
 import { runReleaseQualityGate } from "./delivery/quality-gate.js";
 import { acceptProductBaseline, establishInitialProductBaseline, loadProductBaseline } from "./product-baseline/service.js";
 import { composeExtensionContext, loadExtension } from "./extensions/service.js";
+import { loadExtensionWorkspace } from "./extensions/workspace.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -58,6 +59,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae product accept <需求目录>
   pae extension validate <扩展目录>
   pae extension compose <扩展目录> [更多扩展目录...]
+  pae workspace validate <pae.workspace.json>
   pae --help
 
 示例：
@@ -187,6 +189,16 @@ async function main(): Promise<void> {
     console.log(`加载顺序：${context.extensions.map((item) => `${item.id}@${item.version}`).join(" → ")}`);
     console.log(`有效资源：${context.resources.length}；显式冲突：${context.conflicts.length}`);
     for (const conflict of context.conflicts) console.log(`[覆盖] ${conflict.resourceType}/${conflict.resourceId}：${conflict.previous.extensionId} → ${conflict.selected.extensionId}`);
+    return;
+  }
+
+  if (args[0] === "workspace" && args[1] === "validate" && Boolean(args[2])) {
+    const loaded = await loadExtensionWorkspace(args[2]);
+    console.log(`产品工作空间校验：PASS`);
+    console.log(`工作空间：${loaded.workspace.name}（${loaded.workspace.id}）`);
+    console.log(`产品：${loaded.workspace.product.name} ${loaded.workspace.product.version}`);
+    console.log(`扩展顺序：${loaded.context.extensions.map((item) => item.id).join(" → ")}`);
+    console.log(`有效资源：${loaded.context.resources.length}；显式冲突：${loaded.context.conflicts.length}`);
     return;
   }
 
@@ -406,6 +418,11 @@ async function main(): Promise<void> {
   if (knowledgeMode !== "auto" && knowledgeMode !== "off") {
     throw new Error("--knowledge-mode 仅支持 auto 或 off。");
   }
+  let extensionDirectories = paeConfig.extensions?.enabled ? paeConfig.extensions.directories ?? [] : [];
+  if (paeConfig.extensions?.enabled && paeConfig.extensions.workspace) {
+    const loadedWorkspace = await loadExtensionWorkspace(paeConfig.extensions.workspace);
+    extensionDirectories = [...loadedWorkspace.extensionDirectories, ...extensionDirectories];
+  }
 
   const llmConfig = loadLlmConfig(process.env, {
     provider: option(args, "--provider") ?? paeConfig.llm?.provider,
@@ -449,7 +466,7 @@ async function main(): Promise<void> {
       resume: args.includes("--resume") || paeConfig.execution?.resume,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories });
   } else {
     const outputPath = option(args, "--out") ?? "output/latest";
     const resolvedOutput = path.resolve(outputPath);
@@ -476,7 +493,7 @@ async function main(): Promise<void> {
       revision: option(args, "--revision") !== undefined ? Number(option(args, "--revision")) : undefined,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories });
   }
 
   const failedStages = context.stageResults?.filter(s => s.status === "failed") || [];
