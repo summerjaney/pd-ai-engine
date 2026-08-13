@@ -148,6 +148,7 @@ export class PromptBuilder {
     const knowledgeBlock = this.buildKnowledgeBlock(stage, context);
     const productContextBlock = this.buildProductContextBlock(context);
     const extensionContextBlock = this.buildExtensionContextBlock(context);
+    const platformAnalysisBlock = this.buildPlatformAnalysisBlock(context);
     const prototypeKnowledgeChecklist = stage === "prototype"
       ? this.buildPrototypeKnowledgeChecklist(context)
       : "";
@@ -167,6 +168,7 @@ export class PromptBuilder {
         previousArtifacts ? `# 前序成果物\n${previousArtifacts}` : "",
         productContextBlock,
         extensionContextBlock,
+        platformAnalysisBlock,
         knowledgeBlock,
         prototypeKnowledgeChecklist,
         schemaBlock,
@@ -207,6 +209,21 @@ export class PromptBuilder {
       `## 覆盖记录\n${conflicts}`,
       ...resources,
     ].join("\n\n");
+  }
+
+  private buildPlatformAnalysisBlock(context: Readonly<WorkflowContext>): string {
+    const report = context.platformAnalysis;
+    if (!report) return "";
+    const capabilities = report.currentState.matchedCapabilities.map((item) => `${item.name}${item.module ? `（${item.module}）` : ""}｜来源 ${item.source.extensionId}/${item.source.path}`);
+    return [
+      "# 低代码平台前置分析结果",
+      `涉及模块：${report.currentState.affectedModules.join("、") || "待识别"}`,
+      `匹配能力：${capabilities.join("；") || "未匹配到可确认的已有能力"}`,
+      `差异摘要：${report.gap.summary}`,
+      `建议路径：${report.boundaryAssessment.recommendation}（${report.boundaryAssessment.confidence}，待产品经理确认）`,
+      `待补充：${report.gap.unknowns.join("；")}`,
+      "后续成果必须区分已确认产品事实、基于资料的推断和待确认项；不得把上述建议路径写成最终决策。",
+    ].join("\n");
   }
 
   prototypeSchemaConstraints(): string {

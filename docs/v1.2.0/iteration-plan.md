@@ -29,3 +29,12 @@ PAE v1.2.0 建设可组合的定制化扩展框架，并以低代码基础平台
 - 能按依赖顺序组合领域与产品扩展。
 - 同名规则覆盖有明确记录，不能静默发生。
 - 不加载扩展时，v1.1.0 全量测试保持通过。
+
+## 5. 低代码平台前置分析产物
+
+启用包含 `lowcode.platform-feature-iteration` 工作流资源的扩展后，每次需求运行会新增：
+
+- `00-platform-analysis/platform-analysis.json`
+- `00-platform-analysis/platform-analysis.md`
+
+报告从产品能力地图识别相关模块和已有能力，引用适用规则，给出现状差异和实现路径建议。所有平台化建议均保持 `pending-human-confirmation`，资料不足时默认建议先项目验证，禁止自动形成平台边界决策。

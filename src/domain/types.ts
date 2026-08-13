@@ -347,6 +347,7 @@ export interface WorkflowContext {
   knowledgeCompliance?: import("../knowledge/compliance-validator.js").KnowledgeComplianceResult;
   productContext?: import("../product-context/types.js").ProductContextSelection;
   extensionContext?: import("../extensions/types.js").ComposedExtensionContext;
+  platformAnalysis?: import("../platform-analysis/types.js").PlatformAnalysisReport;
   changeImpact?: import("../change-impact/types.js").ChangeImpactReport;
 }
 

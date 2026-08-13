@@ -23,6 +23,7 @@ import { loadRelevantProductContext } from "../product-context/service.js";
 import { analyzeChangeImpact, renderChangeImpactReport } from "../change-impact/service.js";
 import { loadProductBaseline } from "../product-baseline/service.js";
 import { composeExtensionContext, loadExtension } from "../extensions/service.js";
+import { analyzePlatformRequirement, renderPlatformAnalysisReport } from "../platform-analysis/service.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -52,6 +53,7 @@ const MANAGED_OUTPUT_PATHS = [
   "09-validation",
   "10-review.md",
   "11-change-impact",
+  "00-platform-analysis",
   "99-debug",
   "manifest.json",
   "run.json",
@@ -109,6 +111,9 @@ export class ProductDesignWorkflow {
     if (options.extensionDirectories?.length) {
       const loadedExtensions = await Promise.all(options.extensionDirectories.map((directory) => loadExtension(path.resolve(directory))));
       context.extensionContext = composeExtensionContext(loadedExtensions);
+      if (context.extensionContext.resources.some((resource) => resource.id === "lowcode.platform-feature-iteration")) {
+        context.platformAnalysis = analyzePlatformRequirement(input, context.extensionContext);
+      }
     }
     if (requirement) {
       const projectDirectory = path.dirname(path.dirname(outputDirectory));
@@ -120,7 +125,11 @@ export class ProductDesignWorkflow {
     }
 
     await mkdir(outputDirectory, { recursive: true });
-    const inputHash = createHash("sha256").update(input.content).digest("hex");
+    const inputHash = createHash("sha256")
+      .update(input.content)
+      .update("\n--pae-extension-context--\n")
+      .update(JSON.stringify(context.extensionContext ?? null))
+      .digest("hex");
     let previousRun: RunState | undefined;
     if (options.resume) {
       try { previousRun = JSON.parse(await readFile(path.join(outputDirectory, "run.json"), "utf8")) as RunState; } catch {}
@@ -130,6 +139,14 @@ export class ProductDesignWorkflow {
       await Promise.all(MANAGED_OUTPUT_PATHS.map((target) =>
         rm(path.join(outputDirectory, target), { recursive: true, force: true })
       ));
+    }
+    if (context.platformAnalysis) {
+      const analysisDirectory = path.join(outputDirectory, "00-platform-analysis");
+      await mkdir(analysisDirectory, { recursive: true });
+      await Promise.all([
+        writeFile(path.join(analysisDirectory, "platform-analysis.json"), `${JSON.stringify(context.platformAnalysis, null, 2)}\n`, "utf8"),
+        writeFile(path.join(analysisDirectory, "platform-analysis.md"), renderPlatformAnalysisReport(context.platformAnalysis), "utf8"),
+      ]);
     }
 
     const engineVersion = await readEngineVersion();
@@ -397,6 +414,7 @@ export class ProductDesignWorkflow {
         omittedCount: context.productContext.omittedCount,
       } : undefined,
       extensionContext: context.extensionContext,
+      platformAnalysis: context.platformAnalysis,
       changeImpact: context.changeImpact,
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {

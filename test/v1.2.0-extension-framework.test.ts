@@ -9,6 +9,7 @@ import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import type { WorkflowContext } from "../src/domain/types.js";
 import { loadExtensionWorkspace } from "../src/extensions/workspace.js";
+import { analyzePlatformRequirement, renderPlatformAnalysisReport } from "../src/platform-analysis/service.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 
@@ -120,4 +121,56 @@ test("TC-120-010: 无扩展或缺少产品信息的工作空间被拒绝", async
   const workspacePath = path.join(root, "pae.workspace.json");
   await writeFile(workspacePath, JSON.stringify({ schemaVersion: "1.2", id: "invalid", name: "无效", product: {}, extensionDirectories: [] }), "utf8");
   await assert.rejects(() => loadExtensionWorkspace(workspacePath), /缺少名称|至少一个扩展目录/);
+});
+
+test("TC-120-011: 前置分析从产品能力地图识别模块、能力和来源", async () => {
+  const workspace = await loadExtensionWorkspace(path.join(repositoryRoot, "examples", "base-platform-workspace", "pae.workspace.json"));
+  const report = analyzePlatformRequirement(
+    { sourcePath: "requirement.md", title: "表单字段联动", content: "# 表单字段联动\n\n在表单中选择数据表字段并配置字段联动。" },
+    workspace.context,
+  );
+  assert.ok(report.currentState.affectedModules.includes("表单"));
+  assert.ok(report.currentState.matchedCapabilities.some((item) => item.id === "form-field-selection"));
+  assert.ok(report.currentState.matchedCapabilities.every((item) => item.source.extensionId === "base-platform-demo"));
+  assert.equal(report.boundaryAssessment.recommendation, "platform-enhancement");
+  assert.equal(report.boundaryAssessment.status, "pending-human-confirmation");
+  assert.match(renderPlatformAnalysisReport(report), /不能替代产品经理/);
+});
+
+test("TC-120-012: 涉及模型迁移和兼容时优先进入架构评估且仍需人工确认", async () => {
+  const workspace = await loadExtensionWorkspace(path.join(repositoryRoot, "examples", "base-platform-workspace", "pae.workspace.json"));
+  const report = analyzePlatformRequirement(
+    { sourcePath: "requirement.md", title: "模型版本迁移", content: "# 模型版本迁移\n\n调整底层模型，并兼容历史数据和已发布版本的回滚。" },
+    workspace.context,
+  );
+  assert.equal(report.boundaryAssessment.recommendation, "architecture-assessment");
+  assert.equal(report.boundaryAssessment.requiresHumanConfirmation, true);
+  assert.ok(report.currentState.applicableRules.some((item) => item.id === "lowcode.lifecycle-compatibility"));
+});
+
+test("TC-120-013: 低代码工作流落盘前置分析并注入后续 Prompt", async () => {
+  const workspace = await loadExtensionWorkspace(path.join(repositoryRoot, "examples", "base-platform-workspace", "pae.workspace.json"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-platform-analysis-"));
+  const context = await new ProductDesignWorkflow(new MockStageExecutor()).run(
+    { sourcePath: "requirement.md", title: "表单字段联动", content: "# 表单字段联动\n\n表单选择数据表字段后配置联动。" }, root, undefined,
+    { extensionDirectories: workspace.extensionDirectories },
+  );
+  assert.ok(context.platformAnalysis?.currentState.matchedCapabilities.length);
+  assert.match(await readFile(path.join(root, "00-platform-analysis", "platform-analysis.md"), "utf8"), /平台化判断建议/);
+  const prompt = new PromptBuilder().buildStagePrompt("product-outline", context);
+  assert.match(prompt.user, /# 低代码平台前置分析结果/);
+  const manifest = JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8")) as { platformAnalysis: { boundaryAssessment: { status: string } } };
+  assert.equal(manifest.platformAnalysis.boundaryAssessment.status, "pending-human-confirmation");
+});
+
+test("TC-120-014: 扩展上下文变化会改变运行指纹并阻止复用旧成果", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-extension-fingerprint-"));
+  const input = { sourcePath: "requirement.md", title: "通用需求", content: "# 通用需求\n\n建立信息列表。" };
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  await workflow.run(input, root);
+  const withoutExtension = JSON.parse(await readFile(path.join(root, "run.json"), "utf8")) as { inputHash: string };
+  await workflow.run(input, root, undefined, { extensionDirectories: [path.join(repositoryRoot, "domains", "lowcode-platform")], resume: true });
+  const withExtension = JSON.parse(await readFile(path.join(root, "run.json"), "utf8")) as { inputHash: string; resumedFromRunId?: string };
+  assert.notEqual(withExtension.inputHash, withoutExtension.inputHash);
+  assert.equal(withExtension.resumedFromRunId, undefined);
 });

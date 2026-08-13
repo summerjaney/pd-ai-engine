@@ -10,6 +10,7 @@
 - 新增 `pae extension validate` 与 `pae extension compose` 命令。
 - 支持通过 `pae.workspace.json` 组合领域扩展和具体产品扩展，并提供脱敏基础平台工作空间示例。
 - 扩展上下文已接入工作流、阶段 Prompt 与需求 manifest，可重现每次设计使用的规则及来源。
+- 新增低代码平台前置分析，输出平台现状、能力匹配、影响模块、差异、平台化建议和强制人工确认状态。
 
 All notable changes to this project will be documented in this file.
 
