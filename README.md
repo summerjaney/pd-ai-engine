@@ -251,6 +251,15 @@ node dist/cli.js platform confirm output/<project>/requirements/<requirement> \
 
 然后在原需求命令后增加 `--resume` 继续生成方案、原型和 PRD。确认记录与需求及分析内容哈希绑定；需求、能力地图或扩展规则变化后，旧确认自动失效。
 
+正式设计完成后，PAE 在 `13-knowledge-feedback/` 生成能力、规则、模式和平台决策候选。候选默认不修改产品知识。审核后接受全部候选：
+
+```bash
+node dist/cli.js knowledge accept output/<project>/requirements/<requirement> \
+  --workspace path/to/private-base-platform/pae.workspace.json
+```
+
+也可以使用 `--ids <ID1,ID2>` 只接受指定候选。接受结果写入工作空间的 `accepted-knowledge/product-knowledge-index.json`；每次更新前保存历史快照，并阻止同一候选重复接受。下一项需求加载工作空间时，会自动加载这些已确认的产品增量知识。
+
 `examples/base-platform-workspace` 只用于展示目录和最小知识骨架，不应存放公司真实资料。真实基础平台工作空间建议使用独立私有仓库或私有目录。
 
 ## 当前边界

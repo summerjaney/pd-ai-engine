@@ -33,6 +33,7 @@ import { composeExtensionContext, loadExtension } from "./extensions/service.js"
 import { loadExtensionWorkspace } from "./extensions/workspace.js";
 import { confirmPlatformDecision } from "./platform-analysis/confirmation.js";
 import type { PlatformBoundaryPath } from "./platform-analysis/types.js";
+import { acceptKnowledgeFeedback } from "./knowledge-feedback/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -63,6 +64,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae extension compose <扩展目录> [更多扩展目录...]
   pae workspace validate <pae.workspace.json>
   pae platform confirm <需求目录> --decision <路径> --scope <范围> [--note <说明>]
+  pae knowledge accept <需求目录> --workspace <pae.workspace.json> [--ids <候选ID逗号列表>]
   pae --help
 
 示例：
@@ -96,6 +98,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --decision <路径>         平台判断：configuration|platform-enhancement|platform-capability|project-customization|project-validation|architecture-assessment
   --scope <范围>            本次确认纳入的产品范围
   --note <说明>             平台判断补充说明
+  --workspace <文件>        产品工作空间 pae.workspace.json
+  --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
 `;
 
 async function buildHelp(): Promise<string> {
@@ -130,6 +134,7 @@ const VALID_OPTIONS = new Set([
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
+  "--workspace", "--ids",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -222,6 +227,19 @@ async function main(): Promise<void> {
     console.log(`范围：${output.confirmation.decision.scope}`);
     console.log(`确认记录：${output.path}`);
     console.log("下一步：使用原需求命令加 --resume 继续正式设计。");
+    return;
+  }
+
+  if (args[0] === "knowledge" && args[1] === "accept" && Boolean(args[2])) {
+    validateArgs(args);
+    const workspacePath = option(args, "--workspace");
+    if (!workspacePath) throw new Error("knowledge accept 必须提供 --workspace <pae.workspace.json>。");
+    const ids = option(args, "--ids")?.split(",").map((item) => item.trim()).filter(Boolean);
+    const output = await acceptKnowledgeFeedback(path.resolve(args[2]), workspacePath, ids);
+    console.log("产品知识回流：PASS");
+    console.log(`接受候选：${output.accepted.length}`);
+    console.log(`知识索引：#${output.sequence} ${output.indexPath}`);
+    if (output.snapshotPath) console.log(`历史快照：${output.snapshotPath}`);
     return;
   }
 
@@ -442,9 +460,11 @@ async function main(): Promise<void> {
     throw new Error("--knowledge-mode 仅支持 auto 或 off。");
   }
   let extensionDirectories = paeConfig.extensions?.enabled ? paeConfig.extensions.directories ?? [] : [];
+  let configuredExtensionContext: Awaited<ReturnType<typeof loadExtensionWorkspace>>["context"] | undefined;
   if (paeConfig.extensions?.enabled && paeConfig.extensions.workspace) {
     const loadedWorkspace = await loadExtensionWorkspace(paeConfig.extensions.workspace);
     extensionDirectories = [...loadedWorkspace.extensionDirectories, ...extensionDirectories];
+    configuredExtensionContext = loadedWorkspace.context;
   }
 
   const llmConfig = loadLlmConfig(process.env, {
@@ -489,7 +509,7 @@ async function main(): Promise<void> {
       resume: args.includes("--resume") || paeConfig.execution?.resume,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories, requirePlatformConfirmation: extensionDirectories.length > 0 });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories, extensionContext: configuredExtensionContext, requirePlatformConfirmation: extensionDirectories.length > 0 });
   } else {
     const outputPath = option(args, "--out") ?? "output/latest";
     const resolvedOutput = path.resolve(outputPath);
@@ -516,7 +536,7 @@ async function main(): Promise<void> {
       revision: option(args, "--revision") !== undefined ? Number(option(args, "--revision")) : undefined,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories, requirePlatformConfirmation: extensionDirectories.length > 0 });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories, extensionContext: configuredExtensionContext, requirePlatformConfirmation: extensionDirectories.length > 0 });
   }
 
   const failedStages = context.stageResults?.filter(s => s.status === "failed") || [];

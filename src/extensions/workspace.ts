@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { composeExtensionContext, loadExtension } from "./service.js";
-import { EXTENSION_SCHEMA_VERSION, type ExtensionWorkspace, type LoadedExtensionWorkspace } from "./types.js";
+import { EXTENSION_SCHEMA_VERSION, type ExtensionWorkspace, type LoadedExtension, type LoadedExtensionWorkspace } from "./types.js";
+import type { ProductKnowledgeIndex } from "../knowledge-feedback/types.js";
 
 const ID_PATTERN = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 
@@ -25,5 +26,16 @@ export async function loadExtensionWorkspace(workspacePath: string): Promise<Loa
   const baseDirectory = path.dirname(absolutePath);
   const extensionDirectories = workspace.extensionDirectories.map((directory) => path.resolve(baseDirectory, directory));
   const extensions = await Promise.all(extensionDirectories.map(loadExtension));
+  try {
+    const acceptedPath = path.join(baseDirectory, "accepted-knowledge", "product-knowledge-index.json");
+    const accepted = JSON.parse(await readFile(acceptedPath, "utf8")) as ProductKnowledgeIndex;
+    if (accepted.workspaceId !== workspace.id) throw new Error("已接受知识索引与产品工作空间身份不一致。");
+    const synthetic: LoadedExtension = {
+      root: path.dirname(acceptedPath),
+      manifest: { schemaVersion: "1.2", id: `${workspace.id}.accepted`, name: `${workspace.name}已接受知识`, type: "product", version: `1.0.${accepted.sequence}`, compatibleWith: { pae: ">=1.2.0" }, extends: extensions.length ? [extensions[extensions.length - 1]!.manifest.id] : [], provides: {} },
+      resources: [{ id: `${workspace.id}.accepted-knowledge`, value: accepted, source: { extensionId: `${workspace.id}.accepted`, extensionVersion: `1.0.${accepted.sequence}`, extensionType: "product", resourceType: "knowledge", path: "accepted-knowledge/product-knowledge-index.json" } }],
+    };
+    extensions.push(synthetic);
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   return { path: absolutePath, workspace, extensionDirectories, context: composeExtensionContext(extensions) };
 }

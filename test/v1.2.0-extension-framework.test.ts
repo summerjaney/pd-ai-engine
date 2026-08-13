@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,6 +11,7 @@ import type { WorkflowContext } from "../src/domain/types.js";
 import { loadExtensionWorkspace } from "../src/extensions/workspace.js";
 import { analyzePlatformRequirement, renderPlatformAnalysisReport } from "../src/platform-analysis/service.js";
 import { confirmPlatformDecision, loadValidPlatformDecision } from "../src/platform-analysis/confirmation.js";
+import { acceptKnowledgeFeedback, buildKnowledgeFeedback } from "../src/knowledge-feedback/service.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 
@@ -211,4 +212,54 @@ test("TC-120-017: 需求或分析变化后旧人工确认自动失效", async ()
   await confirmPlatformDecision(root, { path: "platform-enhancement", scope: "字段联动" });
   const changed = analyzePlatformRequirement({ sourcePath: "a.md", title: "字段联动", content: "# 字段联动\n\n新增联动并迁移历史模型。" }, workspace.context);
   assert.equal(await loadValidPlatformDecision(root, changed), undefined);
+});
+
+test("TC-120-018: 正式设计完成后只生成待人工接受的知识候选", async () => {
+  const workspace = await loadExtensionWorkspace(path.join(repositoryRoot, "examples", "base-platform-workspace", "pae.workspace.json"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-feedback-candidates-"));
+  const input = { sourcePath: "requirement.md", title: "字段联动", content: "# 字段联动\n\n表单选择数据表字段后配置联动。" };
+  const requirement = { projectId: "base-platform", projectName: "基础平台", productVersion: "3.1.0", requirementId: "REQ-101", requirementName: "field-linkage", revision: 1 };
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  await assert.rejects(() => workflow.run(input, root, requirement, { extensionContext: workspace.context, requirePlatformConfirmation: true }), /WAITING/);
+  await confirmPlatformDecision(root, { path: "platform-enhancement", scope: "字段联动" });
+  const context = await workflow.run(input, root, requirement, { extensionContext: workspace.context, requirePlatformConfirmation: true, resume: true });
+  assert.equal(buildKnowledgeFeedback(context)?.status, "pending-human-acceptance");
+  const report = JSON.parse(await readFile(path.join(root, "13-knowledge-feedback", "knowledge-feedback-candidates.json"), "utf8")) as { status: string; candidates: Array<{ type: string }> };
+  assert.equal(report.status, "pending-human-acceptance");
+  assert.ok(report.candidates.some((item) => item.type === "decision"));
+  assert.ok(report.candidates.some((item) => item.type === "capability"));
+});
+
+test("TC-120-019: 人工接受候选后写入产品知识索引并禁止重复", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "pae-feedback-accept-"));
+  const workspaceDirectory = path.join(temp, "workspace");
+  await cp(path.join(repositoryRoot, "examples", "base-platform-workspace"), workspaceDirectory, { recursive: true });
+  const workspacePath = path.join(workspaceDirectory, "pae.workspace.json");
+  const workspaceJson = JSON.parse(await readFile(workspacePath, "utf8")) as { extensionDirectories: string[] };
+  workspaceJson.extensionDirectories[0] = path.join(repositoryRoot, "domains", "lowcode-platform");
+  await writeFile(workspacePath, JSON.stringify(workspaceJson), "utf8");
+  const requirementDirectory = path.join(temp, "REQ-101-field-linkage");
+  await mkdir(path.join(requirementDirectory, "13-knowledge-feedback"), { recursive: true });
+  await writeFile(path.join(requirementDirectory, "requirement.json"), JSON.stringify({ requirementId: "REQ-101", requirementName: "field-linkage", revision: 1 }), "utf8");
+  const report = { schemaVersion: "1.2", requirement: { id: "REQ-101", revision: 1, name: "field-linkage" }, platformDecision: { path: "platform-enhancement", scope: "字段联动" }, generatedAt: "now", status: "pending-human-acceptance", candidates: [{ id: "capability:req-101:r1:delivered-scope", type: "capability", name: "字段联动", status: "candidate", summary: "新增字段联动", source: { requirementId: "REQ-101", requirementRevision: 1, artifact: "requirements/REQ-101-field-linkage" }, evidence: ["09-prd.md"] }] };
+  await writeFile(path.join(requirementDirectory, "13-knowledge-feedback", "knowledge-feedback-candidates.json"), JSON.stringify(report), "utf8");
+  const accepted = await acceptKnowledgeFeedback(requirementDirectory, workspacePath);
+  assert.equal(accepted.sequence, 1);
+  assert.equal(accepted.accepted.length, 1);
+  await assert.rejects(() => acceptKnowledgeFeedback(requirementDirectory, workspacePath), /已经全部接受/);
+});
+
+test("TC-120-020: 下一次加载工作空间会注入已接受产品知识", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "pae-feedback-reuse-"));
+  const workspaceDirectory = path.join(temp, "workspace");
+  await cp(path.join(repositoryRoot, "examples", "base-platform-workspace"), workspaceDirectory, { recursive: true });
+  const workspacePath = path.join(workspaceDirectory, "pae.workspace.json");
+  const workspaceJson = JSON.parse(await readFile(workspacePath, "utf8")) as { id: string; extensionDirectories: string[] };
+  workspaceJson.extensionDirectories[0] = path.join(repositoryRoot, "domains", "lowcode-platform");
+  await writeFile(workspacePath, JSON.stringify(workspaceJson), "utf8");
+  await mkdir(path.join(workspaceDirectory, "accepted-knowledge"));
+  await writeFile(path.join(workspaceDirectory, "accepted-knowledge", "product-knowledge-index.json"), JSON.stringify({ schemaVersion: "1.2", workspaceId: workspaceJson.id, sequence: 1, updatedAt: "now", entries: [{ id: "capability:req-101:r1:field-linkage", type: "capability", name: "字段联动", status: "accepted", summary: "已接受能力", source: { requirementId: "REQ-101", requirementRevision: 1, artifact: "requirements/REQ-101" }, evidence: ["09-prd.md"], acceptedAt: "now", acceptedBy: "product-manager" }] }), "utf8");
+  const loaded = await loadExtensionWorkspace(workspacePath);
+  assert.equal(loaded.context.extensions.at(-1)?.id, `${workspaceJson.id}.accepted`);
+  assert.ok(loaded.context.resources.some((item) => item.id === `${workspaceJson.id}.accepted-knowledge`));
 });

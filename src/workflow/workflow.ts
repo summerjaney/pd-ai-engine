@@ -23,8 +23,10 @@ import { loadRelevantProductContext } from "../product-context/service.js";
 import { analyzeChangeImpact, renderChangeImpactReport } from "../change-impact/service.js";
 import { loadProductBaseline } from "../product-baseline/service.js";
 import { composeExtensionContext, loadExtension } from "../extensions/service.js";
+import type { ComposedExtensionContext } from "../extensions/types.js";
 import { analyzePlatformRequirement, renderPlatformAnalysisReport } from "../platform-analysis/service.js";
 import { loadValidPlatformDecision } from "../platform-analysis/confirmation.js";
+import { buildKnowledgeFeedback, renderKnowledgeFeedback } from "../knowledge-feedback/service.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -54,6 +56,7 @@ const MANAGED_OUTPUT_PATHS = [
   "09-validation",
   "10-review.md",
   "11-change-impact",
+  "13-knowledge-feedback",
   "00-platform-analysis/platform-analysis.json",
   "00-platform-analysis/platform-analysis.md",
   "99-debug",
@@ -83,7 +86,7 @@ export class ProductDesignWorkflow {
     private readonly complianceValidator = new KnowledgeComplianceValidator(),
   ) {}
 
-  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number; extensionDirectories?: string[]; requirePlatformConfirmation?: boolean } = {}): Promise<WorkflowContext> {
+  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number; extensionDirectories?: string[]; extensionContext?: ComposedExtensionContext; requirePlatformConfirmation?: boolean } = {}): Promise<WorkflowContext> {
     this.validateInput(input);
     
     const context: WorkflowContext = {
@@ -110,12 +113,14 @@ export class ProductDesignWorkflow {
         } : undefined,
       }),
     };
-    if (options.extensionDirectories?.length) {
+    if (options.extensionContext) {
+      context.extensionContext = options.extensionContext;
+    } else if (options.extensionDirectories?.length) {
       const loadedExtensions = await Promise.all(options.extensionDirectories.map((directory) => loadExtension(path.resolve(directory))));
       context.extensionContext = composeExtensionContext(loadedExtensions);
-      if (context.extensionContext.resources.some((resource) => resource.id === "lowcode.platform-feature-iteration")) {
-        context.platformAnalysis = analyzePlatformRequirement(input, context.extensionContext);
-      }
+    }
+    if (context.extensionContext?.resources.some((resource) => resource.id === "lowcode.platform-feature-iteration")) {
+      context.platformAnalysis = analyzePlatformRequirement(input, context.extensionContext);
     }
     if (requirement) {
       const projectDirectory = path.dirname(path.dirname(outputDirectory));
@@ -397,6 +402,18 @@ export class ProductDesignWorkflow {
       }
     }
 
+    if (!hasFailed) {
+      context.knowledgeFeedback = buildKnowledgeFeedback(context);
+      if (context.knowledgeFeedback) {
+        const feedbackDirectory = path.join(outputDirectory, "13-knowledge-feedback");
+        await mkdir(feedbackDirectory, { recursive: true });
+        await Promise.all([
+          writeFile(path.join(feedbackDirectory, "knowledge-feedback-candidates.json"), `${JSON.stringify(context.knowledgeFeedback, null, 2)}\n`, "utf8"),
+          writeFile(path.join(feedbackDirectory, "knowledge-feedback-candidates.md"), renderKnowledgeFeedback(context.knowledgeFeedback), "utf8"),
+        ]);
+      }
+    }
+
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
       version: engineVersion,
@@ -422,6 +439,7 @@ export class ProductDesignWorkflow {
       extensionContext: context.extensionContext,
       platformAnalysis: context.platformAnalysis,
       platformDecision: context.platformDecision,
+      knowledgeFeedback: context.knowledgeFeedback,
       changeImpact: context.changeImpact,
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {

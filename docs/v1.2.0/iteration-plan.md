@@ -48,3 +48,14 @@ PAE v1.2.0 建设可组合的定制化扩展框架，并以低代码基础平台
 - 必要的补充说明
 
 确认记录写入 `00-platform-analysis/platform-decision-confirmation.json`，并与完整前置分析哈希和需求指纹绑定。只有确认仍然有效时才能继续正式工作流；需求或扩展资源变化会使旧确认失效。
+
+## 7. 产品知识回流
+
+正式设计完成且平台判断已确认后，PAE 输出：
+
+- `13-knowledge-feedback/knowledge-feedback-candidates.json`
+- `13-knowledge-feedback/knowledge-feedback-candidates.md`
+
+候选类型包括平台能力、产品规则、页面模式和平台边界决策，全部保持 `pending-human-acceptance`。产品经理通过 `pae knowledge accept` 指定私有工作空间并接受全部或部分候选。
+
+已接受知识保存在工作空间的 `accepted-knowledge/product-knowledge-index.json`，每次更新递增序号并保存上一版本快照。同一候选禁止重复写入。工作空间后续加载时自动将已接受知识作为产品增量上下文组合，以验证跨需求复用。
