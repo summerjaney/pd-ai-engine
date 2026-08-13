@@ -55,3 +55,22 @@ test("TC-110-018: ERROR 冲突不可通过显式接受绕过", async () => {
   const value = await fixture(); const reportPath = path.join(value.requirement, "11-change-impact", "change-impact-report.json"); const report = JSON.parse(await readFile(reportPath, "utf8")); report.summary.error = 1; await writeFile(reportPath, JSON.stringify(report), "utf8");
   await assert.rejects(() => acceptProductBaseline(value.requirement), /包含 1 个 ERROR/); assert.equal((await loadProductBaseline(value.project))?.baseline.sequence, 1);
 });
+
+test("TC-110-019: 用户管理三个连续需求保持历史设计并生成两级快照", async () => {
+  const value = await fixture(); await acceptProductBaseline(value.requirement);
+  const thirdRequirement: RequirementContext = { ...second, productVersion: "1.2.0", requirementId: "REQ-003", requirementName: "user-permission" };
+  const thirdDirectory = path.join(value.project, "requirements", "REQ-003-user-permission"); const thirdPrototype = prototype(true);
+  thirdPrototype.pages.find((page) => page.id === "user-list")!.actions.push({ id: "authorize", label: "配置权限", kind: "secondary", roles: ["platform-admin"] });
+  thirdPrototype.pages.push({ id: "user-permission", name: "用户权限配置", route: "/users/permission", pattern: "form", fields: [{ id: "role", label: "角色", type: "select", required: true }], actions: [{ id: "save-permission", label: "保存权限", kind: "primary", roles: ["platform-admin"] }] });
+  thirdPrototype.rules.push({ id: "permission-scope", description: "只能配置授权范围内的角色", appliesTo: ["role"] });
+  const current = (await loadProductBaseline(value.project))!; const thirdInput = { sourcePath: "permission.md", title: "用户权限调整", content: "# 用户权限调整\n\n新增用户权限配置页面和授权范围规则。" }; const report = analyzeChangeImpact(current, thirdPrototype, thirdInput, thirdRequirement);
+  await Promise.all([mkdir(path.join(thirdDirectory, "06-prototype"), { recursive: true }), mkdir(path.join(thirdDirectory, "11-change-impact"), { recursive: true })]);
+  await Promise.all([
+    writeFile(path.join(thirdDirectory, "06-prototype", "prototype.json"), JSON.stringify(thirdPrototype), "utf8"),
+    writeFile(path.join(thirdDirectory, "11-change-impact", "change-impact-report.json"), JSON.stringify(report), "utf8"),
+    writeFile(path.join(thirdDirectory, "requirement.json"), JSON.stringify(thirdRequirement), "utf8"),
+  ]);
+  await acceptProductBaseline(thirdDirectory); const final = (await loadProductBaseline(value.project))!;
+  assert.equal(final.baseline.sequence, 3); assert.equal(final.requirements.length, 3); assert.deepEqual(final.pages.map((page) => page.id), ["user-import", "user-list", "user-permission"]); assert.ok(final.rules.some((rule) => rule.id === "permission-scope"));
+  await Promise.all([1, 2].map((sequence) => readFile(path.join(value.project, "product", "history", `baseline-${sequence}`, "product-baseline.json"), "utf8")));
+});

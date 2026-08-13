@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-13
+
+### Added
+
+- 新增带稳定 ID、来源追踪和 SHA-256 完整性校验的产品正式基线。
+- 新增按需求相关性选择并注入的只读产品上下文，manifest 可追踪基线及事实来源。
+- 新增产品变更分类、跨成果物影响分析、Product Diff 和三级冲突门禁。
+- 新增 `pae product status` 与 `pae product accept`，支持显式接受、历史快照和增量更新。
+- 产品概览、总体架构、路线图、需求索引及变更日志由正式产品基线自动维护。
+
+### Validation
+
+- 用户管理基础能力、批量导入和权限调整三个连续需求通过产品演进验收。
+- v0.3.0—v1.0.0 历史测试、TypeScript、构建及 npm 独立安装检查通过。
+- v1.1.0 远端发布须在 v1.0.0 合并、Tag 和 Release 完成后执行。
+
 ## [0.9.0] - 2026-08-11
 
 ### Added
