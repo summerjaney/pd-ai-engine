@@ -10,6 +10,7 @@ import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import type { WorkflowContext } from "../src/domain/types.js";
 import { loadExtensionWorkspace } from "../src/extensions/workspace.js";
 import { analyzePlatformRequirement, renderPlatformAnalysisReport } from "../src/platform-analysis/service.js";
+import { confirmPlatformDecision, loadValidPlatformDecision } from "../src/platform-analysis/confirmation.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 
@@ -173,4 +174,41 @@ test("TC-120-014: 扩展上下文变化会改变运行指纹并阻止复用旧�
   const withExtension = JSON.parse(await readFile(path.join(root, "run.json"), "utf8")) as { inputHash: string; resumedFromRunId?: string };
   assert.notEqual(withExtension.inputHash, withoutExtension.inputHash);
   assert.equal(withExtension.resumedFromRunId, undefined);
+});
+
+test("TC-120-015: 启用门禁时首次运行只生成前置分析并阻止正式阶段", async () => {
+  const workspace = await loadExtensionWorkspace(path.join(repositoryRoot, "examples", "base-platform-workspace", "pae.workspace.json"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-platform-gate-"));
+  await assert.rejects(() => new ProductDesignWorkflow(new MockStageExecutor()).run(
+    { sourcePath: "requirement.md", title: "字段联动", content: "# 字段联动\n\n表单字段需要联动。" }, root, undefined,
+    { extensionDirectories: workspace.extensionDirectories, requirePlatformConfirmation: true },
+  ), /WAITING_PLATFORM_CONFIRMATION/);
+  assert.match(await readFile(path.join(root, "00-platform-analysis", "platform-analysis.md"), "utf8"), /待产品经理确认/);
+  await assert.rejects(() => readFile(path.join(root, "01-requirement-analysis.md"), "utf8"), /ENOENT/);
+});
+
+test("TC-120-016: 人工确认与分析哈希绑定并允许继续完整设计", async () => {
+  const workspace = await loadExtensionWorkspace(path.join(repositoryRoot, "examples", "base-platform-workspace", "pae.workspace.json"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-platform-confirm-"));
+  const input = { sourcePath: "requirement.md", title: "字段联动", content: "# 字段联动\n\n表单选择数据表字段后需要联动。" };
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  await assert.rejects(() => workflow.run(input, root, undefined, { extensionDirectories: workspace.extensionDirectories, requirePlatformConfirmation: true }), /WAITING/);
+  const saved = await confirmPlatformDecision(root, { path: "platform-enhancement", scope: "表单设计器字段联动", note: "本版本不调整底层字段模型" });
+  assert.equal(saved.confirmation.confirmedBy, "product-manager");
+  const context = await workflow.run(input, root, undefined, { extensionDirectories: workspace.extensionDirectories, requirePlatformConfirmation: true, resume: true });
+  assert.equal(context.platformDecision?.decision.path, "platform-enhancement");
+  assert.match(await readFile(path.join(root, "01-requirement-analysis.md"), "utf8"), /需求分析/);
+  const manifest = JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8")) as { platformDecision: { decision: { scope: string } } };
+  assert.equal(manifest.platformDecision.decision.scope, "表单设计器字段联动");
+});
+
+test("TC-120-017: 需求或分析变化后旧人工确认自动失效", async () => {
+  const workspace = await loadExtensionWorkspace(path.join(repositoryRoot, "examples", "base-platform-workspace", "pae.workspace.json"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-stale-confirm-"));
+  const first = analyzePlatformRequirement({ sourcePath: "a.md", title: "字段联动", content: "# 字段联动\n\n新增联动。" }, workspace.context);
+  await (await import("node:fs/promises")).mkdir(path.join(root, "00-platform-analysis"), { recursive: true });
+  await writeFile(path.join(root, "00-platform-analysis", "platform-analysis.json"), JSON.stringify(first), "utf8");
+  await confirmPlatformDecision(root, { path: "platform-enhancement", scope: "字段联动" });
+  const changed = analyzePlatformRequirement({ sourcePath: "a.md", title: "字段联动", content: "# 字段联动\n\n新增联动并迁移历史模型。" }, workspace.context);
+  assert.equal(await loadValidPlatformDecision(root, changed), undefined);
 });

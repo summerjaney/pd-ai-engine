@@ -221,6 +221,7 @@ export class PromptBuilder {
       `匹配能力：${capabilities.join("；") || "未匹配到可确认的已有能力"}`,
       `差异摘要：${report.gap.summary}`,
       `建议路径：${report.boundaryAssessment.recommendation}（${report.boundaryAssessment.confidence}，待产品经理确认）`,
+      context.platformDecision ? `人工确认：${context.platformDecision.decision.path}；范围：${context.platformDecision.decision.scope}${context.platformDecision.decision.note ? `；说明：${context.platformDecision.decision.note}` : ""}` : "人工确认：尚未完成",
       `待补充：${report.gap.unknowns.join("；")}`,
       "后续成果必须区分已确认产品事实、基于资料的推断和待确认项；不得把上述建议路径写成最终决策。",
     ].join("\n");

@@ -31,6 +31,8 @@ import { runReleaseQualityGate } from "./delivery/quality-gate.js";
 import { acceptProductBaseline, establishInitialProductBaseline, loadProductBaseline } from "./product-baseline/service.js";
 import { composeExtensionContext, loadExtension } from "./extensions/service.js";
 import { loadExtensionWorkspace } from "./extensions/workspace.js";
+import { confirmPlatformDecision } from "./platform-analysis/confirmation.js";
+import type { PlatformBoundaryPath } from "./platform-analysis/types.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -60,6 +62,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae extension validate <扩展目录>
   pae extension compose <扩展目录> [更多扩展目录...]
   pae workspace validate <pae.workspace.json>
+  pae platform confirm <需求目录> --decision <路径> --scope <范围> [--note <说明>]
   pae --help
 
 示例：
@@ -90,6 +93,9 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --evidence <说明>         人工画布验收证据说明（verify 必填）
   --page <页面ID>           仅验收指定 MasterGo 页面；省略时验收全部待验收页面
   --json <文件>             保存 MasterGo 完整工具契约（不会调用工具）
+  --decision <路径>         平台判断：configuration|platform-enhancement|platform-capability|project-customization|project-validation|architecture-assessment
+  --scope <范围>            本次确认纳入的产品范围
+  --note <说明>             平台判断补充说明
 `;
 
 async function buildHelp(): Promise<string> {
@@ -123,6 +129,7 @@ const VALID_OPTIONS = new Set([
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
+  "--decision", "--scope", "--note",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -199,6 +206,22 @@ async function main(): Promise<void> {
     console.log(`产品：${loaded.workspace.product.name} ${loaded.workspace.product.version}`);
     console.log(`扩展顺序：${loaded.context.extensions.map((item) => item.id).join(" → ")}`);
     console.log(`有效资源：${loaded.context.resources.length}；显式冲突：${loaded.context.conflicts.length}`);
+    return;
+  }
+
+  if (args[0] === "platform" && args[1] === "confirm" && Boolean(args[2])) {
+    validateArgs(args);
+    const decision = option(args, "--decision") as PlatformBoundaryPath | undefined;
+    const scope = option(args, "--scope");
+    const allowed: PlatformBoundaryPath[] = ["configuration", "platform-enhancement", "platform-capability", "project-customization", "project-validation", "architecture-assessment"];
+    if (!decision || !allowed.includes(decision)) throw new Error(`--decision 必须是：${allowed.join("、")}`);
+    if (!scope) throw new Error("platform confirm 必须提供 --scope <范围>。");
+    const output = await confirmPlatformDecision(path.resolve(args[2]), { path: decision, scope, note: option(args, "--note") });
+    console.log("平台判断确认：PASS");
+    console.log(`决定：${output.confirmation.decision.path}`);
+    console.log(`范围：${output.confirmation.decision.scope}`);
+    console.log(`确认记录：${output.path}`);
+    console.log("下一步：使用原需求命令加 --resume 继续正式设计。");
     return;
   }
 
@@ -466,7 +489,7 @@ async function main(): Promise<void> {
       resume: args.includes("--resume") || paeConfig.execution?.resume,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories, requirePlatformConfirmation: extensionDirectories.length > 0 });
   } else {
     const outputPath = option(args, "--out") ?? "output/latest";
     const resolvedOutput = path.resolve(outputPath);
@@ -493,7 +516,7 @@ async function main(): Promise<void> {
       revision: option(args, "--revision") !== undefined ? Number(option(args, "--revision")) : undefined,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories, requirePlatformConfirmation: extensionDirectories.length > 0 });
   }
 
   const failedStages = context.stageResults?.filter(s => s.status === "failed") || [];

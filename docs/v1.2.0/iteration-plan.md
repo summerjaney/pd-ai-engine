@@ -38,3 +38,13 @@ PAE v1.2.0 建设可组合的定制化扩展框架，并以低代码基础平台
 - `00-platform-analysis/platform-analysis.md`
 
 报告从产品能力地图识别相关模块和已有能力，引用适用规则，给出现状差异和实现路径建议。所有平台化建议均保持 `pending-human-confirmation`，资料不足时默认建议先项目验证，禁止自动形成平台边界决策。
+
+## 6. 平台判断确认门禁
+
+启用低代码工作空间时，首次运行在前置分析完成后停止，不执行需求分析、方案、原型和 PRD。产品经理通过 `pae platform confirm` 确认：
+
+- 实现路径
+- 本次纳入范围
+- 必要的补充说明
+
+确认记录写入 `00-platform-analysis/platform-decision-confirmation.json`，并与完整前置分析哈希和需求指纹绑定。只有确认仍然有效时才能继续正式工作流；需求或扩展资源变化会使旧确认失效。

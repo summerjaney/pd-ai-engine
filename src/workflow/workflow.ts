@@ -24,6 +24,7 @@ import { analyzeChangeImpact, renderChangeImpactReport } from "../change-impact/
 import { loadProductBaseline } from "../product-baseline/service.js";
 import { composeExtensionContext, loadExtension } from "../extensions/service.js";
 import { analyzePlatformRequirement, renderPlatformAnalysisReport } from "../platform-analysis/service.js";
+import { loadValidPlatformDecision } from "../platform-analysis/confirmation.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -53,7 +54,8 @@ const MANAGED_OUTPUT_PATHS = [
   "09-validation",
   "10-review.md",
   "11-change-impact",
-  "00-platform-analysis",
+  "00-platform-analysis/platform-analysis.json",
+  "00-platform-analysis/platform-analysis.md",
   "99-debug",
   "manifest.json",
   "run.json",
@@ -81,7 +83,7 @@ export class ProductDesignWorkflow {
     private readonly complianceValidator = new KnowledgeComplianceValidator(),
   ) {}
 
-  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number; extensionDirectories?: string[] } = {}): Promise<WorkflowContext> {
+  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number; extensionDirectories?: string[]; requirePlatformConfirmation?: boolean } = {}): Promise<WorkflowContext> {
     this.validateInput(input);
     
     const context: WorkflowContext = {
@@ -147,6 +149,10 @@ export class ProductDesignWorkflow {
         writeFile(path.join(analysisDirectory, "platform-analysis.json"), `${JSON.stringify(context.platformAnalysis, null, 2)}\n`, "utf8"),
         writeFile(path.join(analysisDirectory, "platform-analysis.md"), renderPlatformAnalysisReport(context.platformAnalysis), "utf8"),
       ]);
+      context.platformDecision = await loadValidPlatformDecision(outputDirectory, context.platformAnalysis);
+      if (options.requirePlatformConfirmation && !context.platformDecision) {
+        throw new Error(`WAITING_PLATFORM_CONFIRMATION：平台前置分析已生成，正式设计尚未开始。\n请先查看 ${path.join(analysisDirectory, "platform-analysis.md")}，再执行 pae platform confirm <需求目录> --decision <路径> --scope <范围>，随后使用 --resume 继续。`);
+      }
     }
 
     const engineVersion = await readEngineVersion();
@@ -415,6 +421,7 @@ export class ProductDesignWorkflow {
       } : undefined,
       extensionContext: context.extensionContext,
       platformAnalysis: context.platformAnalysis,
+      platformDecision: context.platformDecision,
       changeImpact: context.changeImpact,
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {

@@ -240,6 +240,17 @@ node dist/cli.js workspace validate examples/base-platform-workspace/pae.workspa
 
 执行需求时，PAE 会将领域扩展和产品扩展按依赖顺序组合，注入各设计阶段，并在需求 `manifest.json` 的 `extensionContext` 中记录扩展版本、资源来源和覆盖冲突。不配置扩展时保持 v1.1.0 通用行为。
 
+启用低代码工作空间后，首次运行只生成 `00-platform-analysis/` 并等待产品经理确认。查看报告后执行：
+
+```bash
+node dist/cli.js platform confirm output/<project>/requirements/<requirement> \
+  --decision platform-enhancement \
+  --scope "表单设计器字段联动" \
+  --note "本版本不调整底层字段模型"
+```
+
+然后在原需求命令后增加 `--resume` 继续生成方案、原型和 PRD。确认记录与需求及分析内容哈希绑定；需求、能力地图或扩展规则变化后，旧确认自动失效。
+
 `examples/base-platform-workspace` 只用于展示目录和最小知识骨架，不应存放公司真实资料。真实基础平台工作空间建议使用独立私有仓库或私有目录。
 
 ## 当前边界
