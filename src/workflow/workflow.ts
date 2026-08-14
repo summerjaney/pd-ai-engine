@@ -29,6 +29,8 @@ import { loadValidPlatformDecision } from "../platform-analysis/confirmation.js"
 import { buildKnowledgeFeedback, renderKnowledgeFeedback } from "../knowledge-feedback/service.js";
 import { PlatformKnowledgeService } from "../platform-knowledge/service.js";
 import { renderCapabilityGapAssessment } from "../platform-knowledge/assessment.js";
+import { applyPlatformKnowledgeUsage, buildPlatformKnowledgeUsagePlan, renderPlatformKnowledgeUsagePlan } from "../platform-knowledge/trace.js";
+import { writePlatformKnowledgeConsistency } from "../platform-knowledge/consistency.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -125,6 +127,7 @@ export class ProductDesignWorkflow {
     if (context.extensionContext?.resources.some((resource) => resource.id === "lowcode.platform-feature-iteration")) {
       const platformKnowledge = await this.platformKnowledgeService.load();
       context.platformAnalysis = analyzePlatformRequirement(input, context.extensionContext, platformKnowledge);
+      if (context.platformAnalysis.capabilityGap) context.platformKnowledgeUsagePlan = buildPlatformKnowledgeUsagePlan(context.platformAnalysis.capabilityGap);
     }
     if (requirement) {
       const projectDirectory = path.dirname(path.dirname(outputDirectory));
@@ -162,6 +165,10 @@ export class ProductDesignWorkflow {
         ...(context.platformAnalysis.capabilityGap ? [
           writeFile(path.join(analysisDirectory, "capability-gap.json"), `${JSON.stringify(context.platformAnalysis.capabilityGap, null, 2)}\n`, "utf8"),
           writeFile(path.join(analysisDirectory, "capability-gap.md"), renderCapabilityGapAssessment(context.platformAnalysis.capabilityGap), "utf8"),
+        ] : []),
+        ...(context.platformKnowledgeUsagePlan ? [
+          writeFile(path.join(analysisDirectory, "knowledge-usage-plan.json"), `${JSON.stringify(context.platformKnowledgeUsagePlan, null, 2)}\n`, "utf8"),
+          writeFile(path.join(analysisDirectory, "knowledge-usage-plan.md"), renderPlatformKnowledgeUsagePlan(context.platformKnowledgeUsagePlan), "utf8"),
         ] : []),
       ]);
       context.platformDecision = await loadValidPlatformDecision(outputDirectory, context.platformAnalysis);
@@ -243,6 +250,9 @@ export class ProductDesignWorkflow {
           }
         }
         if (!result) throw new Error(`阶段 ${stage} 未返回结果`);
+        if (context.platformKnowledgeUsagePlan && (typeof result.artifact === "string" || stage === "prototype")) {
+          result.artifact = applyPlatformKnowledgeUsage(stage, result.artifact as string | PrototypeDsl, context.platformKnowledgeUsagePlan);
+        }
         if (stage === "prototype") {
           const compliance = this.complianceValidator.validatePrototype(
             result.artifact as PrototypeDsl,
@@ -414,6 +424,7 @@ export class ProductDesignWorkflow {
     }
 
     if (!hasFailed) {
+      if (context.platformKnowledgeUsagePlan) context.platformKnowledgeConsistency = await writePlatformKnowledgeConsistency(outputDirectory, context.platformKnowledgeUsagePlan);
       context.knowledgeFeedback = buildKnowledgeFeedback(context);
       if (context.knowledgeFeedback) {
         const feedbackDirectory = path.join(outputDirectory, "13-knowledge-feedback");
@@ -449,6 +460,8 @@ export class ProductDesignWorkflow {
       } : undefined,
       extensionContext: context.extensionContext,
       platformAnalysis: context.platformAnalysis,
+      platformKnowledgeUsagePlan: context.platformKnowledgeUsagePlan,
+      platformKnowledgeConsistency: context.platformKnowledgeConsistency,
       platformDecision: context.platformDecision,
       knowledgeFeedback: context.knowledgeFeedback,
       changeImpact: context.changeImpact,

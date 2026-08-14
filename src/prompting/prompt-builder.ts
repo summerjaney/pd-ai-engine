@@ -215,6 +215,14 @@ export class PromptBuilder {
     const report = context.platformAnalysis;
     if (!report) return "";
     const capabilities = report.currentState.matchedCapabilities.map((item) => `${item.name}${item.module ? `（${item.module}）` : ""}｜来源 ${item.source.extensionId}/${item.source.path}`);
+    const gap = report.capabilityGap;
+    const reuse = gap ? [
+      `复用平台能力：${gap.reuse.capabilities.join("、") || "无"}`,
+      `复用页面模式：${gap.reuse.patterns.join("、") || "无"}`,
+      `复用组件：${gap.reuse.components.join("、") || "无"}`,
+      `适用平台约束：${gap.reuse.constraints.join("、") || "无"}`,
+      `待确认能力缺口：${gap.gaps.map((item) => item.description).join("、") || "无"}`,
+    ] : [];
     return [
       "# 低代码平台前置分析结果",
       `涉及模块：${report.currentState.affectedModules.join("、") || "待识别"}`,
@@ -223,6 +231,8 @@ export class PromptBuilder {
       `建议路径：${report.boundaryAssessment.recommendation}（${report.boundaryAssessment.confidence}，待产品经理确认）`,
       context.platformDecision ? `人工确认：${context.platformDecision.decision.path}；范围：${context.platformDecision.decision.scope}${context.platformDecision.decision.note ? `；说明：${context.platformDecision.decision.note}` : ""}` : "人工确认：尚未完成",
       `待补充：${report.gap.unknowns.join("；")}`,
+      ...reuse,
+      context.platformKnowledgeUsagePlan ? "当前阶段必须保留平台知识使用计划中的 [platform-knowledge:<id>@<version>] 引用标记，禁止只复制结论而丢失来源。" : "",
       "后续成果必须区分已确认产品事实、基于资料的推断和待确认项；不得把上述建议路径写成最终决策。",
     ].join("\n");
   }

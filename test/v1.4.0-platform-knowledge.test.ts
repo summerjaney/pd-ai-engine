@@ -10,6 +10,9 @@ import { loadExtensionWorkspace } from "../src/extensions/workspace.js";
 import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
 import { MockStageExecutor } from "../src/execution/mock-executor.js";
 import { analyzePlatformRequirement } from "../src/platform-analysis/service.js";
+import { PromptBuilder } from "../src/prompting/prompt-builder.js";
+import { validatePlatformKnowledgeConsistency } from "../src/platform-knowledge/consistency.js";
+import { runDesignReview } from "../src/design-review/service.js";
 
 test("v1.4.0 loads the confirmed base-platform knowledge sample", async () => {
   const catalog = await new PlatformKnowledgeService().load(path.resolve("knowledge/platform"));
@@ -94,6 +97,19 @@ test("v1.4.0 workflow writes a standalone capability gap report", async () => {
   assert.equal(context.platformAnalysis?.capabilityGap?.boundary.recommendation, "platform-enhancement");
   assert.match(await (await import("node:fs/promises")).readFile(path.join(output, "00-platform-analysis", "capability-gap.md"), "utf8"), /平台能力差距分析/);
   assert.ok(JSON.parse(await (await import("node:fs/promises")).readFile(path.join(output, "00-platform-analysis", "capability-gap.json"), "utf8")).reuse.capabilities.length > 0);
+  assert.equal(context.platformKnowledgeConsistency?.valid, true);
+  assert.ok(context.platformKnowledgeConsistency?.summary.checkedReferenceCount);
+  for (const artifact of ["01-requirement-analysis.md", "02-product-outline.md", "03-product-architecture.md", "04-core-flow.md", "05-page-structure.md", "09-prd.md", "10-review.md"]) {
+    assert.match(await (await import("node:fs/promises")).readFile(path.join(output, artifact), "utf8"), /\[platform-knowledge:/, artifact);
+  }
+  const prototype = JSON.parse(await (await import("node:fs/promises")).readFile(path.join(output, "06-prototype", "prototype.json"), "utf8"));
+  assert.match(prototype.product.sourceAttribution, /platform-knowledge:capability\.organization\.structure/);
+  assert.ok(prototype.rules.some((rule: { id: string }) => rule.id === "constraint.organization.code-unique"));
+  const prompt = new PromptBuilder().buildStagePrompt("prd", context);
+  assert.match(prompt.user, /复用平台能力：capability\.organization\.structure/);
+  assert.match(prompt.user, /复用页面模式：pattern\.tree-table-management/);
+  const designReview = await runDesignReview(output);
+  assert.equal(designReview.report.checks.find((item) => item.id === "platform-knowledge-consistency")?.status, "PASS");
 });
 
 test("v1.4.0 platform knowledge never overrides an architecture assessment", async () => {
@@ -106,4 +122,17 @@ test("v1.4.0 platform knowledge never overrides an architecture assessment", asy
   );
   assert.equal(report.boundaryAssessment.recommendation, "architecture-assessment");
   assert.equal(report.boundaryAssessment.requiresHumanConfirmation, true);
+});
+
+test("v1.4.0 consistency check fails when an artifact loses its platform reference", async () => {
+  const workspace = await loadExtensionWorkspace(path.resolve("examples/base-platform-workspace/pae.workspace.json"));
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v140-tamper-"));
+  const context = await new ProductDesignWorkflow(new MockStageExecutor()).run(
+    { sourcePath: "organization.md", title: "组织结构管理", content: "# 组织结构管理\n\n维护组织层级、编码与停用状态。" }, output, undefined,
+    { extensionDirectories: workspace.extensionDirectories },
+  );
+  await writeFile(path.join(output, "09-prd.md"), "# PRD\n\n平台知识引用被删除。\n", "utf8");
+  const report = await validatePlatformKnowledgeConsistency(output, context.platformKnowledgeUsagePlan);
+  assert.equal(report.valid, false);
+  assert.ok(report.issues.some((issue) => issue.code === "PLATFORM_KNOWLEDGE_REFERENCE_MISSING" && issue.stage === "prd"));
 });
