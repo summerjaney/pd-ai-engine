@@ -1,0 +1,6 @@
+{
+  "id": "base-platform.product-overview",
+  "name": "基础平台产品档案",
+  "positioning": "面向企业业务系统建设的低代码基础平台。",
+  "productSystem": ["基础平台", "IDE 扩展", "移动端 APP", "消息协同 EIM"]
+}

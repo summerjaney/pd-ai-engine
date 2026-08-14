@@ -209,6 +209,59 @@ Component references Rule
 Rule constrains Component
 ```
 
+## 定制化扩展与产品工作空间（v1.2.0）
+
+PAE Core 保持领域无关。领域知识、具体产品规则和交付方式通过扩展组合，不再混入统一 Prompt。
+
+验证低代码领域扩展：
+
+```bash
+npm run build
+node dist/cli.js extension validate domains/lowcode-platform
+```
+
+验证脱敏的基础平台工作空间：
+
+```bash
+node dist/cli.js workspace validate examples/base-platform-workspace/pae.workspace.json
+```
+
+在项目的 `pae.config.json` 中启用：
+
+```json
+{
+  "schemaVersion": "1.0",
+  "extensions": {
+    "enabled": true,
+    "workspace": "path/to/private-base-platform/pae.workspace.json"
+  }
+}
+```
+
+执行需求时，PAE 会将领域扩展和产品扩展按依赖顺序组合，注入各设计阶段，并在需求 `manifest.json` 的 `extensionContext` 中记录扩展版本、资源来源和覆盖冲突。不配置扩展时保持 v1.1.0 通用行为。
+
+启用低代码工作空间后，首次运行只生成 `00-platform-analysis/` 并等待产品经理确认。查看报告后执行：
+
+```bash
+node dist/cli.js platform confirm output/<project>/requirements/<requirement> \
+  --decision platform-enhancement \
+  --scope "表单设计器字段联动" \
+  --note "本版本不调整底层字段模型"
+```
+
+然后在原需求命令后增加 `--resume` 继续生成方案、原型和 PRD。确认记录与需求及分析内容哈希绑定；需求、能力地图或扩展规则变化后，旧确认自动失效。
+
+正式设计完成后，PAE 在 `13-knowledge-feedback/` 生成能力、规则、模式和平台决策候选。候选默认不修改产品知识。审核后接受全部候选：
+
+```bash
+node dist/cli.js knowledge accept output/<project>/requirements/<requirement> \
+  --workspace path/to/private-base-platform/pae.workspace.json
+```
+
+也可以使用 `--ids <ID1,ID2>` 只接受指定候选。接受结果写入工作空间的 `accepted-knowledge/product-knowledge-index.json`；每次更新前保存历史快照，并阻止同一候选重复接受。下一项需求加载工作空间时，会自动加载这些已确认的产品增量知识。
+
+`examples/base-platform-workspace` 只用于展示目录和最小知识骨架，不应存放公司真实资料。真实基础平台工作空间建议使用独立私有仓库或私有目录。
+
 ## 当前边界
 
 MVP 暂不包含：多 Agent、插件市场、企业知识库、开放 API、自动开发与部署、多人协作。MasterGo MCP 已支持受控的真实画布写入，其他设计工具尚未接入。

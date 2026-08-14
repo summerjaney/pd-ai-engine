@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.2",
+  "id": "base-platform-demo",
+  "name": "基础平台示例工作空间",
+  "product": {
+    "name": "基础平台",
+    "version": "3.0.0",
+    "description": "用于演示低代码领域扩展与具体产品扩展组合，不包含公司真实资料。"
+  },
+  "extensionDirectories": [
+    "../../domains/lowcode-platform",
+    "product-extension"
+  ]
+}

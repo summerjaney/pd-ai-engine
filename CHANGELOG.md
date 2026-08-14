@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0] - Unreleased
+
+### Added
+
+- 建立 PAE 扩展清单、发现、校验、依赖排序和上下文组合基础能力。
+- 支持领域与产品扩展对同名资源进行可追踪覆盖，禁止缺失及循环依赖。
+- 新增首个 `lowcode-platform` 领域扩展，包含领域对象、平台边界、模型与表单、生命周期、设计器模式及功能迭代工作流。
+- 新增 `pae extension validate` 与 `pae extension compose` 命令。
+- 支持通过 `pae.workspace.json` 组合领域扩展和具体产品扩展，并提供脱敏基础平台工作空间示例。
+- 扩展上下文已接入工作流、阶段 Prompt 与需求 manifest，可重现每次设计使用的规则及来源。
+- 新增低代码平台前置分析，输出平台现状、能力匹配、影响模块、差异、平台化建议和强制人工确认状态。
+- 新增平台判断人工确认门禁；正式阶段必须在确认实现路径和版本范围后才能继续，旧确认会在需求或分析变化后失效。
+- 新增知识回流候选和人工接受机制；已接受的能力、规则、模式及决策形成带快照的产品增量知识，并在后续需求中自动复用。
+- 新增两项连续低代码平台需求验收，证明已接受能力参与下一需求的平台前置分析；平台门禁状态正式记录为 `WAITING_CONFIRMATION`。
+
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]

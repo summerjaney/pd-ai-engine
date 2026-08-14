@@ -1,0 +1,14 @@
+{
+  "id": "lowcode.platform-boundary",
+  "name": "平台通用能力与项目定制边界",
+  "priority": "critical",
+  "decisionPaths": [
+    { "result": "configuration", "when": "现有配置能力可完整满足需求" },
+    { "result": "platform-enhancement", "when": "已有平台能力存在可复用的通用缺口" },
+    { "result": "platform-capability", "when": "多个项目存在稳定共性且边界可抽象" },
+    { "result": "project-customization", "when": "需求仅适用于单一项目且强依赖特定业务" },
+    { "result": "project-validation", "when": "未来复用价值尚不能确认" },
+    { "result": "architecture-assessment", "when": "需求改变底层模型、生命周期或兼容策略" }
+  ],
+  "requiresHumanConfirmation": true
+}

@@ -147,6 +147,8 @@ export class PromptBuilder {
     const schemaBlock = stage === "prototype" ? PROTOTYPE_DSL_SCHEMA : "";
     const knowledgeBlock = this.buildKnowledgeBlock(stage, context);
     const productContextBlock = this.buildProductContextBlock(context);
+    const extensionContextBlock = this.buildExtensionContextBlock(context);
+    const platformAnalysisBlock = this.buildPlatformAnalysisBlock(context);
     const prototypeKnowledgeChecklist = stage === "prototype"
       ? this.buildPrototypeKnowledgeChecklist(context)
       : "";
@@ -165,6 +167,8 @@ export class PromptBuilder {
         context.input.content.trim(),
         previousArtifacts ? `# 前序成果物\n${previousArtifacts}` : "",
         productContextBlock,
+        extensionContextBlock,
+        platformAnalysisBlock,
         knowledgeBlock,
         prototypeKnowledgeChecklist,
         schemaBlock,
@@ -183,6 +187,43 @@ export class PromptBuilder {
       `产品版本：${productContext.baseline.productVersion}`,
       "以下内容来自已接受产品基线，只能作为现状事实使用；不得无依据地重命名、删除或覆盖。没有列出的历史内容不得推断为不存在。",
       items.length ? items.join("\n") : "本次需求未匹配到相关历史业务项。",
+    ].join("\n");
+  }
+
+  private buildExtensionContextBlock(context: Readonly<WorkflowContext>): string {
+    const extensionContext = context.extensionContext;
+    if (!extensionContext) return "";
+    const extensions = extensionContext.extensions.map((item) => `${item.id}@${item.version}（${item.type}）`).join(" → ");
+    const resources = extensionContext.resources.map((resource) => {
+      const label = resource.id ?? resource.source.path;
+      const body = typeof resource.value === "string" ? resource.value.trim() : JSON.stringify(resource.value);
+      return `## [${resource.source.resourceType}] ${label}\n来源：${resource.source.extensionId}@${resource.source.extensionVersion}/${resource.source.path}\n${body}`;
+    });
+    const conflicts = extensionContext.conflicts.length
+      ? extensionContext.conflicts.map((item) => `- ${item.resourceType}/${item.resourceId}：采用 ${item.selected.extensionId}，覆盖 ${item.previous.extensionId}`).join("\n")
+      : "无资源覆盖冲突。";
+    return [
+      "# 已加载定制化扩展",
+      `加载顺序：${extensions}`,
+      "以下内容是当前领域和产品的设计约束。事实与规则必须保留来源；产品扩展覆盖领域默认值时，以冲突记录中的采用项为准。不得把推断写成已确认产品事实。",
+      `## 覆盖记录\n${conflicts}`,
+      ...resources,
+    ].join("\n\n");
+  }
+
+  private buildPlatformAnalysisBlock(context: Readonly<WorkflowContext>): string {
+    const report = context.platformAnalysis;
+    if (!report) return "";
+    const capabilities = report.currentState.matchedCapabilities.map((item) => `${item.name}${item.module ? `（${item.module}）` : ""}｜来源 ${item.source.extensionId}/${item.source.path}`);
+    return [
+      "# 低代码平台前置分析结果",
+      `涉及模块：${report.currentState.affectedModules.join("、") || "待识别"}`,
+      `匹配能力：${capabilities.join("；") || "未匹配到可确认的已有能力"}`,
+      `差异摘要：${report.gap.summary}`,
+      `建议路径：${report.boundaryAssessment.recommendation}（${report.boundaryAssessment.confidence}，待产品经理确认）`,
+      context.platformDecision ? `人工确认：${context.platformDecision.decision.path}；范围：${context.platformDecision.decision.scope}${context.platformDecision.decision.note ? `；说明：${context.platformDecision.decision.note}` : ""}` : "人工确认：尚未完成",
+      `待补充：${report.gap.unknowns.join("；")}`,
+      "后续成果必须区分已确认产品事实、基于资料的推断和待确认项；不得把上述建议路径写成最终决策。",
     ].join("\n");
   }
 

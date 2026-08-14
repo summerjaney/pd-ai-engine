@@ -9,6 +9,15 @@
     "project": { "type": "object" },
     "llm": { "type": "object" },
     "knowledge": { "type": "object" },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "workspace": { "type": "string", "minLength": 1 },
+        "directories": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
     "mastergo": { "type": "object" },
     "delivery": { "type": "object" },
     "execution": { "type": "object" }

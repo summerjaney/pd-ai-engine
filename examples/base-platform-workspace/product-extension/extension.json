@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.2",
+  "id": "base-platform-demo",
+  "name": "基础平台产品扩展示例",
+  "type": "product",
+  "version": "1.0.0",
+  "description": "脱敏的基础平台最小知识骨架示例。",
+  "compatibleWith": { "pae": ">=1.2.0 <2.0.0" },
+  "extends": ["lowcode-platform"],
+  "provides": {
+    "knowledge": ["knowledge/product-overview.json", "knowledge/module-map.json", "knowledge/capability-map.json"],
+    "rules": ["rules/model-form-relationship.json"]
+  }
+}

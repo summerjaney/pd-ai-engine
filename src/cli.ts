@@ -29,6 +29,11 @@ import { loadPaeConfig } from "./config/loader.js";
 import { diagnosePae } from "./diagnostics/doctor.js";
 import { runReleaseQualityGate } from "./delivery/quality-gate.js";
 import { acceptProductBaseline, establishInitialProductBaseline, loadProductBaseline } from "./product-baseline/service.js";
+import { composeExtensionContext, loadExtension } from "./extensions/service.js";
+import { loadExtensionWorkspace } from "./extensions/workspace.js";
+import { confirmPlatformDecision } from "./platform-analysis/confirmation.js";
+import type { PlatformBoundaryPath } from "./platform-analysis/types.js";
+import { acceptKnowledgeFeedback } from "./knowledge-feedback/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -55,6 +60,11 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae validate <需求目录> --level release
   pae product status --project-dir <项目目录>
   pae product accept <需求目录>
+  pae extension validate <扩展目录>
+  pae extension compose <扩展目录> [更多扩展目录...]
+  pae workspace validate <pae.workspace.json>
+  pae platform confirm <需求目录> --decision <路径> --scope <范围> [--note <说明>]
+  pae knowledge accept <需求目录> --workspace <pae.workspace.json> [--ids <候选ID逗号列表>]
   pae --help
 
 示例：
@@ -85,6 +95,11 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --evidence <说明>         人工画布验收证据说明（verify 必填）
   --page <页面ID>           仅验收指定 MasterGo 页面；省略时验收全部待验收页面
   --json <文件>             保存 MasterGo 完整工具契约（不会调用工具）
+  --decision <路径>         平台判断：configuration|platform-enhancement|platform-capability|project-customization|project-validation|architecture-assessment
+  --scope <范围>            本次确认纳入的产品范围
+  --note <说明>             平台判断补充说明
+  --workspace <文件>        产品工作空间 pae.workspace.json
+  --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
 `;
 
 async function buildHelp(): Promise<string> {
@@ -118,6 +133,8 @@ const VALID_OPTIONS = new Set([
   "--product-version", "--revision", "--output-root",
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
+  "--decision", "--scope", "--note",
+  "--workspace", "--ids",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -166,6 +183,63 @@ async function main(): Promise<void> {
     console.log(`PAE 环境诊断：${report.status}`);
     for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
     if (report.status === "NOT_READY") process.exitCode = 1;
+    return;
+  }
+
+  if (args[0] === "extension" && args[1] === "validate" && Boolean(args[2])) {
+    const extension = await loadExtension(path.resolve(args[2]));
+    console.log(`扩展校验：PASS`);
+    console.log(`扩展：${extension.manifest.name}（${extension.manifest.id}@${extension.manifest.version}）`);
+    console.log(`类型：${extension.manifest.type}；资源：${extension.resources.length}`);
+    return;
+  }
+
+  if (args[0] === "extension" && args[1] === "compose" && args.length >= 3) {
+    const extensions = await Promise.all(args.slice(2).map((directory) => loadExtension(path.resolve(directory))));
+    const context = composeExtensionContext(extensions);
+    console.log(`扩展组合：PASS`);
+    console.log(`加载顺序：${context.extensions.map((item) => `${item.id}@${item.version}`).join(" → ")}`);
+    console.log(`有效资源：${context.resources.length}；显式冲突：${context.conflicts.length}`);
+    for (const conflict of context.conflicts) console.log(`[覆盖] ${conflict.resourceType}/${conflict.resourceId}：${conflict.previous.extensionId} → ${conflict.selected.extensionId}`);
+    return;
+  }
+
+  if (args[0] === "workspace" && args[1] === "validate" && Boolean(args[2])) {
+    const loaded = await loadExtensionWorkspace(args[2]);
+    console.log(`产品工作空间校验：PASS`);
+    console.log(`工作空间：${loaded.workspace.name}（${loaded.workspace.id}）`);
+    console.log(`产品：${loaded.workspace.product.name} ${loaded.workspace.product.version}`);
+    console.log(`扩展顺序：${loaded.context.extensions.map((item) => item.id).join(" → ")}`);
+    console.log(`有效资源：${loaded.context.resources.length}；显式冲突：${loaded.context.conflicts.length}`);
+    return;
+  }
+
+  if (args[0] === "platform" && args[1] === "confirm" && Boolean(args[2])) {
+    validateArgs(args);
+    const decision = option(args, "--decision") as PlatformBoundaryPath | undefined;
+    const scope = option(args, "--scope");
+    const allowed: PlatformBoundaryPath[] = ["configuration", "platform-enhancement", "platform-capability", "project-customization", "project-validation", "architecture-assessment"];
+    if (!decision || !allowed.includes(decision)) throw new Error(`--decision 必须是：${allowed.join("、")}`);
+    if (!scope) throw new Error("platform confirm 必须提供 --scope <范围>。");
+    const output = await confirmPlatformDecision(path.resolve(args[2]), { path: decision, scope, note: option(args, "--note") });
+    console.log("平台判断确认：PASS");
+    console.log(`决定：${output.confirmation.decision.path}`);
+    console.log(`范围：${output.confirmation.decision.scope}`);
+    console.log(`确认记录：${output.path}`);
+    console.log("下一步：使用原需求命令加 --resume 继续正式设计。");
+    return;
+  }
+
+  if (args[0] === "knowledge" && args[1] === "accept" && Boolean(args[2])) {
+    validateArgs(args);
+    const workspacePath = option(args, "--workspace");
+    if (!workspacePath) throw new Error("knowledge accept 必须提供 --workspace <pae.workspace.json>。");
+    const ids = option(args, "--ids")?.split(",").map((item) => item.trim()).filter(Boolean);
+    const output = await acceptKnowledgeFeedback(path.resolve(args[2]), workspacePath, ids);
+    console.log("产品知识回流：PASS");
+    console.log(`接受候选：${output.accepted.length}`);
+    console.log(`知识索引：#${output.sequence} ${output.indexPath}`);
+    if (output.snapshotPath) console.log(`历史快照：${output.snapshotPath}`);
     return;
   }
 
@@ -385,6 +459,13 @@ async function main(): Promise<void> {
   if (knowledgeMode !== "auto" && knowledgeMode !== "off") {
     throw new Error("--knowledge-mode 仅支持 auto 或 off。");
   }
+  let extensionDirectories = paeConfig.extensions?.enabled ? paeConfig.extensions.directories ?? [] : [];
+  let configuredExtensionContext: Awaited<ReturnType<typeof loadExtensionWorkspace>>["context"] | undefined;
+  if (paeConfig.extensions?.enabled && paeConfig.extensions.workspace) {
+    const loadedWorkspace = await loadExtensionWorkspace(paeConfig.extensions.workspace);
+    extensionDirectories = [...loadedWorkspace.extensionDirectories, ...extensionDirectories];
+    configuredExtensionContext = loadedWorkspace.context;
+  }
 
   const llmConfig = loadLlmConfig(process.env, {
     provider: option(args, "--provider") ?? paeConfig.llm?.provider,
@@ -428,7 +509,7 @@ async function main(): Promise<void> {
       resume: args.includes("--resume") || paeConfig.execution?.resume,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories, extensionContext: configuredExtensionContext, requirePlatformConfirmation: extensionDirectories.length > 0 });
   } else {
     const outputPath = option(args, "--out") ?? "output/latest";
     const resolvedOutput = path.resolve(outputPath);
@@ -455,7 +536,7 @@ async function main(): Promise<void> {
       revision: option(args, "--revision") !== undefined ? Number(option(args, "--revision")) : undefined,
     }, input);
     outputDirectory = prepared.requirementDirectory;
-    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries });
+    context = await workflow.run(input, outputDirectory, prepared.context, { knowledgeMode, resume: args.includes("--resume") || paeConfig.execution?.resume, retries: paeConfig.execution?.retries, extensionDirectories, extensionContext: configuredExtensionContext, requirePlatformConfirmation: extensionDirectories.length > 0 });
   }
 
   const failedStages = context.stageResults?.filter(s => s.status === "failed") || [];

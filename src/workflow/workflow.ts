@@ -22,6 +22,11 @@ import { RunStateRecorder, type RunState } from "../execution/run-state.js";
 import { loadRelevantProductContext } from "../product-context/service.js";
 import { analyzeChangeImpact, renderChangeImpactReport } from "../change-impact/service.js";
 import { loadProductBaseline } from "../product-baseline/service.js";
+import { composeExtensionContext, loadExtension } from "../extensions/service.js";
+import type { ComposedExtensionContext } from "../extensions/types.js";
+import { analyzePlatformRequirement, renderPlatformAnalysisReport } from "../platform-analysis/service.js";
+import { loadValidPlatformDecision } from "../platform-analysis/confirmation.js";
+import { buildKnowledgeFeedback, renderKnowledgeFeedback } from "../knowledge-feedback/service.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -51,6 +56,9 @@ const MANAGED_OUTPUT_PATHS = [
   "09-validation",
   "10-review.md",
   "11-change-impact",
+  "13-knowledge-feedback",
+  "00-platform-analysis/platform-analysis.json",
+  "00-platform-analysis/platform-analysis.md",
   "99-debug",
   "manifest.json",
   "run.json",
@@ -78,7 +86,7 @@ export class ProductDesignWorkflow {
     private readonly complianceValidator = new KnowledgeComplianceValidator(),
   ) {}
 
-  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number } = {}): Promise<WorkflowContext> {
+  async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number; extensionDirectories?: string[]; extensionContext?: ComposedExtensionContext; requirePlatformConfirmation?: boolean } = {}): Promise<WorkflowContext> {
     this.validateInput(input);
     
     const context: WorkflowContext = {
@@ -105,6 +113,15 @@ export class ProductDesignWorkflow {
         } : undefined,
       }),
     };
+    if (options.extensionContext) {
+      context.extensionContext = options.extensionContext;
+    } else if (options.extensionDirectories?.length) {
+      const loadedExtensions = await Promise.all(options.extensionDirectories.map((directory) => loadExtension(path.resolve(directory))));
+      context.extensionContext = composeExtensionContext(loadedExtensions);
+    }
+    if (context.extensionContext?.resources.some((resource) => resource.id === "lowcode.platform-feature-iteration")) {
+      context.platformAnalysis = analyzePlatformRequirement(input, context.extensionContext);
+    }
     if (requirement) {
       const projectDirectory = path.dirname(path.dirname(outputDirectory));
       context.productContext = await loadRelevantProductContext(projectDirectory, input);
@@ -115,7 +132,11 @@ export class ProductDesignWorkflow {
     }
 
     await mkdir(outputDirectory, { recursive: true });
-    const inputHash = createHash("sha256").update(input.content).digest("hex");
+    const inputHash = createHash("sha256")
+      .update(input.content)
+      .update("\n--pae-extension-context--\n")
+      .update(JSON.stringify(context.extensionContext ?? null))
+      .digest("hex");
     let previousRun: RunState | undefined;
     if (options.resume) {
       try { previousRun = JSON.parse(await readFile(path.join(outputDirectory, "run.json"), "utf8")) as RunState; } catch {}
@@ -125,6 +146,15 @@ export class ProductDesignWorkflow {
       await Promise.all(MANAGED_OUTPUT_PATHS.map((target) =>
         rm(path.join(outputDirectory, target), { recursive: true, force: true })
       ));
+    }
+    if (context.platformAnalysis) {
+      const analysisDirectory = path.join(outputDirectory, "00-platform-analysis");
+      await mkdir(analysisDirectory, { recursive: true });
+      await Promise.all([
+        writeFile(path.join(analysisDirectory, "platform-analysis.json"), `${JSON.stringify(context.platformAnalysis, null, 2)}\n`, "utf8"),
+        writeFile(path.join(analysisDirectory, "platform-analysis.md"), renderPlatformAnalysisReport(context.platformAnalysis), "utf8"),
+      ]);
+      context.platformDecision = await loadValidPlatformDecision(outputDirectory, context.platformAnalysis);
     }
 
     const engineVersion = await readEngineVersion();
@@ -140,6 +170,10 @@ export class ProductDesignWorkflow {
     };
     const recorder = new RunStateRecorder(outputDirectory, runState);
     await recorder.start();
+    if (options.requirePlatformConfirmation && context.platformAnalysis && !context.platformDecision) {
+      await recorder.waitForConfirmation();
+      throw new Error(`WAITING_PLATFORM_CONFIRMATION：平台前置分析已生成，正式设计尚未开始。\n请先查看 ${path.join(outputDirectory, "00-platform-analysis", "platform-analysis.md")}，再执行 pae platform confirm <需求目录> --decision <路径> --scope <范围>，随后使用 --resume 继续。`);
+    }
 
     const stages: Array<{
       id: StageId;
@@ -369,6 +403,18 @@ export class ProductDesignWorkflow {
       }
     }
 
+    if (!hasFailed) {
+      context.knowledgeFeedback = buildKnowledgeFeedback(context);
+      if (context.knowledgeFeedback) {
+        const feedbackDirectory = path.join(outputDirectory, "13-knowledge-feedback");
+        await mkdir(feedbackDirectory, { recursive: true });
+        await Promise.all([
+          writeFile(path.join(feedbackDirectory, "knowledge-feedback-candidates.json"), `${JSON.stringify(context.knowledgeFeedback, null, 2)}\n`, "utf8"),
+          writeFile(path.join(feedbackDirectory, "knowledge-feedback-candidates.md"), renderKnowledgeFeedback(context.knowledgeFeedback), "utf8"),
+        ]);
+      }
+    }
+
     const manifestContent = JSON.stringify({
       engine: "pd-ai-engine",
       version: engineVersion,
@@ -391,6 +437,10 @@ export class ProductDesignWorkflow {
         selected: context.productContext.selected,
         omittedCount: context.productContext.omittedCount,
       } : undefined,
+      extensionContext: context.extensionContext,
+      platformAnalysis: context.platformAnalysis,
+      platformDecision: context.platformDecision,
+      knowledgeFeedback: context.knowledgeFeedback,
       changeImpact: context.changeImpact,
       stages: stages.map((stage) => {
         if (stage.status === "skipped") {
