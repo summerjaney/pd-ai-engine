@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前开发版本为 `v1.1.0`。PAE 在 v1.0.0 单需求稳定交付基础上，新增产品上下文、变更影响分析和显式接受的产品增量演进闭环。
+当前版本为 `v1.3.0`。PAE 已从单需求稳定交付扩展到持续产品演进、低代码平台定制和真实需求设计闭环。
 
 ## 成果物组织模型
 
@@ -24,8 +24,10 @@ output/
         └── {requirement-id}-{requirement-name}/
             ├── requirement.json
             ├── 00-requirement-input.md
+            ├── 00-sources/
             ├── 01-requirement-analysis.md
             ├── ...
+            ├── 12-design-confirmations/
             └── manifest.json
 ```
 
@@ -257,6 +259,38 @@ node dist/cli.js platform confirm output/<project>/requirements/<requirement> \
 node dist/cli.js knowledge accept output/<project>/requirements/<requirement> \
   --workspace path/to/private-base-platform/pae.workspace.json
 ```
+
+## 真实需求设计闭环（v1.3.0）
+
+创建需求后，PAE 会自动将原始需求登记为 `SRC-000`。会议记录、截图说明、历史 PRD 或现有功能资料可以继续加入来源包：
+
+```bash
+node dist/cli.js source add output/<project>/requirements/<requirement> path/to/meeting-note.md \
+  --type meeting-note \
+  --sensitivity internal \
+  --label "需求沟通记录"
+
+node dist/cli.js source list output/<project>/requirements/<requirement>
+```
+
+机密资料如不应进入 AI 上下文，必须增加 `--exclude-from-analysis`。来源索引只保存安全文件名、相对存储路径和 SHA-256，不记录本机绝对路径。
+
+平台判断确认并完成正式设计后，依次确认需求理解、功能方案和 PRD；原型确认继续使用既有原型确认记录：
+
+```bash
+node dist/cli.js design confirm output/<project>/requirements/<requirement> --gate requirement
+node dist/cli.js design confirm output/<project>/requirements/<requirement> --gate solution
+node dist/cli.js design confirm output/<project>/requirements/<requirement> --gate prd
+node dist/cli.js design status output/<project>/requirements/<requirement>
+```
+
+统一设计检查会聚合来源、五节点确认、页面规划、设计与交互一致性、PRD追踪、MasterGo和变更影响：
+
+```bash
+node dist/cli.js design check output/<project>/requirements/<requirement>
+```
+
+问题分为 `BLOCKER`、`IMPORTANT`、`NORMAL` 和 `SUGGESTION`。存在阻断时结果为 `FAIL`；无阻断但仍有待确认重要问题时结果为 `PENDING`；全部关键问题关闭后方可达到 `READY_FOR_DEVELOPMENT_REVIEW`。
 
 也可以使用 `--ids <ID1,ID2>` 只接受指定候选。接受结果写入工作空间的 `accepted-knowledge/product-knowledge-index.json`；每次更新前保存历史快照，并阻止同一候选重复接受。下一项需求加载工作空间时，会自动加载这些已确认的产品增量知识。
 
