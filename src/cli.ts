@@ -34,6 +34,7 @@ import { loadExtensionWorkspace } from "./extensions/workspace.js";
 import { confirmPlatformDecision } from "./platform-analysis/confirmation.js";
 import type { PlatformBoundaryPath } from "./platform-analysis/types.js";
 import { acceptKnowledgeFeedback } from "./knowledge-feedback/service.js";
+import { confirmDesignGate, writeRealRequirementLoopReport } from "./real-requirement-loop/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -65,6 +66,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae workspace validate <pae.workspace.json>
   pae platform confirm <需求目录> --decision <路径> --scope <范围> [--note <说明>]
   pae knowledge accept <需求目录> --workspace <pae.workspace.json> [--ids <候选ID逗号列表>]
+  pae design status <需求目录>
+  pae design confirm <需求目录> --gate requirement|solution|prd [--note <说明>]
   pae --help
 
 示例：
@@ -100,6 +103,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --note <说明>             平台判断补充说明
   --workspace <文件>        产品工作空间 pae.workspace.json
   --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
+  --gate <节点>             设计确认节点：requirement|solution|prd
 `;
 
 async function buildHelp(): Promise<string> {
@@ -135,6 +139,7 @@ const VALID_OPTIONS = new Set([
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
   "--workspace", "--ids",
+  "--gate",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -240,6 +245,27 @@ async function main(): Promise<void> {
     console.log(`接受候选：${output.accepted.length}`);
     console.log(`知识索引：#${output.sequence} ${output.indexPath}`);
     if (output.snapshotPath) console.log(`历史快照：${output.snapshotPath}`);
+    return;
+  }
+
+  if (args[0] === "design" && args[1] === "status" && Boolean(args[2])) {
+    validateArgs(args);
+    const output = await writeRealRequirementLoopReport(path.resolve(args[2]));
+    console.log(`真实需求设计闭环：${output.report.status}`);
+    console.log(`确认进度：${output.report.summary.confirmed}/${output.report.summary.total}`);
+    if (output.report.currentGate) console.log(`当前节点：${output.report.currentGate}`);
+    console.log(`状态报告：${output.markdownPath}`);
+    if (output.report.status !== "READY_FOR_DEVELOPMENT_REVIEW") process.exitCode = 2;
+    return;
+  }
+
+  if (args[0] === "design" && args[1] === "confirm" && Boolean(args[2])) {
+    validateArgs(args);
+    const gate = option(args, "--gate");
+    if (gate !== "requirement" && gate !== "solution" && gate !== "prd") throw new Error("design confirm 必须提供 --gate requirement|solution|prd。");
+    const output = await confirmDesignGate(path.resolve(args[2]), gate, option(args, "--note"));
+    console.log(`${output.confirmation.gate} 确认：PASS`);
+    console.log(`确认记录：${output.path}`);
     return;
   }
 
