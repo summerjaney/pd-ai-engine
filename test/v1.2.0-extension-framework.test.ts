@@ -150,6 +150,15 @@ test("TC-120-012: 涉及模型迁移和兼容时优先进入架构评估且仍�
   assert.ok(report.currentState.applicableRules.some((item) => item.id === "lowcode.lifecycle-compatibility"));
 });
 
+test("TC-120-012A: 普通发布和运行态预览不会误判为架构改造", async () => {
+  const workspace = await loadExtensionWorkspace(path.join(repositoryRoot, "examples", "base-platform-workspace", "pae.workspace.json"));
+  const report = analyzePlatformRequirement(
+    { sourcePath: "requirement.md", title: "字段联动复制", content: "# 字段联动复制\n\n复制规则后在运行态预览，发布前重新校验。" },
+    workspace.context,
+  );
+  assert.notEqual(report.boundaryAssessment.recommendation, "architecture-assessment");
+});
+
 test("TC-120-013: 低代码工作流落盘前置分析并注入后续 Prompt", async () => {
   const workspace = await loadExtensionWorkspace(path.join(repositoryRoot, "examples", "base-platform-workspace", "pae.workspace.json"));
   const root = await mkdtemp(path.join(os.tmpdir(), "pae-platform-analysis-"));
@@ -185,6 +194,10 @@ test("TC-120-015: 启用门禁时首次运行只生成前置分析并阻止正�
     { extensionDirectories: workspace.extensionDirectories, requirePlatformConfirmation: true },
   ), /WAITING_PLATFORM_CONFIRMATION/);
   assert.match(await readFile(path.join(root, "00-platform-analysis", "platform-analysis.md"), "utf8"), /待产品经理确认/);
+  const state = JSON.parse(await readFile(path.join(root, "run.json"), "utf8")) as { status: string; stages: Array<{ status: string }> };
+  assert.equal(state.status, "WAITING_CONFIRMATION");
+  assert.ok(state.stages.every((stage) => stage.status === "PENDING"));
+  assert.match(await readFile(path.join(root, "run-events.jsonl"), "utf8"), /RUN_WAITING_CONFIRMATION/);
   await assert.rejects(() => readFile(path.join(root, "01-requirement-analysis.md"), "utf8"), /ENOENT/);
 });
 

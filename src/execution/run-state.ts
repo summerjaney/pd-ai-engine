@@ -32,7 +32,7 @@ export interface RunEvent {
   schemaVersion: typeof RUN_SCHEMA_VERSION;
   runId: string;
   timestamp: string;
-  type: "RUN_STARTED" | "RUN_RESUMED" | "STAGE_STARTED" | "STAGE_RETRIED" | "STAGE_SUCCEEDED" | "STAGE_FAILED" | "STAGE_SKIPPED" | "RUN_SUCCEEDED" | "RUN_FAILED";
+  type: "RUN_STARTED" | "RUN_RESUMED" | "RUN_WAITING_CONFIRMATION" | "STAGE_STARTED" | "STAGE_RETRIED" | "STAGE_SUCCEEDED" | "STAGE_FAILED" | "STAGE_SKIPPED" | "RUN_SUCCEEDED" | "RUN_FAILED";
   stage?: StageId;
   error?: string;
   attempt?: number;
@@ -59,6 +59,13 @@ export class RunStateRecorder {
     current.error = error;
     await this.persist();
     await this.event({ type: "STAGE_RETRIED", stage, attempt, error });
+  }
+
+  async waitForConfirmation(): Promise<void> {
+    this.state.status = "WAITING_CONFIRMATION";
+    this.state.currentStage = undefined;
+    await this.persist();
+    await this.event({ type: "RUN_WAITING_CONFIRMATION" });
   }
 
   async stageStarted(stage: StageId): Promise<void> {

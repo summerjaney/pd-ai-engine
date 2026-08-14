@@ -155,9 +155,6 @@ export class ProductDesignWorkflow {
         writeFile(path.join(analysisDirectory, "platform-analysis.md"), renderPlatformAnalysisReport(context.platformAnalysis), "utf8"),
       ]);
       context.platformDecision = await loadValidPlatformDecision(outputDirectory, context.platformAnalysis);
-      if (options.requirePlatformConfirmation && !context.platformDecision) {
-        throw new Error(`WAITING_PLATFORM_CONFIRMATION：平台前置分析已生成，正式设计尚未开始。\n请先查看 ${path.join(analysisDirectory, "platform-analysis.md")}，再执行 pae platform confirm <需求目录> --decision <路径> --scope <范围>，随后使用 --resume 继续。`);
-      }
     }
 
     const engineVersion = await readEngineVersion();
@@ -173,6 +170,10 @@ export class ProductDesignWorkflow {
     };
     const recorder = new RunStateRecorder(outputDirectory, runState);
     await recorder.start();
+    if (options.requirePlatformConfirmation && context.platformAnalysis && !context.platformDecision) {
+      await recorder.waitForConfirmation();
+      throw new Error(`WAITING_PLATFORM_CONFIRMATION：平台前置分析已生成，正式设计尚未开始。\n请先查看 ${path.join(outputDirectory, "00-platform-analysis", "platform-analysis.md")}，再执行 pae platform confirm <需求目录> --decision <路径> --scope <范围>，随后使用 --resume 继续。`);
+    }
 
     const stages: Array<{
       id: StageId;

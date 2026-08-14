@@ -29,12 +29,15 @@ function selectCapabilities(context: ComposedExtensionContext, query: Set<string
   const selected: PlatformCapabilityMatch[] = [];
   for (const resource of context.resources) {
     const value = objectValue(resource);
-    if (!Array.isArray(value?.capabilities)) continue;
-    for (const item of value.capabilities) {
+    const staticCapabilities = Array.isArray(value?.capabilities) ? value.capabilities : [];
+    const acceptedCapabilities = Array.isArray(value?.entries)
+      ? value.entries.filter((item) => item && typeof item === "object" && (item as Record<string, unknown>).type === "capability" && (item as Record<string, unknown>).status === "accepted")
+      : [];
+    for (const item of [...staticCapabilities, ...acceptedCapabilities]) {
       if (!item || typeof item !== "object") continue;
       const capability = item as Record<string, unknown>;
       if (typeof capability.id !== "string" || typeof capability.name !== "string") continue;
-      const relevance = score(query, capability.id, capability.name, typeof capability.module === "string" ? capability.module : "");
+      const relevance = score(query, capability.id, capability.name, typeof capability.module === "string" ? capability.module : "", typeof capability.summary === "string" ? capability.summary : "");
       if (relevance > 0) selected.push({ id: capability.id, name: capability.name, module: typeof capability.module === "string" ? capability.module : undefined, status: typeof capability.status === "string" ? capability.status : undefined, score: relevance, source: resource.source });
     }
   }
@@ -61,7 +64,7 @@ function selectRules(context: ComposedExtensionContext, query: Set<string>) {
 }
 
 function assessBoundary(capabilities: PlatformCapabilityMatch[], content: string): { recommendation: PlatformBoundaryPath; confidence: "low" | "medium"; basis: string[]; alternatives: PlatformBoundaryPath[] } {
-  const architectureSignals = /底层|模型|架构|迁移|兼容|版本|发布|回滚/.test(content);
+  const architectureSignals = /底层模型|底层架构|架构改造|历史数据迁移|模型迁移|向后兼容|版本兼容|版本回滚|发布机制|发布架构/.test(content);
   if (architectureSignals) return { recommendation: "architecture-assessment", confidence: "medium", basis: ["需求包含底层模型、兼容、版本或发布相关信号。", "必须评估历史配置和数据影响。"], alternatives: ["platform-enhancement", "project-validation"] };
   if (capabilities.length > 0) return { recommendation: "platform-enhancement", confidence: "medium", basis: [`匹配到 ${capabilities.length} 项现有平台能力。`, "应先确认现有配置能否覆盖，再判断是否需要增强。"], alternatives: ["configuration", "project-validation"] };
   return { recommendation: "project-validation", confidence: "low", basis: ["当前能力地图未匹配到可确认的已有能力。", "资料不足时不能直接判定为平台通用能力或项目定制。"], alternatives: ["platform-capability", "project-customization"] };
