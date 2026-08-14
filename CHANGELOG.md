@@ -1,6 +1,32 @@
 # Changelog
 
-## [1.2.0] - Unreleased
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+
+## [1.3.0] - 2026-08-14
+
+### Added
+
+- 新增真实需求来源包与来源索引，记录材料类型、敏感级别、文件大小、SHA-256 和是否纳入分析。
+- 新增平台边界、需求理解、功能方案、原型和 PRD 五节点设计闭环状态；成果物变化会自动使确认失效。
+- 新增 `pae source add`、`pae source list`、`pae design status`、`pae design confirm` 和 `pae design check` 命令。
+- 新增跨成果物设计检查，将需求来源、人工确认、页面规划、设计、交互、PRD、MasterGo和变更影响统一归类为四级问题。
+- 新增“表单发布前校验规则”脱敏低代码真实需求样例与专用 Prototype DSL。
+
+### Fixed
+
+- 修复低代码表单需求被 Mock 执行器错误映射为通用申请审批原型的问题。
+- 修复校验结果页与详情页复用字段类型不一致导致设计检查阻断的问题。
+
+### Validation
+
+- TypeScript 类型检查通过。
+- v1.3.0 新增测试 8/8 通过；全量自动化测试 262/262 通过。
+- 脱敏真实需求完成五节点确认并达到 `READY_FOR_DEVELOPMENT_REVIEW`。
+- MasterGo 真实画布仍作为独立保留验收项，不以 Mock 结果代替。
+
+## [1.2.0] - 2026-08-14
 
 ### Added
 
@@ -14,10 +40,6 @@
 - 新增平台判断人工确认门禁；正式阶段必须在确认实现路径和版本范围后才能继续，旧确认会在需求或分析变化后失效。
 - 新增知识回流候选和人工接受机制；已接受的能力、规则、模式及决策形成带快照的产品增量知识，并在后续需求中自动复用。
 - 新增两项连续低代码平台需求验收，证明已接受能力参与下一需求的平台前置分析；平台门禁状态正式记录为 `WAITING_CONFIRMATION`。
-
-All notable changes to this project will be documented in this file.
-
-## [Unreleased]
 
 ## [1.1.0] - 2026-08-13
 

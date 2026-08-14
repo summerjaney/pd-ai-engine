@@ -349,6 +349,89 @@ function createOrganizationManagementPrototype(title: string): PrototypeDsl {
   };
 }
 
+function createFormPublishValidationPrototype(title: string): PrototypeDsl {
+  const roles = ["平台实施人员", "应用管理员"];
+  const designTokens: PrototypeDsl["designTokens"] = {
+    colors: { primary: "#3B82F6", success: "#10B981", danger: "#EF4444", warning: "#F59E0B", bgPage: "#F6F7FB", bgCard: "#FFFFFF", textPrimary: "#111827", textSecondary: "#6B7280", border: "#E5E7EB" },
+    spacing: { s8: 8, s12: 12, s16: 16, s20: 20, s24: 24, s32: 32, s40: 40 },
+    radius: { r8: 8, r12: 12, r16: 16, r24: 24 },
+    typography: { fontSize: { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, xxl: 28 }, fontWeight: { normal: 400, medium: 500, semibold: 600, bold: 700 }, lineHeight: { xs: 16, sm: 20, md: 24, lg: 28, xl: 32, xxl: 36 } },
+  };
+  return {
+    schemaVersion: "0.2",
+    product: { name: title, description: "在低代码表单发布前识别确定性配置错误，并定位到具体字段或规则。", sourceAttribution: "用户输入：发布前校验、错误分级、问题定位和存量兼容。" },
+    navigation: [
+      { label: "表单设计", pageId: "P1-form-designer", roles },
+      { label: "发布校验", pageId: "P2-validation-result", roles },
+      { label: "发布校验", pageId: "P3-validation-detail", roles },
+    ],
+    pages: [
+      {
+        id: "P1-form-designer", name: "表单设计器", route: "/forms/designer", pattern: "form",
+        fields: [
+          { id: "form-name", label: "表单名称", type: "text", required: true },
+          { id: "data-table", label: "数据表", type: "select", required: true },
+          { id: "field-config", label: "字段配置", type: "textarea", required: true },
+          { id: "linkage-rules", label: "字段联动规则", type: "textarea", required: false },
+        ],
+        actions: [
+          { id: "validate-publish", label: "校验并发布", kind: "primary", roles },
+          { id: "save", label: "保存", kind: "secondary", roles },
+        ],
+      },
+      {
+        id: "P2-validation-result", name: "发布校验结果", route: "/forms/publish-validation", pattern: "list",
+        fields: [
+          { id: "level", label: "问题级别", type: "select", required: false },
+          { id: "object", label: "所属字段或规则", type: "text", required: false },
+          { id: "message", label: "问题说明", type: "text", required: false },
+          { id: "suggestion", label: "修复建议", type: "text", required: false },
+        ],
+        actions: [
+          { id: "locate", label: "定位并修复", kind: "primary", roles },
+          { id: "view-detail", label: "查看详情", kind: "secondary", roles },
+          { id: "back", label: "返回设计器", kind: "secondary", roles },
+        ],
+        tableColumns: ["level", "object", "message", "suggestion"],
+        pagination: { enabled: true, pageSize: 20 },
+        emptyState: { description: "未发现发布阻断问题，可以继续发布。", actionId: "back" },
+      },
+      {
+        id: "P3-validation-detail", name: "校验问题详情", route: "/forms/publish-validation/detail", pattern: "detail",
+        fields: [
+          { id: "level", label: "问题级别", type: "select", required: false },
+          { id: "object", label: "所属字段或规则", type: "text", required: false },
+          { id: "message", label: "问题说明", type: "text", required: false },
+          { id: "suggestion", label: "修复建议", type: "text", required: false },
+        ],
+        actions: [
+          { id: "locate", label: "定位并修复", kind: "primary", roles },
+          { id: "back", label: "返回校验结果", kind: "secondary", roles },
+        ],
+      },
+    ],
+    rules: [
+      { id: "publish-blocker", description: "存在阻断错误时禁止发布表单。", appliesTo: ["P1-form-designer", "P2-validation-result"] },
+      { id: "field-reference", description: "字段联动规则不得引用已删除字段。", appliesTo: ["field-config", "linkage-rules"] },
+      { id: "legacy-compatibility", description: "新增校验规则不得影响已发布历史表单的正常运行。", appliesTo: ["P1-form-designer"] },
+    ],
+    transitions: [
+      { sourcePageId: "P1-form-designer", triggerType: "action", triggerId: "validate-publish", triggerLabel: "校验并发布", targetPageId: "P2-validation-result" },
+      { sourcePageId: "P2-validation-result", triggerType: "action", triggerId: "locate", triggerLabel: "定位并修复", targetPageId: "P1-form-designer" },
+      { sourcePageId: "P2-validation-result", triggerType: "action", triggerId: "view-detail", triggerLabel: "查看详情", targetPageId: "P3-validation-detail" },
+      { sourcePageId: "P2-validation-result", triggerType: "action", triggerId: "back", triggerLabel: "返回设计器", targetPageId: "P1-form-designer" },
+      { sourcePageId: "P3-validation-detail", triggerType: "action", triggerId: "locate", triggerLabel: "定位并修复", targetPageId: "P1-form-designer" },
+      { sourcePageId: "P3-validation-detail", triggerType: "action", triggerId: "back", triggerLabel: "返回校验结果", targetPageId: "P2-validation-result" },
+    ],
+    errorFeedback: {
+      validationMessage: "展示问题级别、所属字段或规则、问题说明和修复建议。",
+      operationFailureMessage: "校验执行失败时保留当前表单配置并说明失败原因。",
+      recoveryAction: "允许重新执行校验，或定位到对应字段和规则后修复。",
+    },
+    designTokens,
+  };
+}
+
 function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
   const parsed = parseRequirement(context.input.content);
   const title = parsed.title;
@@ -357,6 +440,9 @@ function createPrototype(context: Readonly<WorkflowContext>): PrototypeDsl {
   }
   if (/组织结构管理|组织机构管理/.test(`${title}\n${context.input.content}`)) {
     return createOrganizationManagementPrototype(title);
+  }
+  if (/表单发布前校验|发布前校验规则|发布校验结果/.test(`${title}\n${context.input.content}`)) {
+    return createFormPublishValidationPrototype(title);
   }
   const actionRoles = parsed.roles.map((role) => role.name);
   if (actionRoles.length === 0) actionRoles.push("管理员");

@@ -1,6 +1,7 @@
 import { access, cp, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { RequirementContext, RequirementInput } from "../domain/types.js";
+import { registerPrimaryRequirementSource } from "../requirement-sources/service.js";
 
 export interface RequirementOutputOptions extends Omit<RequirementContext, "revision"> {
   outputRoot: string;
@@ -223,6 +224,7 @@ export async function prepareRequirementOutput(
     updatedAt: new Date().toISOString(),
   }, null, 2)}\n`, "utf8");
   await writeFile(path.join(requirementDirectory, "00-requirement-input.md"), input.content, "utf8");
+  await registerPrimaryRequirementSource(requirementDirectory, input.sourcePath, input.content);
 
   await updateRequirementIndex(path.join(productDirectory, "requirement-index.md"), {
     id: requirementId,
