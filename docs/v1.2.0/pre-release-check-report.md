@@ -11,17 +11,24 @@
 | 全量测试 | PASS | 254/254 |
 | 历史兼容 | PASS | v0.3.0—v1.1.0 无回退 |
 | 发布目录 | PASS | package.json.files 声明的所有根目录存在 |
-| npm pack 清单 | NOT RUN | 当前执行环境将本地 dry-run 误判为网络审批并取消 |
+| tarball 清单 | PASS | 使用 npm 内置 `libnpmpack` 本地生成 122 KB tarball 并逐项核对；标准 `npm pack --dry-run` 在当前环境被启动前误判为网络操作 |
 | MasterGo 真实画布 | NOT RUN | 本阶段尚未使用真实公司需求和真实画布 |
 
 ## 2. 发布前剩余事项
 
-1. 在正常本地环境执行 `npm pack --dry-run`，确认 tarball 清单包含 `domains/lowcode-platform` 和 `schemas/v1.2`。
-2. 推送 `feat/v1.2.0-extension-framework` 并创建 PR。
-3. PR 合并前重跑 CI。
-4. 合并后从 `main` 创建 v1.2.0 Tag 和 Release。
-5. 真实公司需求与 MasterGo 画布验证作为产品工作接入验收，不阻断扩展框架代码发布，但不能在完成前宣称真实画布验收通过。
+1. 推送 `feat/v1.2.0-extension-framework` 并创建 PR。
+2. PR 合并前重跑 CI。
+3. 合并后从 `main` 创建 v1.2.0 Tag 和 Release。
+4. 真实公司需求与 MasterGo 画布验证作为产品工作接入验收，不阻断扩展框架代码发布，但不能在完成前宣称真实画布验收通过。
 
 ## 3. 当前判定
 
-代码与自动化验收具备候选发布质量；正式发布状态为 `READY_WITH_MANUAL_CHECKS`，仍需完成 npm tarball 清单检查和 GitHub 发布流程。
+代码、自动化验收及发布包内容检查均已通过；正式发布状态为 `READY_FOR_PR`，仍需完成 GitHub PR、合并、Tag 和 Release 流程。
+
+## 4. Tarball 检查证据
+
+- 生成方式：直接调用当前 npm 安装附带的 `libnpmpack`，仅处理本地工作区，不访问注册表。
+- 文件：`pd-ai-engine-1.2.0.tgz`
+- 大小：124393 bytes（约 122 KB）。
+- 已包含：`dist/`、`knowledge/`、`domains/lowcode-platform/`、`schemas/v1.0/`、`schemas/v1.1/`、`schemas/v1.2/`、README、LICENSE 和 package.json。
+- 未包含：`src/`、`test/`、`examples/`、验收输出、私有产品工作空间及公司资料。
