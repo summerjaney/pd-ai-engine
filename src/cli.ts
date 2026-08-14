@@ -35,6 +35,8 @@ import { confirmPlatformDecision } from "./platform-analysis/confirmation.js";
 import type { PlatformBoundaryPath } from "./platform-analysis/types.js";
 import { acceptKnowledgeFeedback } from "./knowledge-feedback/service.js";
 import { confirmDesignGate, writeRealRequirementLoopReport } from "./real-requirement-loop/service.js";
+import { addRequirementSource, readRequirementSourceIndex } from "./requirement-sources/service.js";
+import type { RequirementSourceSensitivity, RequirementSourceType } from "./requirement-sources/types.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -68,6 +70,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae knowledge accept <需求目录> --workspace <pae.workspace.json> [--ids <候选ID逗号列表>]
   pae design status <需求目录>
   pae design confirm <需求目录> --gate requirement|solution|prd [--note <说明>]
+  pae source add <需求目录> <来源文件> --type <类型> --sensitivity public|internal|confidential [选项]
+  pae source list <需求目录>
   pae --help
 
 示例：
@@ -104,6 +108,10 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --workspace <文件>        产品工作空间 pae.workspace.json
   --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
   --gate <节点>             设计确认节点：requirement|solution|prd
+  --type <类型>             来源类型：requirement|interview|meeting-note|screenshot|existing-feature|prd|prototype|other
+  --sensitivity <级别>      来源敏感级别：public|internal|confidential
+  --label <名称>            来源显示名称
+  --exclude-from-analysis  不将该来源纳入 AI 分析
 `;
 
 async function buildHelp(): Promise<string> {
@@ -140,6 +148,7 @@ const VALID_OPTIONS = new Set([
   "--decision", "--scope", "--note",
   "--workspace", "--ids",
   "--gate",
+  "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -266,6 +275,29 @@ async function main(): Promise<void> {
     const output = await confirmDesignGate(path.resolve(args[2]), gate, option(args, "--note"));
     console.log(`${output.confirmation.gate} 确认：PASS`);
     console.log(`确认记录：${output.path}`);
+    return;
+  }
+
+  if (args[0] === "source" && args[1] === "add" && Boolean(args[2]) && Boolean(args[3])) {
+    validateArgs(args);
+    const type = option(args, "--type") as RequirementSourceType | undefined;
+    const sensitivity = option(args, "--sensitivity") as RequirementSourceSensitivity | undefined;
+    const types: RequirementSourceType[] = ["requirement", "interview", "meeting-note", "screenshot", "existing-feature", "prd", "prototype", "other"];
+    const sensitivities: RequirementSourceSensitivity[] = ["public", "internal", "confidential"];
+    if (!type || !types.includes(type)) throw new Error(`--type 必须是：${types.join("、")}`);
+    if (!sensitivity || !sensitivities.includes(sensitivity)) throw new Error(`--sensitivity 必须是：${sensitivities.join("、")}`);
+    const output = await addRequirementSource(path.resolve(args[2]), args[3], { type, sensitivity, label: option(args, "--label"), includeInAnalysis: !args.includes("--exclude-from-analysis") });
+    console.log(`需求来源已登记：${output.source.id} ${output.source.label}`);
+    console.log(`敏感级别：${output.source.sensitivity}；纳入分析：${output.source.includeInAnalysis ? "是" : "否"}`);
+    console.log(`来源索引：${output.indexPath}`);
+    return;
+  }
+
+  if (args[0] === "source" && args[1] === "list" && Boolean(args[2])) {
+    validateArgs(args);
+    const index = await readRequirementSourceIndex(path.resolve(args[2]));
+    console.log(`真实需求来源：${index.sources.length}`);
+    for (const source of index.sources) console.log(`${source.id} ${source.label} [${source.type}/${source.sensitivity}] 分析=${source.includeInAnalysis ? "是" : "否"}`);
     return;
   }
 
