@@ -39,6 +39,7 @@ import { addRequirementSource, readRequirementSourceIndex } from "./requirement-
 import type { RequirementSourceSensitivity, RequirementSourceType } from "./requirement-sources/types.js";
 import { runDesignReview } from "./design-review/service.js";
 import { PlatformKnowledgeService } from "./platform-knowledge/service.js";
+import { assessCapabilityGap, renderCapabilityGapAssessment } from "./platform-knowledge/assessment.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -74,6 +75,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae knowledge list [--knowledge-dir <平台知识目录>]
   pae knowledge show <知识ID> [--knowledge-dir <平台知识目录>]
   pae knowledge search <关键词> [--knowledge-dir <平台知识目录>]
+  pae capability analyze <需求文件> [--knowledge-dir <平台知识目录>] [--out <JSON文件>]
+  pae capability gap <需求文件> [--knowledge-dir <平台知识目录>] [--out <Markdown文件>]
   pae design status <需求目录>
   pae design confirm <需求目录> --gate requirement|solution|prd [--note <说明>]
   pae design check <需求目录>
@@ -292,6 +295,24 @@ async function main(): Promise<void> {
     const matches = service.search(catalog, args[2]);
     console.log(`平台知识检索：${matches.length}`);
     for (const entity of matches) console.log(`${entity.id} [${entity.kind}] ${entity.name}`);
+    return;
+  }
+
+  if (args[0] === "capability" && ["analyze", "gap"].includes(args[1] ?? "") && Boolean(args[2])) {
+    validateArgs(args);
+    const sourcePath = path.resolve(args[2]);
+    const content = await readFile(sourcePath, "utf8");
+    validateRequirementContent(content, sourcePath);
+    const service = new PlatformKnowledgeService();
+    const catalog = await service.load(path.resolve(option(args, "--knowledge-dir") ?? "knowledge/platform"));
+    const report = assessCapabilityGap({ sourcePath, content, title: getTitle(content, sourcePath) }, catalog);
+    const rendered = args[1] === "analyze" ? `${JSON.stringify(report, null, 2)}\n` : renderCapabilityGapAssessment(report);
+    const output = option(args, "--out");
+    if (output) {
+      const target = path.resolve(output);
+      await writeFile(target, rendered, "utf8");
+      console.log(`平台能力${args[1] === "analyze" ? "分析" : "差距报告"}：${target}`);
+    } else console.log(rendered.trimEnd());
     return;
   }
 

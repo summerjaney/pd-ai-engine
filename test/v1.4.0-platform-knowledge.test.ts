@@ -5,6 +5,11 @@ import path from "node:path";
 import test from "node:test";
 import { PlatformKnowledgeService } from "../src/platform-knowledge/service.js";
 import { PlatformKnowledgeValidationError } from "../src/platform-knowledge/validator.js";
+import { assessCapabilityGap, renderCapabilityGapAssessment } from "../src/platform-knowledge/assessment.js";
+import { loadExtensionWorkspace } from "../src/extensions/workspace.js";
+import { ProductDesignWorkflow } from "../src/workflow/workflow.js";
+import { MockStageExecutor } from "../src/execution/mock-executor.js";
+import { analyzePlatformRequirement } from "../src/platform-analysis/service.js";
 
 test("v1.4.0 loads the confirmed base-platform knowledge sample", async () => {
   const catalog = await new PlatformKnowledgeService().load(path.resolve("knowledge/platform"));
@@ -41,4 +46,64 @@ test("v1.4.0 rejects path traversal in the platform catalog", async () => {
     schemaVersion: "1.4", version: "1.4.0", product: { id: "base-platform", name: "基础平台", version: "3.0.0" }, entries: ["../outside.json"],
   }));
   await assert.rejects(() => new PlatformKnowledgeService().load(directory), /路径越界/);
+});
+
+test("v1.4.0 matches organization capability and expands all reusable references", async () => {
+  const catalog = await new PlatformKnowledgeService().load(path.resolve("knowledge/platform"));
+  const report = assessCapabilityGap({
+    sourcePath: "organization.md",
+    title: "组织结构有效期管理",
+    content: "# 组织结构有效期管理\n\n现有组织结构增加生效时间、失效时间和历史版本查询。",
+  }, catalog);
+  assert.deepEqual(report.reuse.capabilities, ["capability.organization.structure"]);
+  assert.deepEqual(report.reuse.patterns, ["pattern.tree-table-management"]);
+  assert.deepEqual(report.reuse.components, ["component.organization-tree"]);
+  assert.deepEqual(report.reuse.constraints, ["constraint.organization.code-unique"]);
+  assert.ok(report.gaps.some((item) => item.id === "gap.effective-date"));
+  assert.ok(report.gaps.some((item) => item.id === "gap.history-version"));
+  assert.equal(report.boundary.recommendation, "platform-enhancement");
+  assert.equal(report.boundary.requiresHumanConfirmation, true);
+});
+
+test("v1.4.0 does not treat project-only customization as a platform capability", async () => {
+  const catalog = await new PlatformKnowledgeService().load(path.resolve("knowledge/platform"));
+  const report = assessCapabilityGap({ sourcePath: "custom.md", title: "客户专用看板", content: "# 客户专用看板\n\n仅本项目使用的客户定制大屏。" }, catalog);
+  assert.equal(report.reuse.capabilities.length, 0);
+  assert.equal(report.boundary.recommendation, "project-customization");
+  assert.equal(report.boundary.confidence, "low");
+});
+
+test("v1.4.0 capability gap markdown exposes evidence, reuse and human gate", async () => {
+  const catalog = await new PlatformKnowledgeService().load(path.resolve("knowledge/platform"));
+  const report = assessCapabilityGap({ sourcePath: "organization.md", title: "组织结构", content: "# 组织结构\n\n增加组织有效期。" }, catalog);
+  const markdown = renderCapabilityGapAssessment(report);
+  assert.match(markdown, /可复用资产/);
+  assert.match(markdown, /基础平台3\.0概要设计/);
+  assert.match(markdown, /必须人工确认：是/);
+});
+
+test("v1.4.0 workflow writes a standalone capability gap report", async () => {
+  const workspace = await loadExtensionWorkspace(path.resolve("examples/base-platform-workspace/pae.workspace.json"));
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v140-workflow-"));
+  const context = await new ProductDesignWorkflow(new MockStageExecutor()).run(
+    { sourcePath: "organization.md", title: "组织结构有效期", content: "# 组织结构有效期\n\n组织结构增加生效时间、失效时间和历史版本查询。" },
+    output,
+    undefined,
+    { extensionDirectories: workspace.extensionDirectories },
+  );
+  assert.equal(context.platformAnalysis?.capabilityGap?.boundary.recommendation, "platform-enhancement");
+  assert.match(await (await import("node:fs/promises")).readFile(path.join(output, "00-platform-analysis", "capability-gap.md"), "utf8"), /平台能力差距分析/);
+  assert.ok(JSON.parse(await (await import("node:fs/promises")).readFile(path.join(output, "00-platform-analysis", "capability-gap.json"), "utf8")).reuse.capabilities.length > 0);
+});
+
+test("v1.4.0 platform knowledge never overrides an architecture assessment", async () => {
+  const workspace = await loadExtensionWorkspace(path.resolve("examples/base-platform-workspace/pae.workspace.json"));
+  const catalog = await new PlatformKnowledgeService().load(path.resolve("knowledge/platform"));
+  const report = analyzePlatformRequirement(
+    { sourcePath: "organization.md", title: "组织结构模型迁移", content: "# 组织结构模型迁移\n\n调整组织结构底层模型并迁移历史数据。" },
+    workspace.context,
+    catalog,
+  );
+  assert.equal(report.boundaryAssessment.recommendation, "architecture-assessment");
+  assert.equal(report.boundaryAssessment.requiresHumanConfirmation, true);
 });

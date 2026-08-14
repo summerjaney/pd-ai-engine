@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { RequirementInput } from "../domain/types.js";
 import type { ComposedExtensionContext, ExtensionResource } from "../extensions/types.js";
 import { PLATFORM_ANALYSIS_SCHEMA_VERSION, type PlatformAnalysisReport, type PlatformBoundaryPath, type PlatformCapabilityMatch } from "./types.js";
+import type { PlatformKnowledgeCatalog } from "../platform-knowledge/types.js";
+import { assessCapabilityGap } from "../platform-knowledge/assessment.js";
 
 function terms(value: string): Set<string> {
   const normalized = value.toLowerCase();
@@ -70,13 +72,18 @@ function assessBoundary(capabilities: PlatformCapabilityMatch[], content: string
   return { recommendation: "project-validation", confidence: "low", basis: ["当前能力地图未匹配到可确认的已有能力。", "资料不足时不能直接判定为平台通用能力或项目定制。"], alternatives: ["platform-capability", "project-customization"] };
 }
 
-export function analyzePlatformRequirement(input: RequirementInput, context: ComposedExtensionContext): PlatformAnalysisReport {
+export function analyzePlatformRequirement(input: RequirementInput, context: ComposedExtensionContext, platformKnowledge?: PlatformKnowledgeCatalog): PlatformAnalysisReport {
   const query = terms(`${input.title}\n${input.content}`);
   const matchedCapabilities = selectCapabilities(context, query);
   const affectedModules = selectModules(context, query, matchedCapabilities);
   const applicableRules = selectRules(context, query);
   const assessment = assessBoundary(matchedCapabilities, input.content);
   const unknowns = ["现有功能的实际配置范围是否完整覆盖需求", "该需求是否已在多个项目重复出现", "技术实现、历史数据和兼容性约束", "最终平台化边界及版本范围"];
+  const capabilityGap = platformKnowledge ? assessCapabilityGap(input, platformKnowledge) : undefined;
+  const knowledgeRecommendation = capabilityGap?.boundary.recommendation;
+  const effectiveAssessment = assessment.recommendation !== "architecture-assessment" && knowledgeRecommendation && knowledgeRecommendation !== "project-validation"
+    ? { recommendation: knowledgeRecommendation as PlatformBoundaryPath, confidence: capabilityGap.boundary.confidence === "low" ? "low" as const : "medium" as const, basis: [...assessment.basis, ...capabilityGap.boundary.basis], alternatives: assessment.alternatives }
+    : assessment;
   return {
     schemaVersion: PLATFORM_ANALYSIS_SCHEMA_VERSION,
     requirement: { title: input.title, fingerprint: createHash("sha256").update(input.content).digest("hex") },
@@ -87,7 +94,8 @@ export function analyzePlatformRequirement(input: RequirementInput, context: Com
       existingCapabilityCount: matchedCapabilities.length,
       unknowns,
     },
-    boundaryAssessment: { ...assessment, status: "pending-human-confirmation", requiresHumanConfirmation: true },
+    boundaryAssessment: { ...effectiveAssessment, status: "pending-human-confirmation", requiresHumanConfirmation: true },
+    capabilityGap,
   };
 }
 

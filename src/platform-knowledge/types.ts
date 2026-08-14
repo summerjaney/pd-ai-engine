@@ -97,3 +97,32 @@ export interface PlatformKnowledgeCatalog {
   entities: PlatformKnowledgeEntity[];
   byId: ReadonlyMap<string, PlatformKnowledgeEntity>;
 }
+
+export interface PlatformKnowledgeMatch {
+  id: string;
+  kind: PlatformKnowledgeKind;
+  name: string;
+  score: number;
+  version: string;
+  source: PlatformKnowledgeSource;
+}
+
+export interface CapabilityGapAssessment {
+  schemaVersion: "1.4";
+  requirement: { title: string; fingerprint: string };
+  platformKnowledge: { productId: string; productVersion: string; catalogVersion: string };
+  matched: PlatformKnowledgeMatch[];
+  reuse: {
+    capabilities: string[];
+    patterns: string[];
+    components: string[];
+    constraints: string[];
+  };
+  gaps: Array<{ id: string; description: string; evidence: string; status: "needs-confirmation" }>;
+  boundary: {
+    recommendation: "configuration" | "platform-enhancement" | "project-customization" | "project-validation";
+    confidence: "low" | "medium" | "high";
+    basis: string[];
+    requiresHumanConfirmation: true;
+  };
+}

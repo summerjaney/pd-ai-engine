@@ -1,4 +1,5 @@
 import type { ExtensionSource } from "../extensions/types.js";
+import type { CapabilityGapAssessment } from "../platform-knowledge/types.js";
 
 export const PLATFORM_ANALYSIS_SCHEMA_VERSION = "1.2" as const;
 
@@ -35,4 +36,5 @@ export interface PlatformAnalysisReport {
     status: "pending-human-confirmation";
     requiresHumanConfirmation: true;
   };
+  capabilityGap?: CapabilityGapAssessment;
 }

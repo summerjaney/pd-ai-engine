@@ -27,6 +27,8 @@ import type { ComposedExtensionContext } from "../extensions/types.js";
 import { analyzePlatformRequirement, renderPlatformAnalysisReport } from "../platform-analysis/service.js";
 import { loadValidPlatformDecision } from "../platform-analysis/confirmation.js";
 import { buildKnowledgeFeedback, renderKnowledgeFeedback } from "../knowledge-feedback/service.js";
+import { PlatformKnowledgeService } from "../platform-knowledge/service.js";
+import { renderCapabilityGapAssessment } from "../platform-knowledge/assessment.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -84,6 +86,7 @@ export class ProductDesignWorkflow {
     private readonly knowledgeLoader = new KnowledgeLoader(),
     private readonly knowledgeSelector = new KnowledgeSelector(),
     private readonly complianceValidator = new KnowledgeComplianceValidator(),
+    private readonly platformKnowledgeService = new PlatformKnowledgeService(),
   ) {}
 
   async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number; extensionDirectories?: string[]; extensionContext?: ComposedExtensionContext; requirePlatformConfirmation?: boolean } = {}): Promise<WorkflowContext> {
@@ -120,7 +123,8 @@ export class ProductDesignWorkflow {
       context.extensionContext = composeExtensionContext(loadedExtensions);
     }
     if (context.extensionContext?.resources.some((resource) => resource.id === "lowcode.platform-feature-iteration")) {
-      context.platformAnalysis = analyzePlatformRequirement(input, context.extensionContext);
+      const platformKnowledge = await this.platformKnowledgeService.load();
+      context.platformAnalysis = analyzePlatformRequirement(input, context.extensionContext, platformKnowledge);
     }
     if (requirement) {
       const projectDirectory = path.dirname(path.dirname(outputDirectory));
@@ -136,6 +140,8 @@ export class ProductDesignWorkflow {
       .update(input.content)
       .update("\n--pae-extension-context--\n")
       .update(JSON.stringify(context.extensionContext ?? null))
+      .update("\n--pae-platform-knowledge--\n")
+      .update(JSON.stringify(context.platformAnalysis?.capabilityGap?.platformKnowledge ?? null))
       .digest("hex");
     let previousRun: RunState | undefined;
     if (options.resume) {
@@ -153,6 +159,10 @@ export class ProductDesignWorkflow {
       await Promise.all([
         writeFile(path.join(analysisDirectory, "platform-analysis.json"), `${JSON.stringify(context.platformAnalysis, null, 2)}\n`, "utf8"),
         writeFile(path.join(analysisDirectory, "platform-analysis.md"), renderPlatformAnalysisReport(context.platformAnalysis), "utf8"),
+        ...(context.platformAnalysis.capabilityGap ? [
+          writeFile(path.join(analysisDirectory, "capability-gap.json"), `${JSON.stringify(context.platformAnalysis.capabilityGap, null, 2)}\n`, "utf8"),
+          writeFile(path.join(analysisDirectory, "capability-gap.md"), renderCapabilityGapAssessment(context.platformAnalysis.capabilityGap), "utf8"),
+        ] : []),
       ]);
       context.platformDecision = await loadValidPlatformDecision(outputDirectory, context.platformAnalysis);
     }
