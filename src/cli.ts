@@ -38,6 +38,7 @@ import { confirmDesignGate, writeRealRequirementLoopReport } from "./real-requir
 import { addRequirementSource, readRequirementSourceIndex } from "./requirement-sources/service.js";
 import type { RequirementSourceSensitivity, RequirementSourceType } from "./requirement-sources/types.js";
 import { runDesignReview } from "./design-review/service.js";
+import { PlatformKnowledgeService } from "./platform-knowledge/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -69,6 +70,10 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae workspace validate <pae.workspace.json>
   pae platform confirm <需求目录> --decision <路径> --scope <范围> [--note <说明>]
   pae knowledge accept <需求目录> --workspace <pae.workspace.json> [--ids <候选ID逗号列表>]
+  pae knowledge validate [--knowledge-dir <平台知识目录>]
+  pae knowledge list [--knowledge-dir <平台知识目录>]
+  pae knowledge show <知识ID> [--knowledge-dir <平台知识目录>]
+  pae knowledge search <关键词> [--knowledge-dir <平台知识目录>]
   pae design status <需求目录>
   pae design confirm <需求目录> --gate requirement|solution|prd [--note <说明>]
   pae design check <需求目录>
@@ -109,6 +114,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --note <说明>             平台判断补充说明
   --workspace <文件>        产品工作空间 pae.workspace.json
   --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
+  --knowledge-dir <目录>   平台知识库目录，默认 knowledge/platform
   --gate <节点>             设计确认节点：requirement|solution|prd
   --type <类型>             来源类型：requirement|interview|meeting-note|screenshot|existing-feature|prd|prototype|other
   --sensitivity <级别>      来源敏感级别：public|internal|confidential
@@ -148,7 +154,7 @@ const VALID_OPTIONS = new Set([
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
-  "--workspace", "--ids",
+  "--workspace", "--ids", "--knowledge-dir",
   "--gate",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
@@ -256,6 +262,36 @@ async function main(): Promise<void> {
     console.log(`接受候选：${output.accepted.length}`);
     console.log(`知识索引：#${output.sequence} ${output.indexPath}`);
     if (output.snapshotPath) console.log(`历史快照：${output.snapshotPath}`);
+    return;
+  }
+
+  if (args[0] === "knowledge" && ["validate", "list", "show", "search"].includes(args[1] ?? "")) {
+    validateArgs(args);
+    const service = new PlatformKnowledgeService();
+    const directory = path.resolve(option(args, "--knowledge-dir") ?? "knowledge/platform");
+    const catalog = await service.load(directory);
+    if (args[1] === "validate") {
+      console.log("平台知识库校验：PASS");
+      console.log(`产品：${catalog.product.name} ${catalog.product.version}`);
+      console.log(`知识版本：${catalog.version}；条目：${catalog.entities.length}`);
+      return;
+    }
+    if (args[1] === "list") {
+      const entities = service.list(catalog);
+      console.log(`平台知识：${entities.length}`);
+      for (const entity of entities) console.log(`${entity.id} [${entity.kind}/${entity.status}] ${entity.name}`);
+      return;
+    }
+    if (!args[2] || args[2].startsWith("-")) throw new Error(`knowledge ${args[1]} 必须提供${args[1] === "show" ? "知识 ID" : "关键词"}。`);
+    if (args[1] === "show") {
+      const entity = catalog.byId.get(args[2]);
+      if (!entity) throw new Error(`未找到平台知识：${args[2]}`);
+      console.log(JSON.stringify(entity, null, 2));
+      return;
+    }
+    const matches = service.search(catalog, args[2]);
+    console.log(`平台知识检索：${matches.length}`);
+    for (const entity of matches) console.log(`${entity.id} [${entity.kind}] ${entity.name}`);
     return;
   }
 

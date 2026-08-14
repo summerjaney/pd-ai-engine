@@ -1,0 +1,15 @@
+{
+  "id": "pattern.tree-table-management",
+  "kind": "pattern",
+  "name": "树表管理",
+  "description": "通过左侧层级树定位范围，在右侧表格完成对象查询与维护。",
+  "version": "1.0.0",
+  "status": "confirmed",
+  "tags": ["后台页面", "树表", "层级数据"],
+  "source": { "type": "product-design", "document": "基础平台3.0概要设计", "section": "组织机构-组织结构", "version": "3.0.0", "confirmedBy": "product-manager", "confirmedAt": "2026-08-14" },
+  "applicableScenarios": ["对象存在稳定层级关系", "需要按层级过滤右侧数据"],
+  "nonApplicableScenarios": ["对象无层级关系", "层级仅用于偶发筛选"],
+  "pageStructure": ["页面标题与操作区", "左侧层级树", "右侧查询区", "右侧数据表格", "编辑抽屉或弹窗"],
+  "interactionRules": ["选中树节点后刷新右侧列表", "新增下级时自动带入父级", "停用前检查下级及业务引用"],
+  "references": [{ "id": "component.organization-tree", "kind": "component" }]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "component.organization-tree",
+  "kind": "component",
+  "name": "组织树",
+  "description": "展示并选择组织层级的树形组件。",
+  "version": "1.0.0",
+  "status": "confirmed",
+  "tags": ["组织机构", "树组件"],
+  "source": { "type": "existing-feature", "document": "基础平台组织机构模块", "section": "组织结构", "version": "3.0.0", "confirmedBy": "product-manager", "confirmedAt": "2026-08-14" },
+  "componentType": "tree",
+  "usageRules": ["默认展开根节点", "支持关键字过滤", "停用节点必须显示状态", "无权限节点不得展示"],
+  "references": []
+}
