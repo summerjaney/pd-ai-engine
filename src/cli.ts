@@ -37,6 +37,7 @@ import { acceptKnowledgeFeedback } from "./knowledge-feedback/service.js";
 import { confirmDesignGate, writeRealRequirementLoopReport } from "./real-requirement-loop/service.js";
 import { addRequirementSource, readRequirementSourceIndex } from "./requirement-sources/service.js";
 import type { RequirementSourceSensitivity, RequirementSourceType } from "./requirement-sources/types.js";
+import { runDesignReview } from "./design-review/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -70,6 +71,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae knowledge accept <需求目录> --workspace <pae.workspace.json> [--ids <候选ID逗号列表>]
   pae design status <需求目录>
   pae design confirm <需求目录> --gate requirement|solution|prd [--note <说明>]
+  pae design check <需求目录>
   pae source add <需求目录> <来源文件> --type <类型> --sensitivity public|internal|confidential [选项]
   pae source list <需求目录>
   pae --help
@@ -275,6 +277,17 @@ async function main(): Promise<void> {
     const output = await confirmDesignGate(path.resolve(args[2]), gate, option(args, "--note"));
     console.log(`${output.confirmation.gate} 确认：PASS`);
     console.log(`确认记录：${output.path}`);
+    return;
+  }
+
+  if (args[0] === "design" && args[1] === "check" && Boolean(args[2])) {
+    validateArgs(args);
+    const output = await runDesignReview(path.resolve(args[2]));
+    console.log(`跨成果物设计检查：${output.report.status}`);
+    console.log(`阻断/重要/一般/建议：${output.report.summary.BLOCKER}/${output.report.summary.IMPORTANT}/${output.report.summary.NORMAL}/${output.report.summary.SUGGESTION}`);
+    console.log(`检查报告：${output.markdownPath}`);
+    if (output.report.status === "FAIL") process.exitCode = 1;
+    else if (output.report.status === "PENDING") process.exitCode = 2;
     return;
   }
 
