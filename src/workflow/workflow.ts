@@ -31,6 +31,7 @@ import { PlatformKnowledgeService } from "../platform-knowledge/service.js";
 import { renderCapabilityGapAssessment } from "../platform-knowledge/assessment.js";
 import { applyPlatformKnowledgeUsage, buildPlatformKnowledgeUsagePlan, renderPlatformKnowledgeUsagePlan } from "../platform-knowledge/trace.js";
 import { writePlatformKnowledgeConsistency } from "../platform-knowledge/consistency.js";
+import { buildPlatformKnowledgeFeedback, renderPlatformKnowledgeFeedback } from "../platform-knowledge/feedback.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -61,6 +62,7 @@ const MANAGED_OUTPUT_PATHS = [
   "10-review.md",
   "11-change-impact",
   "13-knowledge-feedback",
+  "14-platform-knowledge-feedback",
   "00-platform-analysis/platform-analysis.json",
   "00-platform-analysis/platform-analysis.md",
   "99-debug",
@@ -425,6 +427,15 @@ export class ProductDesignWorkflow {
 
     if (!hasFailed) {
       if (context.platformKnowledgeUsagePlan) context.platformKnowledgeConsistency = await writePlatformKnowledgeConsistency(outputDirectory, context.platformKnowledgeUsagePlan);
+      context.platformKnowledgeFeedback = buildPlatformKnowledgeFeedback(context);
+      if (context.platformKnowledgeFeedback) {
+        const platformFeedbackDirectory = path.join(outputDirectory, "14-platform-knowledge-feedback");
+        await mkdir(platformFeedbackDirectory, { recursive: true });
+        await Promise.all([
+          writeFile(path.join(platformFeedbackDirectory, "platform-knowledge-candidates.json"), `${JSON.stringify(context.platformKnowledgeFeedback, null, 2)}\n`, "utf8"),
+          writeFile(path.join(platformFeedbackDirectory, "platform-knowledge-candidates.md"), renderPlatformKnowledgeFeedback(context.platformKnowledgeFeedback), "utf8"),
+        ]);
+      }
       context.knowledgeFeedback = buildKnowledgeFeedback(context);
       if (context.knowledgeFeedback) {
         const feedbackDirectory = path.join(outputDirectory, "13-knowledge-feedback");
@@ -462,6 +473,7 @@ export class ProductDesignWorkflow {
       platformAnalysis: context.platformAnalysis,
       platformKnowledgeUsagePlan: context.platformKnowledgeUsagePlan,
       platformKnowledgeConsistency: context.platformKnowledgeConsistency,
+      platformKnowledgeFeedback: context.platformKnowledgeFeedback,
       platformDecision: context.platformDecision,
       knowledgeFeedback: context.knowledgeFeedback,
       changeImpact: context.changeImpact,

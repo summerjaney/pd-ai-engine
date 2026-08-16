@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -13,6 +13,8 @@ import { analyzePlatformRequirement } from "../src/platform-analysis/service.js"
 import { PromptBuilder } from "../src/prompting/prompt-builder.js";
 import { validatePlatformKnowledgeConsistency } from "../src/platform-knowledge/consistency.js";
 import { runDesignReview } from "../src/design-review/service.js";
+import { confirmPlatformDecision } from "../src/platform-analysis/confirmation.js";
+import { acceptPlatformKnowledgeFeedback, readPlatformKnowledgeFeedback } from "../src/platform-knowledge/feedback.js";
 
 test("v1.4.0 loads the confirmed base-platform knowledge sample", async () => {
   const catalog = await new PlatformKnowledgeService().load(path.resolve("knowledge/platform"));
@@ -135,4 +137,45 @@ test("v1.4.0 consistency check fails when an artifact loses its platform referen
   const report = await validatePlatformKnowledgeConsistency(output, context.platformKnowledgeUsagePlan);
   assert.equal(report.valid, false);
   assert.ok(report.issues.some((issue) => issue.code === "PLATFORM_KNOWLEDGE_REFERENCE_MISSING" && issue.stage === "prd"));
+});
+
+test("v1.4.0 generates draft candidates only after the platform decision is confirmed", async () => {
+  const workspace = await loadExtensionWorkspace(path.resolve("examples/base-platform-workspace/pae.workspace.json"));
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v140-feedback-"));
+  const requirement = { projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-140", requirementName: "organization-effective-date", revision: 1 };
+  const input = { sourcePath: "organization.md", title: "组织有效期与历史版本", content: "# 组织有效期与历史版本\n\n组织结构增加生效时间、失效时间和历史版本查询。" };
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  const first = await workflow.run(input, output, requirement, { extensionDirectories: workspace.extensionDirectories });
+  assert.equal(first.platformKnowledgeFeedback, undefined);
+  await confirmPlatformDecision(output, { path: "platform-enhancement", scope: "组织有效期与历史版本" });
+  const resumed = await workflow.run(input, output, requirement, { extensionDirectories: workspace.extensionDirectories, resume: true });
+  assert.ok(resumed.platformKnowledgeFeedback?.candidates.length);
+  assert.ok(resumed.platformKnowledgeFeedback?.candidates.every((item) => item.status === "draft" && item.entity.status === "draft"));
+  const saved = await readPlatformKnowledgeFeedback(output);
+  assert.equal(saved.status, "pending-product-manager-review");
+  assert.match(await readFile(path.join(output, "14-platform-knowledge-feedback", "platform-knowledge-candidates.md"), "utf8"), /不会自动修改|不会自动晋级|只有产品经理/);
+});
+
+test("v1.4.0 accepts selected candidates into a copied formal catalog and prevents duplicates", async () => {
+  const workspace = await loadExtensionWorkspace(path.resolve("examples/base-platform-workspace/pae.workspace.json"));
+  const output = await mkdtemp(path.join(os.tmpdir(), "pae-v140-accept-"));
+  const requirement = { projectId: "base-platform", projectName: "基础平台", productVersion: "3.0.0", requirementId: "REQ-141", requirementName: "organization-effective-date", revision: 1 };
+  const input = { sourcePath: "organization.md", title: "组织有效期", content: "# 组织有效期\n\n组织结构增加生效时间和失效时间。" };
+  const workflow = new ProductDesignWorkflow(new MockStageExecutor());
+  await workflow.run(input, output, requirement, { extensionDirectories: workspace.extensionDirectories });
+  await confirmPlatformDecision(output, { path: "platform-enhancement", scope: "组织有效期" });
+  await workflow.run(input, output, requirement, { extensionDirectories: workspace.extensionDirectories, resume: true });
+  await writeFile(path.join(output, "requirement.json"), `${JSON.stringify(requirement, null, 2)}\n`, "utf8");
+  const knowledgeRoot = await mkdtemp(path.join(os.tmpdir(), "pae-v140-catalog-"));
+  const knowledgeDirectory = path.join(knowledgeRoot, "platform");
+  await cp(path.resolve("knowledge/platform"), knowledgeDirectory, { recursive: true });
+  const candidateId = "capability.organization.effective-date";
+  const accepted = await acceptPlatformKnowledgeFeedback(output, knowledgeDirectory, [candidateId]);
+  assert.deepEqual(accepted.accepted.map((item) => item.id), [candidateId]);
+  assert.equal(accepted.accepted[0].status, "confirmed");
+  assert.equal(accepted.accepted[0].source.confirmedBy, "product-manager");
+  const catalog = await new PlatformKnowledgeService().load(knowledgeDirectory);
+  assert.equal(catalog.byId.get(candidateId)?.status, "confirmed");
+  assert.ok((await readFile(accepted.snapshotPath, "utf8")).includes('"schemaVersion": "1.4"'));
+  await assert.rejects(() => acceptPlatformKnowledgeFeedback(output, knowledgeDirectory, [candidateId]), /禁止覆盖正式知识/);
 });

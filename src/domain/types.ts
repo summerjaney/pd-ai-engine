@@ -350,6 +350,7 @@ export interface WorkflowContext {
   platformAnalysis?: import("../platform-analysis/types.js").PlatformAnalysisReport;
   platformKnowledgeUsagePlan?: import("../platform-knowledge/trace.js").PlatformKnowledgeUsagePlan;
   platformKnowledgeConsistency?: import("../platform-knowledge/consistency.js").PlatformKnowledgeConsistencyReport;
+  platformKnowledgeFeedback?: import("../platform-knowledge/feedback.js").PlatformKnowledgeFeedbackReport;
   platformDecision?: import("../platform-analysis/confirmation.js").PlatformDecisionConfirmation;
   knowledgeFeedback?: import("../knowledge-feedback/types.js").KnowledgeFeedbackReport;
   changeImpact?: import("../change-impact/types.js").ChangeImpactReport;

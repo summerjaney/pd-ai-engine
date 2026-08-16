@@ -40,6 +40,7 @@ import type { RequirementSourceSensitivity, RequirementSourceType } from "./requ
 import { runDesignReview } from "./design-review/service.js";
 import { PlatformKnowledgeService } from "./platform-knowledge/service.js";
 import { assessCapabilityGap, renderCapabilityGapAssessment } from "./platform-knowledge/assessment.js";
+import { acceptPlatformKnowledgeFeedback, extractPlatformKnowledgeFeedback, readPlatformKnowledgeFeedback, renderPlatformKnowledgeFeedback } from "./platform-knowledge/feedback.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -71,6 +72,9 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae workspace validate <pae.workspace.json>
   pae platform confirm <需求目录> --decision <路径> --scope <范围> [--note <说明>]
   pae knowledge accept <需求目录> --workspace <pae.workspace.json> [--ids <候选ID逗号列表>]
+  pae knowledge extract <需求目录>
+  pae knowledge review <需求目录>
+  pae knowledge accept <需求目录> --knowledge-dir <平台知识目录> [--ids <候选ID逗号列表>]
   pae knowledge validate [--knowledge-dir <平台知识目录>]
   pae knowledge list [--knowledge-dir <平台知识目录>]
   pae knowledge show <知识ID> [--knowledge-dir <平台知识目录>]
@@ -258,13 +262,38 @@ async function main(): Promise<void> {
   if (args[0] === "knowledge" && args[1] === "accept" && Boolean(args[2])) {
     validateArgs(args);
     const workspacePath = option(args, "--workspace");
-    if (!workspacePath) throw new Error("knowledge accept 必须提供 --workspace <pae.workspace.json>。");
     const ids = option(args, "--ids")?.split(",").map((item) => item.trim()).filter(Boolean);
-    const output = await acceptKnowledgeFeedback(path.resolve(args[2]), workspacePath, ids);
-    console.log("产品知识回流：PASS");
-    console.log(`接受候选：${output.accepted.length}`);
-    console.log(`知识索引：#${output.sequence} ${output.indexPath}`);
-    if (output.snapshotPath) console.log(`历史快照：${output.snapshotPath}`);
+    const knowledgeDirectory = option(args, "--knowledge-dir");
+    if (workspacePath && knowledgeDirectory) throw new Error("knowledge accept 只能选择 --workspace 或 --knowledge-dir 其中一种目标。");
+    if (workspacePath) {
+      const output = await acceptKnowledgeFeedback(path.resolve(args[2]), workspacePath, ids);
+      console.log("产品知识回流：PASS");
+      console.log(`接受候选：${output.accepted.length}`);
+      console.log(`知识索引：#${output.sequence} ${output.indexPath}`);
+      if (output.snapshotPath) console.log(`历史快照：${output.snapshotPath}`);
+    } else if (knowledgeDirectory) {
+      const output = await acceptPlatformKnowledgeFeedback(path.resolve(args[2]), path.resolve(knowledgeDirectory), ids);
+      console.log("平台知识晋级：PASS");
+      console.log(`确认知识：${output.accepted.length}`);
+      console.log(`平台目录：${output.catalogPath}`);
+      console.log(`历史快照：${output.snapshotPath}`);
+    } else throw new Error("knowledge accept 必须提供 --workspace <文件> 或 --knowledge-dir <目录>。");
+    return;
+  }
+
+  if (args[0] === "knowledge" && args[1] === "extract" && Boolean(args[2])) {
+    validateArgs(args);
+    const output = await extractPlatformKnowledgeFeedback(path.resolve(args[2]));
+    console.log("平台知识候选提取：PASS");
+    console.log(`候选：${output.report.candidates.length}`);
+    console.log(`审核文件：${output.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "knowledge" && args[1] === "review" && Boolean(args[2])) {
+    validateArgs(args);
+    const report = await readPlatformKnowledgeFeedback(path.resolve(args[2]));
+    console.log(renderPlatformKnowledgeFeedback(report));
     return;
   }
 
