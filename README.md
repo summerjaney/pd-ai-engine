@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v1.3.0`。PAE 已从单需求稳定交付扩展到持续产品演进、低代码平台定制和真实需求设计闭环。
+当前版本为 `v1.4.0`。PAE 已从单需求稳定交付扩展到持续产品演进、低代码平台定制、真实需求设计闭环和可追溯的平台知识复用。
 
 ## 成果物组织模型
 
@@ -295,6 +295,29 @@ node dist/cli.js design check output/<project>/requirements/<requirement>
 也可以使用 `--ids <ID1,ID2>` 只接受指定候选。接受结果写入工作空间的 `accepted-knowledge/product-knowledge-index.json`；每次更新前保存历史快照，并阻止同一候选重复接受。下一项需求加载工作空间时，会自动加载这些已确认的产品增量知识。
 
 `examples/base-platform-workspace` 只用于展示目录和最小知识骨架，不应存放公司真实资料。真实基础平台工作空间建议使用独立私有仓库或私有目录。
+
+## 平台知识闭环（v1.4.0）
+
+v1.4.0 增加独立于产品工作空间的平台知识目录。平台能力、模式、组件和约束以带版本、状态及来源的实体维护；工作流会输出能力匹配、缺口、知识使用计划和跨成果物一致性报告。
+
+```bash
+node dist/cli.js knowledge validate --knowledge-dir knowledge/platform
+node dist/cli.js knowledge list --knowledge-dir knowledge/platform
+node dist/cli.js knowledge search "组织结构" --knowledge-dir knowledge/platform
+node dist/cli.js capability analyze output/<project>/requirements/<requirement> \
+  --knowledge-dir knowledge/platform
+```
+
+只有平台判断已确认、能力缺口仍有效且知识引用一致时，工作流才会在 `14-platform-knowledge-feedback/` 生成草稿候选。候选不会自动进入正式目录；产品经理审核后显式晋升：
+
+```bash
+node dist/cli.js knowledge review output/<project>/requirements/<requirement>
+node dist/cli.js knowledge accept output/<project>/requirements/<requirement> \
+  --knowledge-dir knowledge/platform \
+  --ids capability.history-version
+```
+
+接受操作会再次校验需求修订、能力缺口指纹和知识一致性，保存目录历史快照，并将选中候选以 `confirmed` 状态写入正式平台知识目录。成果物中的 `[platform-knowledge:<id>@<version>]` 标记用于追踪设计结论的知识来源。
 
 ## 当前边界
 
