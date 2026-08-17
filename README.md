@@ -319,6 +319,22 @@ node dist/cli.js knowledge accept output/<project>/requirements/<requirement> \
 
 接受操作会再次校验需求修订、能力缺口指纹和知识一致性，保存目录历史快照，并将选中候选以 `confirmed` 状态写入正式平台知识目录。成果物中的 `[platform-knowledge:<id>@<version>]` 标记用于追踪设计结论的知识来源。
 
+## 真实产品资料知识生产（v1.5.0 开发中）
+
+v1.5.0 在平台知识闭环之上增加真实产品资料入口。资料与正式知识严格分离：资料先登记、留存内容指纹并按敏感级别管理，再解析为统一章节结构，随后生成带原文证据的草稿候选。候选与正式平台知识比较后仍需产品经理复核，不会自动覆盖或晋升。
+
+```bash
+node dist/cli.js material add path/to/platform-design.docx \
+  --source-root private-sources/platform \
+  --type product-design --sensitivity confidential --product base-platform --version 2.0
+node dist/cli.js material extract source.platform-design --source-root private-sources/platform
+node dist/cli.js material derive private-sources/platform/extracted/source.platform-design/extraction.json
+node dist/cli.js material compare private-sources/platform/extracted/source.platform-design/knowledge-candidates/candidates.json \
+  --knowledge-dir knowledge/platform
+```
+
+当前自动解析 Markdown、TXT、JSON、DOCX 和 PPTX。Axure `.rp` 专有文件不会被猜测性解析，应提供 Axure HTML 导出包或人工整理的页面索引。`internal` 与 `confidential` 资料会自动标记为不得进入公开测试夹具；真实公司资料不应提交到公开仓库。
+
 ## 当前边界
 
 MVP 暂不包含：多 Agent、插件市场、企业知识库、开放 API、自动开发与部署、多人协作。MasterGo MCP 已支持受控的真实画布写入，其他设计工具尚未接入。
