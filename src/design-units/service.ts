@@ -37,7 +37,7 @@ function kindsForImpact(item: ModuleImpactItem): DesignUnitKind[] {
   return [...kinds];
 }
 
-function buildUnits(report: CrossModuleImpactReport): DesignUnit[] {
+export function buildDesignUnits(report: CrossModuleImpactReport): DesignUnit[] {
   return report.impacts.flatMap((item) => kindsForImpact(item).map((kind): DesignUnit => ({
     id: `DU-${slug(item.moduleId)}-${slug(kind)}`,
     kind,
@@ -62,7 +62,7 @@ export async function generateDesignUnitPlan(requirementDirectory: string, repor
   const plan: DesignUnitPlan = {
     schemaVersion: "1.6", requirementFingerprint: report.requirement.fingerprint, impactReportHash: hash(report),
     solutionComparisonHash: decision.comparisonHash, selectedOptionId: decision.selectedOptionId, solutionScope: decision.scope,
-    generatedAt: new Date().toISOString(), units: buildUnits(report),
+    generatedAt: new Date().toISOString(), units: buildDesignUnits(report),
   };
   const directory = planDirectory(requirementDirectory);
   await mkdir(directory, { recursive: true });

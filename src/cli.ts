@@ -52,6 +52,7 @@ import { analyzeCrossModuleImpact, renderCrossModuleImpact, renderCrossModuleMer
 import { evaluateSolutionGate, readSolutionComparison, selectSolution, writeSolutionComparison } from "./solution-options/service.js";
 import type { SolutionOptionId } from "./solution-options/types.js";
 import { generateDesignUnitPlan, writeDesignUnitTraceability } from "./design-units/service.js";
+import { captureRequirementDesignSnapshot, readRequirementChangeReport, writeRequirementChangeReport } from "./incremental-change/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -102,6 +103,9 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae solution select <需求目录> --option <方案ID> --scope <范围> [--note <说明>]
   pae design-unit generate <需求目录> <影响分析JSON>
   pae design-unit check <需求目录>
+  pae change snapshot <需求目录> <需求文件> <影响分析JSON>
+  pae change detect <需求目录> <需求文件> <影响分析JSON>
+  pae change status <需求目录>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -498,6 +502,39 @@ async function main(): Promise<void> {
     console.log(`覆盖：${result.report.summary.coveredReferenceCount}/${result.report.summary.expectedReferenceCount}`);
     console.log(`追踪报告：${result.markdownPath}`);
     if (!result.report.valid) process.exitCode = 1;
+    return;
+  }
+
+  if (args[0] === "change" && ["snapshot", "detect"].includes(args[1] ?? "") && Boolean(args[2]) && Boolean(args[3]) && Boolean(args[4])) {
+    validateArgs(args);
+    const sourcePath = path.resolve(args[3]);
+    const content = await readFile(sourcePath, "utf8");
+    validateRequirementContent(content, sourcePath);
+    const input = { sourcePath, title: getTitle(content, sourcePath), content };
+    const report = JSON.parse(await readFile(path.resolve(args[4]), "utf8"));
+    if (report.schemaVersion !== "1.6" || !report.requirement?.fingerprint || !Array.isArray(report.impacts)) throw new Error("影响分析JSON结构无效。");
+    if (args[1] === "snapshot") {
+      const result = await captureRequirementDesignSnapshot(path.resolve(args[2]), input, report);
+      console.log(`需求设计快照：#${result.snapshot.sequence}`);
+      console.log(`设计单元：${result.snapshot.designUnitPlan.units.length}`);
+      console.log(`快照：${result.path}`);
+    } else {
+      const result = await writeRequirementChangeReport(path.resolve(args[2]), input, report);
+      console.log(`需求变更检测：${result.report.status}`);
+      console.log(`影响/保留设计单元：${result.report.summary.affectedUnits}/${result.report.summary.preservedUnits}`);
+      console.log(`变更报告：${result.markdownPath}`);
+      if (result.report.status === "CHANGE_DETECTED") process.exitCode = 2;
+    }
+    return;
+  }
+
+  if (args[0] === "change" && args[1] === "status" && Boolean(args[2])) {
+    validateArgs(args);
+    const report = await readRequirementChangeReport(path.resolve(args[2]));
+    console.log(`需求变更：${report.status}`);
+    console.log(`模块新增/修改/移除：${report.summary.addedModules}/${report.summary.modifiedModules}/${report.summary.removedModules}`);
+    console.log(`设计单元影响/保留：${report.summary.affectedUnits}/${report.summary.preservedUnits}`);
+    console.log(`需要重新确认：${report.invalidatedConfirmations.join("、") || "无"}`);
     return;
   }
 
