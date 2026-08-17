@@ -51,6 +51,7 @@ import { PlatformModuleService } from "./platform-modules/service.js";
 import { analyzeCrossModuleImpact, renderCrossModuleImpact, renderCrossModuleMermaid } from "./cross-module-impact/service.js";
 import { evaluateSolutionGate, readSolutionComparison, selectSolution, writeSolutionComparison } from "./solution-options/service.js";
 import type { SolutionOptionId } from "./solution-options/types.js";
+import { generateDesignUnitPlan, writeDesignUnitTraceability } from "./design-units/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -99,6 +100,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae solution compare <影响分析JSON> --out <需求目录>
   pae solution list <需求目录>
   pae solution select <需求目录> --option <方案ID> --scope <范围> [--note <说明>]
+  pae design-unit generate <需求目录> <影响分析JSON>
+  pae design-unit check <需求目录>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -473,6 +476,28 @@ async function main(): Promise<void> {
     console.log(`方案：${result.decision.selectedOptionId}`);
     console.log(`范围：${result.decision.scope}`);
     console.log(`决策记录：${result.path}`);
+    return;
+  }
+
+  if (args[0] === "design-unit" && args[1] === "generate" && Boolean(args[2]) && Boolean(args[3])) {
+    validateArgs(args);
+    const report = JSON.parse(await readFile(path.resolve(args[3]), "utf8"));
+    if (report.schemaVersion !== "1.6" || !report.requirement?.fingerprint || !Array.isArray(report.impacts)) throw new Error("影响分析JSON结构无效。");
+    const result = await generateDesignUnitPlan(path.resolve(args[2]), report);
+    console.log("复杂需求设计单元：GENERATED");
+    console.log(`已选方案：${result.plan.selectedOptionId}`);
+    console.log(`设计单元：${result.plan.units.length}`);
+    console.log(`设计单元计划：${result.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "design-unit" && args[1] === "check" && Boolean(args[2])) {
+    validateArgs(args);
+    const result = await writeDesignUnitTraceability(path.resolve(args[2]));
+    console.log(`设计单元跨成果物追踪：${result.report.valid ? "PASS" : "FAIL"}`);
+    console.log(`覆盖：${result.report.summary.coveredReferenceCount}/${result.report.summary.expectedReferenceCount}`);
+    console.log(`追踪报告：${result.markdownPath}`);
+    if (!result.report.valid) process.exitCode = 1;
     return;
   }
 
