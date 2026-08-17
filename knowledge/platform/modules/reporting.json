@@ -1,0 +1,16 @@
+{
+  "id": "module.reporting",
+  "name": "报表",
+  "description": "提供业务数据查询、聚合、展示和导出能力。",
+  "version": "3.0.0",
+  "status": "confirmed",
+  "responsibilities": ["数据查询", "指标聚合", "图表展示", "数据导出"],
+  "coreObjects": ["Dataset", "Metric", "Report"],
+  "capabilities": [],
+  "dependencies": [
+    { "moduleId": "module.form", "type": "data", "description": "报表数据集可来源于业务表单数据。", "required": true },
+    { "moduleId": "module.permission", "type": "permission", "description": "查询结果必须应用统一数据权限。", "required": true }
+  ],
+  "extensionPoints": ["自定义数据源", "自定义指标", "导出策略"],
+  "source": { "document": "基础平台3.0概要设计", "section": "报表" }
+}

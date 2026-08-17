@@ -1,0 +1,16 @@
+{
+  "id": "module.workflow",
+  "name": "流程设计",
+  "description": "提供流程建模、任务处理和业务表单协同能力。",
+  "version": "3.0.0",
+  "status": "confirmed",
+  "responsibilities": ["流程建模", "流程实例", "待办任务", "审批权限"],
+  "coreObjects": ["ProcessDefinition", "ProcessInstance", "Task"],
+  "capabilities": [],
+  "dependencies": [
+    { "moduleId": "module.form", "type": "data", "description": "流程实例关联业务表单及其数据。", "required": true },
+    { "moduleId": "module.permission", "type": "permission", "description": "任务查询和处理受用户及数据权限约束。", "required": true }
+  ],
+  "extensionPoints": ["流程节点扩展", "任务候选人规则"],
+  "source": { "document": "基础平台3.0概要设计", "section": "流程设计" }
+}

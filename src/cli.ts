@@ -47,6 +47,7 @@ import type { MaterialKnowledgeDerivation, ProductSourceSensitivity, ProductSour
 import { compareMaterialCandidates, deriveMaterialKnowledge, writeMaterialComparison } from "./source-material/derivation.js";
 import { prepareMaterialPromotionPackage, promoteMaterialPackage } from "./source-material/promotion.js";
 import { LlmMaterialKnowledgeExtractor } from "./source-material/extractor.js";
+import { PlatformModuleService } from "./platform-modules/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -87,6 +88,10 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae knowledge search <关键词> [--knowledge-dir <平台知识目录>]
   pae capability analyze <需求文件> [--knowledge-dir <平台知识目录>] [--out <JSON文件>]
   pae capability gap <需求文件> [--knowledge-dir <平台知识目录>] [--out <Markdown文件>]
+  pae module validate [--module-dir <平台模块目录>]
+  pae module list [--module-dir <平台模块目录>]
+  pae module show <模块ID> [--module-dir <平台模块目录>]
+  pae module graph [--module-dir <平台模块目录>] [--out <Mermaid文件>]
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -135,6 +140,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --workspace <文件>        产品工作空间 pae.workspace.json
   --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
   --knowledge-dir <目录>   平台知识库目录，默认 knowledge/platform
+  --module-dir <目录>      平台模块目录，默认 knowledge/platform/modules
   --source-root <目录>     产品资料工作目录，默认 sources/platform
   --product <标识>         产品资料所属产品
   --version <版本>         产品资料版本
@@ -178,7 +184,7 @@ const VALID_OPTIONS = new Set([
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
-  "--workspace", "--ids", "--knowledge-dir", "--source-root", "--product", "--version", "--extractor",
+  "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--source-root", "--product", "--version", "--extractor",
   "--gate",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
@@ -358,6 +364,38 @@ async function main(): Promise<void> {
       const target = path.resolve(output);
       await writeFile(target, rendered, "utf8");
       console.log(`平台能力${args[1] === "analyze" ? "分析" : "差距报告"}：${target}`);
+    } else console.log(rendered.trimEnd());
+    return;
+  }
+
+  if (args[0] === "module" && ["validate", "list", "show", "graph"].includes(args[1] ?? "")) {
+    validateArgs(args);
+    const service = new PlatformModuleService();
+    const directory = path.resolve(option(args, "--module-dir") ?? "knowledge/platform/modules");
+    const catalog = await service.load(directory);
+    if (args[1] === "validate") {
+      console.log("平台模块目录校验：PASS");
+      console.log(`产品：${catalog.productId}；目录版本：${catalog.version}；模块：${catalog.modules.length}`);
+      return;
+    }
+    if (args[1] === "list") {
+      console.log(`平台模块：${catalog.modules.length}`);
+      for (const module of catalog.modules) console.log(`${module.id} [${module.status}] ${module.name}；依赖 ${module.dependencies.length}`);
+      return;
+    }
+    if (args[1] === "show") {
+      if (!args[2] || args[2].startsWith("-")) throw new Error("module show 必须提供模块 ID。");
+      const module = catalog.byId.get(args[2]);
+      if (!module) throw new Error(`未找到平台模块：${args[2]}`);
+      console.log(JSON.stringify(module, null, 2));
+      return;
+    }
+    const rendered = service.renderMermaid(catalog);
+    const output = option(args, "--out");
+    if (output) {
+      const target = path.resolve(output);
+      await writeFile(target, rendered, "utf8");
+      console.log(`平台模块依赖图：${target}`);
     } else console.log(rendered.trimEnd());
     return;
   }

@@ -1,0 +1,15 @@
+{
+  "id": "module.form",
+  "name": "表单设计",
+  "description": "提供业务模型、表单页面和数据操作配置能力。",
+  "version": "3.0.0",
+  "status": "confirmed",
+  "responsibilities": ["业务模型设计", "表单设计", "数据增删改查"],
+  "coreObjects": ["BusinessModel", "Form", "Field", "Record"],
+  "capabilities": [],
+  "dependencies": [
+    { "moduleId": "module.permission", "type": "permission", "description": "表单数据查询和操作受权限策略约束。", "required": true }
+  ],
+  "extensionPoints": ["自定义字段", "自定义校验", "数据访问拦截器"],
+  "source": { "document": "基础平台3.0概要设计", "section": "表单设计" }
+}

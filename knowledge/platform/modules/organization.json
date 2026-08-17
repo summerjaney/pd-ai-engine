@@ -1,0 +1,13 @@
+{
+  "id": "module.organization",
+  "name": "组织机构",
+  "description": "维护组织、岗位、人员归属及组织层级关系。",
+  "version": "3.0.0",
+  "status": "confirmed",
+  "responsibilities": ["组织树维护", "人员组织归属", "组织状态管理"],
+  "coreObjects": ["Organization", "Position", "UserOrganization"],
+  "capabilities": ["capability.organization.structure"],
+  "dependencies": [],
+  "extensionPoints": ["组织属性扩展", "外部组织同步"],
+  "source": { "document": "基础平台3.0概要设计", "section": "组织机构" }
+}
