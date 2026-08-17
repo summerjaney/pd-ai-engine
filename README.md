@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v1.4.0`。PAE 已从单需求稳定交付扩展到持续产品演进、低代码平台定制、真实需求设计闭环和可追溯的平台知识复用。
+当前版本为 `v1.5.0`。PAE 已从真实需求设计闭环和平台知识复用，扩展到真实产品资料解析、知识候选生产、人工审核与安全晋升。
 
 ## 成果物组织模型
 
@@ -318,6 +318,30 @@ node dist/cli.js knowledge accept output/<project>/requirements/<requirement> \
 ```
 
 接受操作会再次校验需求修订、能力缺口指纹和知识一致性，保存目录历史快照，并将选中候选以 `confirmed` 状态写入正式平台知识目录。成果物中的 `[platform-knowledge:<id>@<version>]` 标记用于追踪设计结论的知识来源。
+
+## 真实产品资料知识生产（v1.5.0 开发中）
+
+v1.5.0 在平台知识闭环之上增加真实产品资料入口。资料与正式知识严格分离：资料先登记、留存内容指纹并按敏感级别管理，再解析为统一章节结构，随后生成带原文证据的草稿候选。候选与正式平台知识比较后仍需产品经理复核，不会自动覆盖或晋升。
+
+```bash
+node dist/cli.js material add path/to/platform-design.docx \
+  --source-root private-sources/platform \
+  --type product-design --sensitivity confidential --product base-platform --version 2.0
+node dist/cli.js material extract source.platform-design --source-root private-sources/platform
+node dist/cli.js material derive private-sources/platform/extracted/source.platform-design/extraction.json --extractor rule
+# 配置OpenAI-compatible Provider后可使用受证据约束的LLM提取
+node dist/cli.js material derive extraction.json --extractor llm --provider openai --model <model>
+node dist/cli.js material compare private-sources/platform/extracted/source.platform-design/knowledge-candidates/candidates.json \
+  --knowledge-dir knowledge/platform
+node dist/cli.js material package candidates.json comparison.json review-decision.json
+node dist/cli.js material promote promotion/promotion-package.json --knowledge-dir knowledge/platform
+```
+
+当前自动解析 Markdown、TXT、JSON、DOCX、PPTX 和 Axure HTML 导出 ZIP。Axure HTML 仅提取页面与静态文本，动态交互仍需人工或真实画布验收；`.rp` 专有文件不会被猜测性解析。`internal` 与 `confidential` 资料会自动标记为不得进入公开测试夹具；真实公司资料不应提交到公开仓库。
+
+资料知识提取器默认使用确定性的 `rule` 模式，也可选择 `llm`。LLM模式不是自由生成：返回值必须是严格JSON，候选类型、章节ID、置信度均需通过结构校验，且 `evidenceExcerpt` 必须逐字存在于来源章节。无法提供原文证据的候选在重试后仍会被拒绝。
+
+`material compare` 会同时生成 `review-decision.json`，所有候选默认是 `pending`。产品经理必须填写 `reviewedAt` 并将每项明确设为 `accept-new`、`merge-source`、`create-version` 或 `reject`。只有比较结果为 `new-knowledge` 的候选可以使用 `accept-new`；生成晋升包本身仍不会修改正式知识，必须再显式执行 `material promote`。
 
 ## 当前边界
 

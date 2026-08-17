@@ -41,6 +41,12 @@ import { runDesignReview } from "./design-review/service.js";
 import { PlatformKnowledgeService } from "./platform-knowledge/service.js";
 import { assessCapabilityGap, renderCapabilityGapAssessment } from "./platform-knowledge/assessment.js";
 import { acceptPlatformKnowledgeFeedback, extractPlatformKnowledgeFeedback, readPlatformKnowledgeFeedback, renderPlatformKnowledgeFeedback } from "./platform-knowledge/feedback.js";
+import { ProductSourceService } from "./source-material/service.js";
+import { PRODUCT_SOURCE_SENSITIVITIES, PRODUCT_SOURCE_TYPES } from "./source-material/types.js";
+import type { MaterialKnowledgeDerivation, ProductSourceSensitivity, ProductSourceType } from "./source-material/types.js";
+import { compareMaterialCandidates, deriveMaterialKnowledge, writeMaterialComparison } from "./source-material/derivation.js";
+import { prepareMaterialPromotionPackage, promoteMaterialPackage } from "./source-material/promotion.js";
+import { LlmMaterialKnowledgeExtractor } from "./source-material/extractor.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -81,6 +87,13 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae knowledge search <关键词> [--knowledge-dir <平台知识目录>]
   pae capability analyze <需求文件> [--knowledge-dir <平台知识目录>] [--out <JSON文件>]
   pae capability gap <需求文件> [--knowledge-dir <平台知识目录>] [--out <Markdown文件>]
+  pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
+  pae material list --source-root <目录>
+  pae material extract <资料ID> --source-root <目录>
+  pae material derive <解析JSON> [--extractor rule|llm] [--out <目录>]
+  pae material compare <候选JSON> --knowledge-dir <平台知识目录> [--out <目录>]
+  pae material package <候选JSON> <比较JSON> <审核JSON> [--out <目录>]
+  pae material promote <晋升包JSON> --knowledge-dir <平台知识目录>
   pae design status <需求目录>
   pae design confirm <需求目录> --gate requirement|solution|prd [--note <说明>]
   pae design check <需求目录>
@@ -122,6 +135,10 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --workspace <文件>        产品工作空间 pae.workspace.json
   --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
   --knowledge-dir <目录>   平台知识库目录，默认 knowledge/platform
+  --source-root <目录>     产品资料工作目录，默认 sources/platform
+  --product <标识>         产品资料所属产品
+  --version <版本>         产品资料版本
+  --extractor <模式>       资料知识提取器：rule（默认）或 llm
   --gate <节点>             设计确认节点：requirement|solution|prd
   --type <类型>             来源类型：requirement|interview|meeting-note|screenshot|existing-feature|prd|prototype|other
   --sensitivity <级别>      来源敏感级别：public|internal|confidential
@@ -161,7 +178,7 @@ const VALID_OPTIONS = new Set([
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
-  "--workspace", "--ids", "--knowledge-dir",
+  "--workspace", "--ids", "--knowledge-dir", "--source-root", "--product", "--version", "--extractor",
   "--gate",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
@@ -342,6 +359,96 @@ async function main(): Promise<void> {
       await writeFile(target, rendered, "utf8");
       console.log(`平台能力${args[1] === "analyze" ? "分析" : "差距报告"}：${target}`);
     } else console.log(rendered.trimEnd());
+    return;
+  }
+
+  if (args[0] === "material" && args[1] === "add" && Boolean(args[2])) {
+    validateArgs(args);
+    const type = option(args, "--type") as ProductSourceType | undefined;
+    const sensitivity = option(args, "--sensitivity") as ProductSourceSensitivity | undefined;
+    const product = option(args, "--product");
+    if (!type || !PRODUCT_SOURCE_TYPES.includes(type)) throw new Error(`--type 必须是：${PRODUCT_SOURCE_TYPES.join("、")}`);
+    if (!sensitivity || !PRODUCT_SOURCE_SENSITIVITIES.includes(sensitivity)) throw new Error(`--sensitivity 必须是：${PRODUCT_SOURCE_SENSITIVITIES.join("、")}`);
+    if (!product) throw new Error("material add 必须提供 --product <产品标识>。");
+    const root = path.resolve(option(args, "--source-root") ?? "sources/platform");
+    const source = await new ProductSourceService().add(root, path.resolve(args[2]), { type, sensitivity, product, name: option(args, "--label"), version: option(args, "--version") });
+    console.log("产品资料登记：PASS");
+    console.log(`资料：${source.id} ${source.name}`);
+    console.log(`格式：${source.format}；敏感级别：${source.sensitivity}`);
+    console.log(`指纹：${source.contentFingerprint}`);
+    return;
+  }
+
+  if (args[0] === "material" && args[1] === "list") {
+    validateArgs(args);
+    const root = path.resolve(option(args, "--source-root") ?? "sources/platform");
+    const catalog = await new ProductSourceService().loadCatalog(root);
+    console.log(`产品资料：${catalog.sources.length}`);
+    for (const source of catalog.sources) console.log(`${source.id} [${source.type}/${source.format}/${source.sensitivity}] ${source.name}`);
+    return;
+  }
+
+  if (args[0] === "material" && args[1] === "extract" && Boolean(args[2])) {
+    validateArgs(args);
+    const root = path.resolve(option(args, "--source-root") ?? "sources/platform");
+    const output = await new ProductSourceService().extract(root, args[2]);
+    console.log(`产品资料解析：${output.report.status}`);
+    console.log(`章节：${output.report.sections.length}；警告：${output.report.warnings.length}`);
+    console.log(`解析结果：${output.jsonPath}`);
+    return;
+  }
+
+  if (args[0] === "material" && args[1] === "derive" && Boolean(args[2])) {
+    validateArgs(args);
+    const extractorMode = option(args, "--extractor") ?? "rule";
+    if (extractorMode !== "rule" && extractorMode !== "llm") throw new Error("--extractor 仅支持 rule 或 llm。");
+    let extractor;
+    if (extractorMode === "llm") {
+      const config = loadLlmConfig(process.env, { provider: option(args, "--provider"), model: option(args, "--model") });
+      if (config.provider !== "openai") throw new Error("LLM资料知识提取必须配置 openai Provider。");
+      extractor = new LlmMaterialKnowledgeExtractor(new OpenAiProvider({ apiKey: config.apiKey!, model: config.model, baseUrl: config.baseUrl, timeoutMs: config.timeoutMs }), config.maxRetries + 1);
+    }
+    const output = await deriveMaterialKnowledge(path.resolve(args[2]), option(args, "--out") ? path.resolve(option(args, "--out")!) : undefined, { extractor });
+    console.log("产品资料知识候选：PENDING_PRODUCT_MANAGER_REVIEW");
+    console.log(`提取器：${output.report.extractor?.id} [${output.report.extractor?.mode}]${output.report.extractor?.model ? ` ${output.report.extractor.model}` : ""}`);
+    console.log(`候选：${output.report.candidates.length}`);
+    console.log(`审核文件：${output.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "material" && args[1] === "compare" && Boolean(args[2])) {
+    validateArgs(args);
+    const derivation = JSON.parse(await readFile(path.resolve(args[2]), "utf8")) as MaterialKnowledgeDerivation;
+    if (derivation.schemaVersion !== "1.5" || derivation.status !== "pending-product-manager-review") throw new Error("产品资料知识候选文件无效。");
+    const knowledgeDirectory = path.resolve(option(args, "--knowledge-dir") ?? "knowledge/platform");
+    const catalog = await new PlatformKnowledgeService().load(knowledgeDirectory);
+    const report = compareMaterialCandidates(derivation, catalog);
+    const directory = option(args, "--out") ? path.resolve(option(args, "--out")!) : path.join(path.dirname(path.resolve(args[2])), "comparison");
+    const output = await writeMaterialComparison(report, directory);
+    console.log("知识候选比较：PENDING_PRODUCT_MANAGER_REVIEW");
+    console.log(`重复：${report.comparisons.filter((item) => item.decision === "duplicate").length}；新增：${report.comparisons.filter((item) => item.decision === "new-knowledge").length}；待判断：${report.comparisons.filter((item) => !["duplicate", "new-knowledge"].includes(item.decision)).length}`);
+    console.log(`比较报告：${output.markdownPath}`);
+    console.log(`审核决定：${output.reviewPath}`);
+    return;
+  }
+
+  if (args[0] === "material" && args[1] === "package" && Boolean(args[2]) && Boolean(args[3]) && Boolean(args[4])) {
+    validateArgs(args);
+    const output = await prepareMaterialPromotionPackage(path.resolve(args[2]), path.resolve(args[3]), path.resolve(args[4]), option(args, "--out") ? path.resolve(option(args, "--out")!) : undefined);
+    console.log("产品资料知识晋升包：APPROVED_FOR_EXPLICIT_PROMOTION");
+    console.log(`已审核新增知识：${output.promotion.candidates.length}`);
+    console.log(`晋升包：${output.jsonPath}`);
+    return;
+  }
+
+  if (args[0] === "material" && args[1] === "promote" && Boolean(args[2])) {
+    validateArgs(args);
+    const knowledgeDirectory = option(args, "--knowledge-dir");
+    if (!knowledgeDirectory) throw new Error("material promote 必须显式提供 --knowledge-dir <平台知识目录>。");
+    const output = await promoteMaterialPackage(path.resolve(args[2]), path.resolve(knowledgeDirectory));
+    console.log("产品资料知识晋升：PASS");
+    console.log(`正式知识：${output.acceptedIds.join("、")}`);
+    console.log(`历史快照：${output.snapshotPath}`);
     return;
   }
 

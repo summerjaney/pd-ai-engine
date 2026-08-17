@@ -1,11 +1,10 @@
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { RequirementContext, WorkflowContext } from "../domain/types.js";
 import type { PlatformDecisionConfirmation } from "../platform-analysis/confirmation.js";
 import type { PlatformKnowledgeConsistencyReport } from "./consistency.js";
-import { PlatformKnowledgeService } from "./service.js";
-import type { CapabilityGapAssessment, PlatformCapability, PlatformKnowledgeCatalogFile, PlatformKnowledgeEntity } from "./types.js";
-import { PlatformKnowledgeValidator } from "./validator.js";
+import type { CapabilityGapAssessment, PlatformCapability, PlatformKnowledgeEntity } from "./types.js";
+import { promotePlatformKnowledgeEntities } from "./promotion.js";
 
 export interface PlatformKnowledgeCandidate {
   id: string;
@@ -101,33 +100,10 @@ export async function acceptPlatformKnowledgeFeedback(requirementDirectory: stri
   if (selectedIds?.some((id) => !report.candidates.some((item) => item.id === id))) throw new Error("包含不存在的平台知识候选 ID。");
   if (!chosen.length) throw new Error("没有可接受的平台知识候选。");
 
-  const service = new PlatformKnowledgeService();
-  const catalog = await service.load(knowledgeDirectory);
-  const existing = new Set(catalog.entities.map((item) => item.id));
-  if (chosen.some((item) => existing.has(item.id))) throw new Error("候选知识 ID 已存在，禁止覆盖正式知识。");
   const now = new Date().toISOString();
-  const accepted = chosen.map((item): PlatformKnowledgeEntity => ({ ...item.entity, status: "confirmed", source: { ...item.entity.source, confirmedBy: "product-manager", confirmedAt: now } } as PlatformKnowledgeEntity));
-  const validator: PlatformKnowledgeValidator = new PlatformKnowledgeValidator();
-  validator.validateEntities([...catalog.entities, ...accepted]);
-
-  const catalogPath = path.join(knowledgeDirectory, "catalog.json");
-  const rawCatalog = JSON.parse(await readFile(catalogPath, "utf8")) as PlatformKnowledgeCatalogFile;
-  const stamp = now.replace(/[:.]/g, "-");
-  const historyDirectory = path.join(knowledgeDirectory, "history");
-  await mkdir(historyDirectory, { recursive: true });
-  const snapshotPath = path.join(historyDirectory, `catalog-${stamp}.json`);
-  await cp(catalogPath, snapshotPath, { errorOnExist: true });
-  const entryPaths: string[] = [];
-  for (const entity of accepted) {
-    const directory = entity.kind === "capability" ? "capabilities" : `${entity.kind}s`;
-    const relative = `${directory}/${entity.id.replace(/[^a-z0-9.-]+/gi, "-")}.json`;
-    await mkdir(path.join(knowledgeDirectory, directory), { recursive: true });
-    await writeFile(path.join(knowledgeDirectory, relative), `${JSON.stringify(entity, null, 2)}\n`, "utf8");
-    entryPaths.push(relative);
-  }
-  const nextCatalog: PlatformKnowledgeCatalogFile = { ...rawCatalog, entries: [...rawCatalog.entries, ...entryPaths] };
-  validator.validateCatalog(nextCatalog);
-  await writeFile(catalogPath, `${JSON.stringify(nextCatalog, null, 2)}\n`, "utf8");
-  await writeFile(path.join(requirementDirectory, "14-platform-knowledge-feedback", "platform-knowledge-acceptance.json"), `${JSON.stringify({ schemaVersion: "1.4", status: "accepted", acceptedAt: now, acceptedBy: "product-manager", acceptedIds: accepted.map((item) => item.id), catalogVersion: nextCatalog.version }, null, 2)}\n`, "utf8");
-  return { accepted, catalogPath, snapshotPath };
+  const promoted = await promotePlatformKnowledgeEntities(knowledgeDirectory, chosen.map((item) => item.entity), {
+    expectedCatalogVersion: report.catalogVersion, acceptedBy: "product-manager", now,
+  });
+  await writeFile(path.join(requirementDirectory, "14-platform-knowledge-feedback", "platform-knowledge-acceptance.json"), `${JSON.stringify({ schemaVersion: "1.4", status: "accepted", acceptedAt: now, acceptedBy: "product-manager", acceptedIds: promoted.accepted.map((item) => item.id), catalogVersion: report.catalogVersion }, null, 2)}\n`, "utf8");
+  return promoted;
 }
