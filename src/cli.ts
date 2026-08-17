@@ -49,6 +49,8 @@ import { prepareMaterialPromotionPackage, promoteMaterialPackage } from "./sourc
 import { LlmMaterialKnowledgeExtractor } from "./source-material/extractor.js";
 import { PlatformModuleService } from "./platform-modules/service.js";
 import { analyzeCrossModuleImpact, renderCrossModuleImpact, renderCrossModuleMermaid } from "./cross-module-impact/service.js";
+import { evaluateSolutionGate, readSolutionComparison, selectSolution, writeSolutionComparison } from "./solution-options/service.js";
+import type { SolutionOptionId } from "./solution-options/types.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -94,6 +96,9 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae module show <模块ID> [--module-dir <平台模块目录>]
   pae module graph [--module-dir <平台模块目录>] [--out <Mermaid文件>]
   pae impact analyze <需求文件> [--module-dir <平台模块目录>] [--out <报告目录>]
+  pae solution compare <影响分析JSON> --out <需求目录>
+  pae solution list <需求目录>
+  pae solution select <需求目录> --option <方案ID> --scope <范围> [--note <说明>]
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -143,6 +148,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
   --knowledge-dir <目录>   平台知识库目录，默认 knowledge/platform
   --module-dir <目录>      平台模块目录，默认 knowledge/platform/modules
+  --option <方案ID>        实施方案：configuration|platform-enhancement|product-extension|project-customization|architecture-assessment
   --source-root <目录>     产品资料工作目录，默认 sources/platform
   --product <标识>         产品资料所属产品
   --version <版本>         产品资料版本
@@ -186,7 +192,7 @@ const VALID_OPTIONS = new Set([
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
-  "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--source-root", "--product", "--version", "--extractor",
+  "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
   "--gate",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
@@ -427,6 +433,46 @@ async function main(): Promise<void> {
       console.log(`平台化建议：${report.boundary.recommendation}（${report.boundary.confidence}）`);
       console.log(`分析报告：${markdownPath}`);
     } else console.log(renderCrossModuleImpact(report).trimEnd());
+    return;
+  }
+
+  if (args[0] === "solution" && args[1] === "compare" && Boolean(args[2])) {
+    validateArgs(args);
+    const output = option(args, "--out");
+    if (!output) throw new Error("solution compare 必须提供 --out <需求目录>。");
+    const report = JSON.parse(await readFile(path.resolve(args[2]), "utf8"));
+    if (report.schemaVersion !== "1.6" || !report.requirement?.fingerprint || !report.moduleCatalog?.version || !Array.isArray(report.impacts)) throw new Error("影响分析JSON结构无效。");
+    const result = await writeSolutionComparison(path.resolve(output), report);
+    console.log("实施方案比较：pending-product-manager-selection");
+    console.log(`候选方案：${result.comparison.options.length}`);
+    console.log(`建议方案：${result.comparison.recommendedOptionId}`);
+    console.log(`比较报告：${result.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "solution" && args[1] === "list" && Boolean(args[2])) {
+    validateArgs(args);
+    const requirementDirectory = path.resolve(args[2]);
+    const comparison = await readSolutionComparison(requirementDirectory);
+    const gate = await evaluateSolutionGate(requirementDirectory);
+    console.log(`实施方案：${comparison.options.length}；门禁：${gate.status}`);
+    for (const item of comparison.options) console.log(`${item.id}${item.recommended ? " [推荐]" : ""} ${item.name}`);
+    console.log(`允许继续正式设计：${gate.canProceed ? "是" : "否"}`);
+    return;
+  }
+
+  if (args[0] === "solution" && args[1] === "select" && Boolean(args[2])) {
+    validateArgs(args);
+    const selected = option(args, "--option") as SolutionOptionId | undefined;
+    const scope = option(args, "--scope");
+    const allowed: SolutionOptionId[] = ["configuration", "platform-enhancement", "product-extension", "project-customization", "architecture-assessment"];
+    if (!selected || !allowed.includes(selected)) throw new Error(`--option 必须是：${allowed.join("、")}`);
+    if (!scope) throw new Error("solution select 必须提供 --scope <范围>。");
+    const result = await selectSolution(path.resolve(args[2]), selected, scope, option(args, "--note"));
+    console.log("实施方案选择：SELECTED");
+    console.log(`方案：${result.decision.selectedOptionId}`);
+    console.log(`范围：${result.decision.scope}`);
+    console.log(`决策记录：${result.path}`);
     return;
   }
 
