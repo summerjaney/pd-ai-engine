@@ -119,3 +119,33 @@ export async function writeDesignUnitTraceability(requirementDirectory: string):
   await Promise.all([writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8"), writeFile(markdownPath, renderDesignUnitTraceability(report), "utf8")]);
   return { report, jsonPath, markdownPath };
 }
+
+export async function applyDesignUnitReferences(requirementDirectory: string, plan?: DesignUnitPlan): Promise<{ updatedArtifacts: string[]; referenceCount: number }> {
+  plan ??= await readDesignUnitPlan(requirementDirectory);
+  const byArtifact = new Map<string, string[]>();
+  for (const unit of plan.units) for (const artifact of unit.expectedArtifacts) {
+    const ids = byArtifact.get(artifact) ?? [];
+    ids.push(unit.id);
+    byArtifact.set(artifact, ids);
+  }
+  const updatedArtifacts: string[] = [];
+  let referenceCount = 0;
+  for (const [artifact, ids] of byArtifact) {
+    const target = path.join(requirementDirectory, artifact);
+    const raw = await optionalText(target);
+    if (raw === undefined) throw new Error(`无法应用设计单元引用，成果物不存在：${artifact}`);
+    const uniqueIds = [...new Set(ids)].sort();
+    referenceCount += uniqueIds.length;
+    if (artifact.endsWith(".json")) {
+      const value = JSON.parse(raw) as Record<string, unknown>;
+      value.designUnitReferences = uniqueIds.map(designUnitMarker);
+      await writeFile(target, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    } else {
+      const withoutPrevious = raw.replace(/\n## 设计单元引用\n[\s\S]*$/m, "").trimEnd();
+      const rows = uniqueIds.map((id) => `- ${designUnitMarker(id)}`).join("\n");
+      await writeFile(target, `${withoutPrevious}\n\n## 设计单元引用\n\n${rows}\n`, "utf8");
+    }
+    updatedArtifacts.push(artifact);
+  }
+  return { updatedArtifacts: updatedArtifacts.sort(), referenceCount };
+}

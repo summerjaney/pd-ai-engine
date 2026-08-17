@@ -53,6 +53,7 @@ import { evaluateSolutionGate, readSolutionComparison, selectSolution, writeSolu
 import type { SolutionOptionId } from "./solution-options/types.js";
 import { generateDesignUnitPlan, writeDesignUnitTraceability } from "./design-units/service.js";
 import { captureRequirementDesignSnapshot, readRequirementChangeReport, writeRequirementChangeReport } from "./incremental-change/service.js";
+import { finalizeComplexRequirement, prepareComplexRequirement } from "./complex-requirement/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -106,6 +107,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae change snapshot <需求目录> <需求文件> <影响分析JSON>
   pae change detect <需求目录> <需求文件> <影响分析JSON>
   pae change status <需求目录>
+  pae complex prepare <需求目录> <需求文件> [--module-dir <平台模块目录>]
+  pae complex finalize <需求目录> <需求文件>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -535,6 +538,31 @@ async function main(): Promise<void> {
     console.log(`模块新增/修改/移除：${report.summary.addedModules}/${report.summary.modifiedModules}/${report.summary.removedModules}`);
     console.log(`设计单元影响/保留：${report.summary.affectedUnits}/${report.summary.preservedUnits}`);
     console.log(`需要重新确认：${report.invalidatedConfirmations.join("、") || "无"}`);
+    return;
+  }
+
+  if (args[0] === "complex" && ["prepare", "finalize"].includes(args[1] ?? "") && Boolean(args[2]) && Boolean(args[3])) {
+    validateArgs(args);
+    const sourcePath = path.resolve(args[3]);
+    const content = await readFile(sourcePath, "utf8");
+    validateRequirementContent(content, sourcePath);
+    const input = { sourcePath, title: getTitle(content, sourcePath), content };
+    const requirementDirectory = path.resolve(args[2]);
+    if (args[1] === "prepare") {
+      const result = await prepareComplexRequirement(requirementDirectory, input, path.resolve(option(args, "--module-dir") ?? "knowledge/platform/modules"));
+      console.log(`复杂需求准备：${result.status}`);
+      console.log(`直接/间接/回归：${result.impact.summary.direct}/${result.impact.summary.indirect}/${result.impact.summary.regression}`);
+      console.log(`建议方案：${result.impact.boundary.recommendation}`);
+      console.log(`方案比较：${result.comparisonPath}`);
+      if (result.status === "WAITING_SOLUTION_SELECTION") process.exitCode = 2;
+    } else {
+      const result = await finalizeComplexRequirement(requirementDirectory, input);
+      console.log(`跨模块复杂需求验收：${result.report.status}`);
+      console.log(`设计单元/引用：${result.report.designUnits.count}/${result.report.designUnits.referenceCount}`);
+      console.log(`正式快照：#${result.report.snapshotSequence ?? 0}`);
+      console.log(`验收报告：${result.markdownPath}`);
+      if (result.report.status !== "PASS") process.exitCode = 1;
+    }
     return;
   }
 
