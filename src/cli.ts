@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -48,6 +48,7 @@ import { compareMaterialCandidates, deriveMaterialKnowledge, writeMaterialCompar
 import { prepareMaterialPromotionPackage, promoteMaterialPackage } from "./source-material/promotion.js";
 import { LlmMaterialKnowledgeExtractor } from "./source-material/extractor.js";
 import { PlatformModuleService } from "./platform-modules/service.js";
+import { analyzeCrossModuleImpact, renderCrossModuleImpact, renderCrossModuleMermaid } from "./cross-module-impact/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -92,6 +93,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae module list [--module-dir <平台模块目录>]
   pae module show <模块ID> [--module-dir <平台模块目录>]
   pae module graph [--module-dir <平台模块目录>] [--out <Mermaid文件>]
+  pae impact analyze <需求文件> [--module-dir <平台模块目录>] [--out <报告目录>]
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -397,6 +399,34 @@ async function main(): Promise<void> {
       await writeFile(target, rendered, "utf8");
       console.log(`平台模块依赖图：${target}`);
     } else console.log(rendered.trimEnd());
+    return;
+  }
+
+  if (args[0] === "impact" && args[1] === "analyze" && Boolean(args[2])) {
+    validateArgs(args);
+    const sourcePath = path.resolve(args[2]);
+    const content = await readFile(sourcePath, "utf8");
+    validateRequirementContent(content, sourcePath);
+    const moduleService = new PlatformModuleService();
+    const catalog = await moduleService.load(path.resolve(option(args, "--module-dir") ?? "knowledge/platform/modules"));
+    const report = analyzeCrossModuleImpact({ sourcePath, title: getTitle(content, sourcePath), content }, catalog);
+    const output = option(args, "--out");
+    if (output) {
+      const directory = path.resolve(output);
+      await mkdir(directory, { recursive: true });
+      const jsonPath = path.join(directory, "module-impact-report.json");
+      const markdownPath = path.join(directory, "module-impact-report.md");
+      const graphPath = path.join(directory, "dependency-graph.mmd");
+      await Promise.all([
+        writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8"),
+        writeFile(markdownPath, renderCrossModuleImpact(report), "utf8"),
+        writeFile(graphPath, renderCrossModuleMermaid(report), "utf8"),
+      ]);
+      console.log(`跨模块影响分析：${report.boundary.status}`);
+      console.log(`直接/间接/回归：${report.summary.direct}/${report.summary.indirect}/${report.summary.regression}`);
+      console.log(`平台化建议：${report.boundary.recommendation}（${report.boundary.confidence}）`);
+      console.log(`分析报告：${markdownPath}`);
+    } else console.log(renderCrossModuleImpact(report).trimEnd());
     return;
   }
 
