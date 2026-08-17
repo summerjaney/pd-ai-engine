@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.4",
+  "version": "1.4.0",
+  "product": { "id": "base-platform", "name": "基础平台", "version": "3.0.0" },
+  "entries": [
+    "capabilities/organization-structure.json",
+    "patterns/tree-table-management.json",
+    "components/organization-tree.json",
+    "constraints/organization-code-unique.json"
+  ]
+}

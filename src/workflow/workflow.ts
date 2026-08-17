@@ -27,6 +27,11 @@ import type { ComposedExtensionContext } from "../extensions/types.js";
 import { analyzePlatformRequirement, renderPlatformAnalysisReport } from "../platform-analysis/service.js";
 import { loadValidPlatformDecision } from "../platform-analysis/confirmation.js";
 import { buildKnowledgeFeedback, renderKnowledgeFeedback } from "../knowledge-feedback/service.js";
+import { PlatformKnowledgeService } from "../platform-knowledge/service.js";
+import { renderCapabilityGapAssessment } from "../platform-knowledge/assessment.js";
+import { applyPlatformKnowledgeUsage, buildPlatformKnowledgeUsagePlan, renderPlatformKnowledgeUsagePlan } from "../platform-knowledge/trace.js";
+import { writePlatformKnowledgeConsistency } from "../platform-knowledge/consistency.js";
+import { buildPlatformKnowledgeFeedback, renderPlatformKnowledgeFeedback } from "../platform-knowledge/feedback.js";
 
 const OUTPUT_FILES: Record<StageId, string> = {
   "requirement-analysis": "01-requirement-analysis.md",
@@ -57,6 +62,7 @@ const MANAGED_OUTPUT_PATHS = [
   "10-review.md",
   "11-change-impact",
   "13-knowledge-feedback",
+  "14-platform-knowledge-feedback",
   "00-platform-analysis/platform-analysis.json",
   "00-platform-analysis/platform-analysis.md",
   "99-debug",
@@ -84,6 +90,7 @@ export class ProductDesignWorkflow {
     private readonly knowledgeLoader = new KnowledgeLoader(),
     private readonly knowledgeSelector = new KnowledgeSelector(),
     private readonly complianceValidator = new KnowledgeComplianceValidator(),
+    private readonly platformKnowledgeService = new PlatformKnowledgeService(),
   ) {}
 
   async run(input: WorkflowContext["input"], outputDirectory: string, requirement?: RequirementContext, options: { knowledgeMode?: KnowledgeMode; resume?: boolean; retries?: number; extensionDirectories?: string[]; extensionContext?: ComposedExtensionContext; requirePlatformConfirmation?: boolean } = {}): Promise<WorkflowContext> {
@@ -120,7 +127,9 @@ export class ProductDesignWorkflow {
       context.extensionContext = composeExtensionContext(loadedExtensions);
     }
     if (context.extensionContext?.resources.some((resource) => resource.id === "lowcode.platform-feature-iteration")) {
-      context.platformAnalysis = analyzePlatformRequirement(input, context.extensionContext);
+      const platformKnowledge = await this.platformKnowledgeService.load();
+      context.platformAnalysis = analyzePlatformRequirement(input, context.extensionContext, platformKnowledge);
+      if (context.platformAnalysis.capabilityGap) context.platformKnowledgeUsagePlan = buildPlatformKnowledgeUsagePlan(context.platformAnalysis.capabilityGap);
     }
     if (requirement) {
       const projectDirectory = path.dirname(path.dirname(outputDirectory));
@@ -136,6 +145,8 @@ export class ProductDesignWorkflow {
       .update(input.content)
       .update("\n--pae-extension-context--\n")
       .update(JSON.stringify(context.extensionContext ?? null))
+      .update("\n--pae-platform-knowledge--\n")
+      .update(JSON.stringify(context.platformAnalysis?.capabilityGap?.platformKnowledge ?? null))
       .digest("hex");
     let previousRun: RunState | undefined;
     if (options.resume) {
@@ -153,6 +164,14 @@ export class ProductDesignWorkflow {
       await Promise.all([
         writeFile(path.join(analysisDirectory, "platform-analysis.json"), `${JSON.stringify(context.platformAnalysis, null, 2)}\n`, "utf8"),
         writeFile(path.join(analysisDirectory, "platform-analysis.md"), renderPlatformAnalysisReport(context.platformAnalysis), "utf8"),
+        ...(context.platformAnalysis.capabilityGap ? [
+          writeFile(path.join(analysisDirectory, "capability-gap.json"), `${JSON.stringify(context.platformAnalysis.capabilityGap, null, 2)}\n`, "utf8"),
+          writeFile(path.join(analysisDirectory, "capability-gap.md"), renderCapabilityGapAssessment(context.platformAnalysis.capabilityGap), "utf8"),
+        ] : []),
+        ...(context.platformKnowledgeUsagePlan ? [
+          writeFile(path.join(analysisDirectory, "knowledge-usage-plan.json"), `${JSON.stringify(context.platformKnowledgeUsagePlan, null, 2)}\n`, "utf8"),
+          writeFile(path.join(analysisDirectory, "knowledge-usage-plan.md"), renderPlatformKnowledgeUsagePlan(context.platformKnowledgeUsagePlan), "utf8"),
+        ] : []),
       ]);
       context.platformDecision = await loadValidPlatformDecision(outputDirectory, context.platformAnalysis);
     }
@@ -233,6 +252,9 @@ export class ProductDesignWorkflow {
           }
         }
         if (!result) throw new Error(`阶段 ${stage} 未返回结果`);
+        if (context.platformKnowledgeUsagePlan && (typeof result.artifact === "string" || stage === "prototype")) {
+          result.artifact = applyPlatformKnowledgeUsage(stage, result.artifact as string | PrototypeDsl, context.platformKnowledgeUsagePlan);
+        }
         if (stage === "prototype") {
           const compliance = this.complianceValidator.validatePrototype(
             result.artifact as PrototypeDsl,
@@ -404,6 +426,16 @@ export class ProductDesignWorkflow {
     }
 
     if (!hasFailed) {
+      if (context.platformKnowledgeUsagePlan) context.platformKnowledgeConsistency = await writePlatformKnowledgeConsistency(outputDirectory, context.platformKnowledgeUsagePlan);
+      context.platformKnowledgeFeedback = buildPlatformKnowledgeFeedback(context);
+      if (context.platformKnowledgeFeedback) {
+        const platformFeedbackDirectory = path.join(outputDirectory, "14-platform-knowledge-feedback");
+        await mkdir(platformFeedbackDirectory, { recursive: true });
+        await Promise.all([
+          writeFile(path.join(platformFeedbackDirectory, "platform-knowledge-candidates.json"), `${JSON.stringify(context.platformKnowledgeFeedback, null, 2)}\n`, "utf8"),
+          writeFile(path.join(platformFeedbackDirectory, "platform-knowledge-candidates.md"), renderPlatformKnowledgeFeedback(context.platformKnowledgeFeedback), "utf8"),
+        ]);
+      }
       context.knowledgeFeedback = buildKnowledgeFeedback(context);
       if (context.knowledgeFeedback) {
         const feedbackDirectory = path.join(outputDirectory, "13-knowledge-feedback");
@@ -439,6 +471,9 @@ export class ProductDesignWorkflow {
       } : undefined,
       extensionContext: context.extensionContext,
       platformAnalysis: context.platformAnalysis,
+      platformKnowledgeUsagePlan: context.platformKnowledgeUsagePlan,
+      platformKnowledgeConsistency: context.platformKnowledgeConsistency,
+      platformKnowledgeFeedback: context.platformKnowledgeFeedback,
       platformDecision: context.platformDecision,
       knowledgeFeedback: context.knowledgeFeedback,
       changeImpact: context.changeImpact,

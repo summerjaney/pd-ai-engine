@@ -38,6 +38,9 @@ import { confirmDesignGate, writeRealRequirementLoopReport } from "./real-requir
 import { addRequirementSource, readRequirementSourceIndex } from "./requirement-sources/service.js";
 import type { RequirementSourceSensitivity, RequirementSourceType } from "./requirement-sources/types.js";
 import { runDesignReview } from "./design-review/service.js";
+import { PlatformKnowledgeService } from "./platform-knowledge/service.js";
+import { assessCapabilityGap, renderCapabilityGapAssessment } from "./platform-knowledge/assessment.js";
+import { acceptPlatformKnowledgeFeedback, extractPlatformKnowledgeFeedback, readPlatformKnowledgeFeedback, renderPlatformKnowledgeFeedback } from "./platform-knowledge/feedback.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -69,6 +72,15 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae workspace validate <pae.workspace.json>
   pae platform confirm <需求目录> --decision <路径> --scope <范围> [--note <说明>]
   pae knowledge accept <需求目录> --workspace <pae.workspace.json> [--ids <候选ID逗号列表>]
+  pae knowledge extract <需求目录>
+  pae knowledge review <需求目录>
+  pae knowledge accept <需求目录> --knowledge-dir <平台知识目录> [--ids <候选ID逗号列表>]
+  pae knowledge validate [--knowledge-dir <平台知识目录>]
+  pae knowledge list [--knowledge-dir <平台知识目录>]
+  pae knowledge show <知识ID> [--knowledge-dir <平台知识目录>]
+  pae knowledge search <关键词> [--knowledge-dir <平台知识目录>]
+  pae capability analyze <需求文件> [--knowledge-dir <平台知识目录>] [--out <JSON文件>]
+  pae capability gap <需求文件> [--knowledge-dir <平台知识目录>] [--out <Markdown文件>]
   pae design status <需求目录>
   pae design confirm <需求目录> --gate requirement|solution|prd [--note <说明>]
   pae design check <需求目录>
@@ -109,6 +121,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --note <说明>             平台判断补充说明
   --workspace <文件>        产品工作空间 pae.workspace.json
   --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
+  --knowledge-dir <目录>   平台知识库目录，默认 knowledge/platform
   --gate <节点>             设计确认节点：requirement|solution|prd
   --type <类型>             来源类型：requirement|interview|meeting-note|screenshot|existing-feature|prd|prototype|other
   --sensitivity <级别>      来源敏感级别：public|internal|confidential
@@ -148,7 +161,7 @@ const VALID_OPTIONS = new Set([
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
-  "--workspace", "--ids",
+  "--workspace", "--ids", "--knowledge-dir",
   "--gate",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
@@ -249,13 +262,86 @@ async function main(): Promise<void> {
   if (args[0] === "knowledge" && args[1] === "accept" && Boolean(args[2])) {
     validateArgs(args);
     const workspacePath = option(args, "--workspace");
-    if (!workspacePath) throw new Error("knowledge accept 必须提供 --workspace <pae.workspace.json>。");
     const ids = option(args, "--ids")?.split(",").map((item) => item.trim()).filter(Boolean);
-    const output = await acceptKnowledgeFeedback(path.resolve(args[2]), workspacePath, ids);
-    console.log("产品知识回流：PASS");
-    console.log(`接受候选：${output.accepted.length}`);
-    console.log(`知识索引：#${output.sequence} ${output.indexPath}`);
-    if (output.snapshotPath) console.log(`历史快照：${output.snapshotPath}`);
+    const knowledgeDirectory = option(args, "--knowledge-dir");
+    if (workspacePath && knowledgeDirectory) throw new Error("knowledge accept 只能选择 --workspace 或 --knowledge-dir 其中一种目标。");
+    if (workspacePath) {
+      const output = await acceptKnowledgeFeedback(path.resolve(args[2]), workspacePath, ids);
+      console.log("产品知识回流：PASS");
+      console.log(`接受候选：${output.accepted.length}`);
+      console.log(`知识索引：#${output.sequence} ${output.indexPath}`);
+      if (output.snapshotPath) console.log(`历史快照：${output.snapshotPath}`);
+    } else if (knowledgeDirectory) {
+      const output = await acceptPlatformKnowledgeFeedback(path.resolve(args[2]), path.resolve(knowledgeDirectory), ids);
+      console.log("平台知识晋级：PASS");
+      console.log(`确认知识：${output.accepted.length}`);
+      console.log(`平台目录：${output.catalogPath}`);
+      console.log(`历史快照：${output.snapshotPath}`);
+    } else throw new Error("knowledge accept 必须提供 --workspace <文件> 或 --knowledge-dir <目录>。");
+    return;
+  }
+
+  if (args[0] === "knowledge" && args[1] === "extract" && Boolean(args[2])) {
+    validateArgs(args);
+    const output = await extractPlatformKnowledgeFeedback(path.resolve(args[2]));
+    console.log("平台知识候选提取：PASS");
+    console.log(`候选：${output.report.candidates.length}`);
+    console.log(`审核文件：${output.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "knowledge" && args[1] === "review" && Boolean(args[2])) {
+    validateArgs(args);
+    const report = await readPlatformKnowledgeFeedback(path.resolve(args[2]));
+    console.log(renderPlatformKnowledgeFeedback(report));
+    return;
+  }
+
+  if (args[0] === "knowledge" && ["validate", "list", "show", "search"].includes(args[1] ?? "")) {
+    validateArgs(args);
+    const service = new PlatformKnowledgeService();
+    const directory = path.resolve(option(args, "--knowledge-dir") ?? "knowledge/platform");
+    const catalog = await service.load(directory);
+    if (args[1] === "validate") {
+      console.log("平台知识库校验：PASS");
+      console.log(`产品：${catalog.product.name} ${catalog.product.version}`);
+      console.log(`知识版本：${catalog.version}；条目：${catalog.entities.length}`);
+      return;
+    }
+    if (args[1] === "list") {
+      const entities = service.list(catalog);
+      console.log(`平台知识：${entities.length}`);
+      for (const entity of entities) console.log(`${entity.id} [${entity.kind}/${entity.status}] ${entity.name}`);
+      return;
+    }
+    if (!args[2] || args[2].startsWith("-")) throw new Error(`knowledge ${args[1]} 必须提供${args[1] === "show" ? "知识 ID" : "关键词"}。`);
+    if (args[1] === "show") {
+      const entity = catalog.byId.get(args[2]);
+      if (!entity) throw new Error(`未找到平台知识：${args[2]}`);
+      console.log(JSON.stringify(entity, null, 2));
+      return;
+    }
+    const matches = service.search(catalog, args[2]);
+    console.log(`平台知识检索：${matches.length}`);
+    for (const entity of matches) console.log(`${entity.id} [${entity.kind}] ${entity.name}`);
+    return;
+  }
+
+  if (args[0] === "capability" && ["analyze", "gap"].includes(args[1] ?? "") && Boolean(args[2])) {
+    validateArgs(args);
+    const sourcePath = path.resolve(args[2]);
+    const content = await readFile(sourcePath, "utf8");
+    validateRequirementContent(content, sourcePath);
+    const service = new PlatformKnowledgeService();
+    const catalog = await service.load(path.resolve(option(args, "--knowledge-dir") ?? "knowledge/platform"));
+    const report = assessCapabilityGap({ sourcePath, content, title: getTitle(content, sourcePath) }, catalog);
+    const rendered = args[1] === "analyze" ? `${JSON.stringify(report, null, 2)}\n` : renderCapabilityGapAssessment(report);
+    const output = option(args, "--out");
+    if (output) {
+      const target = path.resolve(output);
+      await writeFile(target, rendered, "utf8");
+      console.log(`平台能力${args[1] === "analyze" ? "分析" : "差距报告"}：${target}`);
+    } else console.log(rendered.trimEnd());
     return;
   }
 

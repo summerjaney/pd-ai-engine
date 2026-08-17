@@ -5,6 +5,7 @@ import type { DeliveryConsistencyReport, DesignConsistencyReport, InteractionCon
 import { buildRealRequirementLoopReport } from "../real-requirement-loop/service.js";
 import { readRequirementSourceIndex } from "../requirement-sources/service.js";
 import type { DesignReviewIssue, DesignReviewLevel, DesignReviewReport } from "./types.js";
+import type { PlatformKnowledgeConsistencyReport } from "../platform-knowledge/consistency.js";
 
 async function optionalJson<T>(file: string): Promise<T | undefined> {
   try { return JSON.parse(await readFile(file, "utf8")) as T; }
@@ -57,6 +58,14 @@ export async function runDesignReview(requirementDirectory: string): Promise<{ r
     for (const issue of rawIssues) add({ code: issue.code, level: normalizedLevel(issue.severity), source: item.id, message: issue.message, artifact: item.file });
     const valid = "valid" in item.value ? Boolean(item.value.valid) : rawIssues.every((issue) => normalizedLevel(issue.severity) !== "BLOCKER");
     checks.push({ id: item.id, status: valid ? "PASS" : "FAIL", issueCount: rawIssues.length });
+  }
+
+  const platformKnowledge = await optionalJson<PlatformKnowledgeConsistencyReport>(path.join(root, "09-validation/platform-knowledge-consistency.json"));
+  if (platformKnowledge) {
+    for (const issue of platformKnowledge.issues) add({ code: issue.code, level: normalizedLevel(issue.severity), source: "platform-knowledge-consistency", message: issue.message, artifact: issue.artifact });
+    checks.push({ id: "platform-knowledge-consistency", status: platformKnowledge.valid ? "PASS" : "FAIL", issueCount: platformKnowledge.issues.length });
+  } else {
+    checks.push({ id: "platform-knowledge-consistency", status: "NOT_AVAILABLE", issueCount: 0 });
   }
 
   const impact = await optionalJson<ChangeImpactReport>(path.join(root, "11-change-impact/change-impact-report.json"));

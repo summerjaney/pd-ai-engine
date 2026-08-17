@@ -1,0 +1,13 @@
+{
+  "id": "constraint.organization.code-unique",
+  "kind": "constraint",
+  "name": "组织编码唯一",
+  "description": "同一平台范围内组织编码不可重复。",
+  "version": "1.0.0",
+  "status": "confirmed",
+  "tags": ["组织机构", "编码", "唯一性"],
+  "source": { "type": "product-design", "document": "基础平台3.0概要设计", "section": "组织机构-组织结构-规则说明", "version": "3.0.0", "confirmedBy": "product-manager", "confirmedAt": "2026-08-14" },
+  "severity": "error",
+  "rule": "新增或修改组织时，组织编码必须在平台范围内唯一。",
+  "references": []
+}
