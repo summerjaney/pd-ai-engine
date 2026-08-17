@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PlatformKnowledgeCatalog, PlatformKnowledgeEntity, PlatformKnowledgeKind } from "../platform-knowledge/types.js";
-import type { CandidateComparison, MaterialKnowledgeCandidate, MaterialKnowledgeComparisonReport, MaterialKnowledgeDerivation, ProductSourceExtraction } from "./types.js";
+import type { CandidateComparison, MaterialKnowledgeCandidate, MaterialKnowledgeComparisonReport, MaterialKnowledgeDerivation, MaterialReviewDecisionFile, ProductSourceExtraction } from "./types.js";
 
 const signals: Array<{ kind: PlatformKnowledgeKind; words: string[] }> = [
   { kind: "capability", words: ["管理", "支持", "能力", "功能", "维护"] },
@@ -56,14 +56,26 @@ export async function deriveMaterialKnowledge(extractionPath: string, outputDire
 }
 
 export function compareMaterialCandidates(report: MaterialKnowledgeDerivation, catalog: PlatformKnowledgeCatalog): MaterialKnowledgeComparisonReport {
+  const normalized = (value: string) => value.replace(/[\s，。；;,.]/g, "");
+  const versionParts = (value?: string) => (value ?? "0.0.0").split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const newer = (candidate?: string, existing?: string) => {
+    const left = versionParts(candidate); const right = versionParts(existing);
+    return left.some((value, index) => value > (right[index] ?? 0) && left.slice(0, index).every((part, previous) => part === (right[previous] ?? 0)));
+  };
+  const contradiction = (left: string, right: string) => [
+    ["支持", "不支持"], ["允许", "不得"], ["必须", "可选"], ["展示", "不得展示"], ["唯一", "可重复"], ["不可重复", "允许重复"],
+  ].some(([positive, negative]) => (left.includes(positive) && right.includes(negative)) || (left.includes(negative) && right.includes(positive)));
+  const compareExisting = (candidate: MaterialKnowledgeCandidate, existing: PlatformKnowledgeEntity): CandidateComparison => {
+    if (normalized(existing.description) === normalized(candidate.entity.description)) return { candidateId: candidate.id, existingId: existing.id, decision: "duplicate", reasons: ["描述与现有知识一致，仅需考虑补充来源"], requiresHumanConfirmation: true };
+    if (contradiction(candidate.entity.description, existing.description)) return { candidateId: candidate.id, existingId: existing.id, decision: "conflict", reasons: ["候选与现有知识包含相反约束或能力陈述"], requiresHumanConfirmation: true };
+    if (newer(candidate.entity.source.version, existing.source.version)) return { candidateId: candidate.id, existingId: existing.id, decision: "new-version", reasons: [`资料版本 ${candidate.entity.source.version} 高于现有来源版本 ${existing.source.version ?? "未标注"}`], requiresHumanConfirmation: true };
+    return { candidateId: candidate.id, existingId: existing.id, decision: "supplement", reasons: ["同一知识的描述不同，可能是来源补充或规则扩展"], requiresHumanConfirmation: true };
+  };
   const comparisons: CandidateComparison[] = report.candidates.map((candidate) => {
     const exact = catalog.byId.get(candidate.id);
-    if (exact) {
-      const same = exact.description.replace(/\s/g, "") === candidate.entity.description.replace(/\s/g, "");
-      return { candidateId: candidate.id, existingId: exact.id, decision: same ? "duplicate" : "supplement", reasons: [same ? "ID与描述均与现有知识一致" : "ID一致但描述不同，需要确认是补充还是版本变化"], requiresHumanConfirmation: true };
-    }
+    if (exact) return compareExisting(candidate, exact);
     const sameName = catalog.entities.find((item) => item.kind === candidate.kind && item.name === candidate.entity.name);
-    if (sameName) return { candidateId: candidate.id, existingId: sameName.id, decision: "needs-review", reasons: ["同类型知识名称相同但ID不同"], requiresHumanConfirmation: true };
+    if (sameName) return { ...compareExisting(candidate, sameName), reasons: ["同类型知识名称相同但ID不同", ...compareExisting(candidate, sameName).reasons] };
     const conflicting = catalog.entities.find((item) => item.kind === candidate.kind && candidate.entity.description.includes(item.name));
     if (conflicting) return { candidateId: candidate.id, existingId: conflicting.id, decision: "needs-review", reasons: ["候选描述涉及现有知识，需要人工判断关系"], requiresHumanConfirmation: true };
     return { candidateId: candidate.id, decision: "new-knowledge", reasons: ["未找到相同ID或同名知识"], requiresHumanConfirmation: true };
@@ -71,12 +83,15 @@ export function compareMaterialCandidates(report: MaterialKnowledgeDerivation, c
   return { schemaVersion: "1.5", sourceId: report.sourceId, catalogVersion: catalog.version, comparedAt: new Date().toISOString(), comparisons };
 }
 
-export async function writeMaterialComparison(report: MaterialKnowledgeComparisonReport, directory: string): Promise<{ jsonPath: string; markdownPath: string }> {
+export async function writeMaterialComparison(report: MaterialKnowledgeComparisonReport, directory: string): Promise<{ jsonPath: string; markdownPath: string; reviewPath: string }> {
   await mkdir(directory, { recursive: true });
   const jsonPath = path.join(directory, "comparison.json");
   const markdownPath = path.join(directory, "comparison.md");
+  const reviewPath = path.join(directory, "review-decision.json");
   const markdown = [`# 知识候选比较`, "", `- 来源：${report.sourceId}`, `- 正式知识目录版本：${report.catalogVersion}`, "", "| 候选 | 已有知识 | 判断 | 原因 |", "|---|---|---|---|",
     ...report.comparisons.map((item) => `| ${item.candidateId} | ${item.existingId ?? "—"} | ${item.decision} | ${item.reasons.join("；")} |`), "", "> 所有判断均需要产品经理确认，不会自动覆盖正式知识。"].join("\n");
-  await Promise.all([writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8"), writeFile(markdownPath, `${markdown}\n`, "utf8")]);
-  return { jsonPath, markdownPath };
+  const review: MaterialReviewDecisionFile = { schemaVersion: "1.5", sourceId: report.sourceId, catalogVersion: report.catalogVersion, reviewedBy: "product-manager",
+    decisions: report.comparisons.map((item) => ({ candidateId: item.candidateId, action: "pending", note: `比较建议：${item.decision}` })) };
+  await Promise.all([writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8"), writeFile(markdownPath, `${markdown}\n`, "utf8"), writeFile(reviewPath, `${JSON.stringify(review, null, 2)}\n`, "utf8")]);
+  return { jsonPath, markdownPath, reviewPath };
 }

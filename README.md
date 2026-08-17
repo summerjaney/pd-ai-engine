@@ -331,9 +331,13 @@ node dist/cli.js material extract source.platform-design --source-root private-s
 node dist/cli.js material derive private-sources/platform/extracted/source.platform-design/extraction.json
 node dist/cli.js material compare private-sources/platform/extracted/source.platform-design/knowledge-candidates/candidates.json \
   --knowledge-dir knowledge/platform
+node dist/cli.js material package candidates.json comparison.json review-decision.json
+node dist/cli.js material promote promotion/promotion-package.json --knowledge-dir knowledge/platform
 ```
 
-当前自动解析 Markdown、TXT、JSON、DOCX 和 PPTX。Axure `.rp` 专有文件不会被猜测性解析，应提供 Axure HTML 导出包或人工整理的页面索引。`internal` 与 `confidential` 资料会自动标记为不得进入公开测试夹具；真实公司资料不应提交到公开仓库。
+当前自动解析 Markdown、TXT、JSON、DOCX、PPTX 和 Axure HTML 导出 ZIP。Axure HTML 仅提取页面与静态文本，动态交互仍需人工或真实画布验收；`.rp` 专有文件不会被猜测性解析。`internal` 与 `confidential` 资料会自动标记为不得进入公开测试夹具；真实公司资料不应提交到公开仓库。
+
+`material compare` 会同时生成 `review-decision.json`，所有候选默认是 `pending`。产品经理必须填写 `reviewedAt` 并将每项明确设为 `accept-new`、`merge-source`、`create-version` 或 `reject`。只有比较结果为 `new-knowledge` 的候选可以使用 `accept-new`；生成晋升包本身仍不会修改正式知识，必须再显式执行 `material promote`。
 
 ## 当前边界
 

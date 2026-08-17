@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,6 +8,7 @@ import { ProductSourceService } from "../src/source-material/service.js";
 import { compareMaterialCandidates, deriveMaterialKnowledge, writeMaterialComparison } from "../src/source-material/derivation.js";
 import { PlatformKnowledgeService } from "../src/platform-knowledge/service.js";
 import type { MaterialKnowledgeDerivation } from "../src/source-material/types.js";
+import { prepareMaterialPromotionPackage, promoteMaterialPackage } from "../src/source-material/promotion.js";
 
 test("v1.5.0 registers sensitive product material with a stable fingerprint and private-fixture gate", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pae-v150-source-"));
@@ -63,6 +64,25 @@ test("v1.5.0 refuses to guess Axure RP proprietary content", async () => {
   assert.equal(output.report.sections.length, 0);
 });
 
+test("v1.5.0 recognizes an Axure HTML export ZIP and extracts page text", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-v150-axure-html-"));
+  const file = path.join(root, "prototype.zip");
+  const zip = new AdmZip();
+  zip.addFile("index.html", Buffer.from("<html><title>Axure Prototype</title></html>"));
+  zip.addFile("resources/scripts/axure/axure.js", Buffer.from("// axure"));
+  zip.addFile("data/document.js", Buffer.from('{"pageName":"组织结构"}'));
+  zip.addFile("pages/organization.html", Buffer.from("<html><head><title>组织结构</title></head><body><h1>组织结构</h1><p>页面支持组织树和组织列表管理。</p></body></html>"));
+  zip.writeZip(file);
+  const service = new ProductSourceService();
+  const source = await service.add(path.join(root, "sources"), file, { type: "prototype", sensitivity: "internal", product: "base-platform" });
+  assert.equal(source.format, "axure-html");
+  const output = await service.extract(path.join(root, "sources"), source.id);
+  assert.equal(output.report.status, "extracted");
+  assert.equal(output.report.sections[0].title, "组织结构");
+  assert.match(output.report.sections[0].content, /组织树和组织列表管理/);
+  assert.match(output.report.warnings.join(" "), /动态交互.*人工|真实画布验收/);
+});
+
 test("v1.5.0 derives draft candidates only and keeps the product-manager gate", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pae-v150-derive-"));
   const extraction = path.join(root, "extraction.json");
@@ -88,6 +108,47 @@ test("v1.5.0 comparison detects duplicates without overwriting formal knowledge"
   const directory = await mkdtemp(path.join(os.tmpdir(), "pae-v150-compare-"));
   const output = await writeMaterialComparison(report, directory);
   assert.match(await readFile(output.markdownPath, "utf8"), /不会自动覆盖正式知识/);
+});
+
+test("v1.5.0 distinguishes a newer source version and a contradictory rule", async () => {
+  const catalog = await new PlatformKnowledgeService().load(path.resolve("knowledge/platform"));
+  const existing = catalog.byId.get("constraint.organization.code-unique")!;
+  const candidate = (description: string, version: string): MaterialKnowledgeDerivation => ({ schemaVersion: "1.5", sourceId: "source.ldp", status: "pending-product-manager-review", generatedAt: "2026-08-17T00:00:00Z", candidates: [{
+    id: existing.id, kind: existing.kind, status: "draft", confidence: "high", entity: { ...existing, description, status: "draft", source: { ...existing.source, version } }, evidence: { sourceId: "source.ldp", sectionId: "s1", sectionTitle: "规则", locator: { page: 28 }, excerpt: description, contentFingerprint: "sha256:evidence" },
+  }] });
+  assert.equal(compareMaterialCandidates(candidate("组织编码需要全局校验并记录冲突。", "4.0.0"), catalog).comparisons[0].decision, "new-version");
+  assert.equal(compareMaterialCandidates(candidate("组织编码允许重复。", "3.0.0"), catalog).comparisons[0].decision, "conflict");
+});
+
+test("v1.5.0 requires a complete product-manager review before packaging", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-v150-review-gate-"));
+  const candidate = { id: "constraint.organization.new-rule", kind: "constraint" as const, status: "draft" as const, confidence: "high" as const,
+    entity: { id: "constraint.organization.new-rule", kind: "constraint" as const, name: "组织新规则", description: "新增组织必须填写生效日期。", version: "1.0.0", status: "draft" as const, tags: ["组织"], source: { type: "product-design" as const, document: "平台设计说明书", version: "3.0.0" }, references: [], severity: "error" as const, rule: "新增组织必须填写生效日期。" },
+    evidence: { sourceId: "source.ldp", sectionId: "s1", sectionTitle: "组织规则", locator: { page: 30 }, excerpt: "新增组织必须填写生效日期。", contentFingerprint: "sha256:evidence" } };
+  const derivation = { schemaVersion: "1.5", sourceId: "source.ldp", status: "pending-product-manager-review", generatedAt: "2026-08-17T00:00:00Z", candidates: [candidate] };
+  const comparison = { schemaVersion: "1.5", sourceId: "source.ldp", catalogVersion: "1.4.0", comparedAt: "2026-08-17T00:00:00Z", comparisons: [{ candidateId: candidate.id, decision: "new-knowledge", reasons: ["new"], requiresHumanConfirmation: true }] };
+  const derivationPath = path.join(root, "candidates.json"); const comparisonPath = path.join(root, "comparison.json"); const reviewPath = path.join(root, "review.json");
+  await writeFile(derivationPath, JSON.stringify(derivation)); await writeFile(comparisonPath, JSON.stringify(comparison));
+  await writeFile(reviewPath, JSON.stringify({ schemaVersion: "1.5", sourceId: "source.ldp", catalogVersion: "1.4.0", reviewedBy: "product-manager", decisions: [{ candidateId: candidate.id, action: "pending" }] }));
+  await assert.rejects(() => prepareMaterialPromotionPackage(derivationPath, comparisonPath, reviewPath), /reviewedAt|待审核/);
+  await writeFile(reviewPath, JSON.stringify({ schemaVersion: "1.5", sourceId: "source.ldp", catalogVersion: "1.4.0", reviewedBy: "product-manager", reviewedAt: "2026-08-17T01:00:00Z", decisions: [{ candidateId: candidate.id, action: "accept-new" }] }));
+  const output = await prepareMaterialPromotionPackage(derivationPath, comparisonPath, reviewPath);
+  assert.equal(output.promotion.candidates.length, 1);
+  assert.match(await readFile(output.markdownPath, "utf8"), /不会修改正式知识/);
+});
+
+test("v1.5.0 explicitly promotes an approved package through the shared v1.4.0 safety path", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-v150-promote-"));
+  const knowledgeDirectory = path.join(root, "platform");
+  await cp(path.resolve("knowledge/platform"), knowledgeDirectory, { recursive: true });
+  const packagePath = path.join(root, "promotion-package.json");
+  const entity = { id: "constraint.organization.effective-date-required", kind: "constraint", name: "组织生效日期必填", description: "新增组织必须填写生效日期。", version: "1.0.0", status: "draft", tags: ["组织"], source: { type: "product-design", document: "平台设计说明书", version: "3.0.0" }, references: [], severity: "error", rule: "新增组织必须填写生效日期。" };
+  await writeFile(packagePath, JSON.stringify({ schemaVersion: "1.5", sourceId: "source.ldp", catalogVersion: "1.4.0", status: "approved-for-explicit-promotion", approvedAt: "2026-08-17T01:00:00Z", approvedBy: "product-manager", candidates: [{ id: entity.id, kind: entity.kind, status: "draft", confidence: "high", entity, evidence: { sourceId: "source.ldp", sectionId: "s1", sectionTitle: "组织", locator: { page: 30 }, excerpt: entity.description, contentFingerprint: "sha256:evidence" } }] }));
+  const output = await promoteMaterialPackage(packagePath, knowledgeDirectory);
+  assert.deepEqual(output.acceptedIds, [entity.id]);
+  assert.equal((await new PlatformKnowledgeService().load(knowledgeDirectory)).byId.get(entity.id)?.status, "confirmed");
+  assert.match(await readFile(output.snapshotPath, "utf8"), /"schemaVersion": "1.4"/);
+  await assert.rejects(() => promoteMaterialPackage(packagePath, knowledgeDirectory), /禁止覆盖|版本已变化/);
 });
 
 test("v1.5.0 rejects duplicate source IDs and path escape is not persisted", async () => {

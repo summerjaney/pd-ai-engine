@@ -9,7 +9,7 @@ export interface ProductSourceRecord {
   id: string;
   name: string;
   type: ProductSourceType;
-  format: "md" | "txt" | "json" | "docx" | "pptx" | "axure-rp" | "other";
+  format: "md" | "txt" | "json" | "docx" | "pptx" | "axure-rp" | "axure-html" | "other";
   product: string;
   version?: string;
   sensitivity: ProductSourceSensitivity;
@@ -81,4 +81,26 @@ export interface MaterialKnowledgeComparisonReport {
   catalogVersion: string;
   comparedAt: string;
   comparisons: CandidateComparison[];
+}
+
+export const MATERIAL_REVIEW_ACTIONS = ["pending", "accept-new", "merge-source", "create-version", "reject"] as const;
+export type MaterialReviewAction = (typeof MATERIAL_REVIEW_ACTIONS)[number];
+
+export interface MaterialReviewDecisionFile {
+  schemaVersion: "1.5";
+  sourceId: string;
+  catalogVersion: string;
+  reviewedBy: "product-manager";
+  reviewedAt?: string;
+  decisions: Array<{ candidateId: string; action: MaterialReviewAction; note?: string }>;
+}
+
+export interface MaterialPromotionPackage {
+  schemaVersion: "1.5";
+  sourceId: string;
+  catalogVersion: string;
+  status: "approved-for-explicit-promotion";
+  approvedAt: string;
+  approvedBy: "product-manager";
+  candidates: MaterialKnowledgeCandidate[];
 }

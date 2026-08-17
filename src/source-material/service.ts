@@ -14,10 +14,16 @@ function sha256(content: Buffer | string): string {
   return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
 
-function formatOf(file: string): ProductSourceRecord["format"] {
+function formatOf(file: string, bytes: Buffer): ProductSourceRecord["format"] {
   const ext = path.extname(file).toLowerCase().slice(1);
   if (["md", "txt", "json", "docx", "pptx"].includes(ext)) return ext as ProductSourceRecord["format"];
   if (ext === "rp") return "axure-rp";
+  if (ext === "zip") {
+    try {
+      const names = new AdmZip(bytes).getEntries().map((entry) => entry.entryName.toLowerCase());
+      if (names.some((name) => name.endsWith("index.html") || name.endsWith("start.html")) && names.some((name) => name.includes("data/document.js") || name.includes("resources/scripts/axure"))) return "axure-html";
+    } catch { /* invalid ZIP falls through to other */ }
+  }
   return "other";
 }
 
@@ -47,6 +53,36 @@ function sectionsFromText(content: string): ExtractedSection[] {
   return sections;
 }
 
+function stripHtml(value: string): string {
+  return decodeXml(value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "").replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h[1-6]|tr)>/gi, "\n"));
+}
+
+function extractAxureHtml(sourcePath: string): { sections: ExtractedSection[]; warnings: string[] } {
+  const zip = new AdmZip(sourcePath);
+  const warnings: string[] = [];
+  const entries = zip.getEntries().filter((entry) => !entry.isDirectory);
+  const pageEntries = entries.filter((entry) => /\.html?$/i.test(entry.entryName)
+    && !/(^|\/)(index|start)\.html?$/i.test(entry.entryName)
+    && !/(^|\/)resources\//i.test(entry.entryName));
+  const sections: ExtractedSection[] = pageEntries.map((entry, index) => {
+    const raw = entry.getData().toString("utf8");
+    const title = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/<[^>]+>/g, "").trim()
+      || raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, "").trim()
+      || path.basename(entry.entryName, path.extname(entry.entryName));
+    return { id: `section-${index + 1}`, title: title || `页面${index + 1}`, content: stripHtml(raw), locator: { page: index + 1, entry: entry.entryName } };
+  }).filter((item) => item.content.length > 0);
+  if (!sections.length) {
+    const documentEntry = entries.find((entry) => /(^|\/)data\/document\.js$/i.test(entry.entryName));
+    const raw = documentEntry?.getData().toString("utf8") ?? "";
+    const names = [...raw.matchAll(/["']pageName["']\s*:\s*["']([^"']+)["']/g)].map((match) => match[1]);
+    names.forEach((name, index) => sections.push({ id: `section-${index + 1}`, title: name, content: `Axure 页面：${name}`, locator: { page: index + 1, entry: documentEntry?.entryName } }));
+  }
+  if (!sections.length) warnings.push("Axure HTML 包中未识别到独立页面；请检查是否包含完整导出数据。 ");
+  warnings.push("Axure HTML 解析仅提取页面层级与静态文本，动态交互仍需人工或真实画布验收。");
+  return { sections, warnings };
+}
+
 export class ProductSourceService {
   async loadCatalog(root: string): Promise<ProductSourceCatalog> {
     try {
@@ -69,7 +105,7 @@ export class ProductSourceService {
     await mkdir(path.join(root, "originals"), { recursive: true });
     await copyFile(sourceFile, path.join(root, "originals", storedName));
     const record: ProductSourceRecord = {
-      id, name: options.name ?? path.basename(sourceFile, path.extname(sourceFile)), type: options.type, format: formatOf(sourceFile),
+      id, name: options.name ?? path.basename(sourceFile, path.extname(sourceFile)), type: options.type, format: formatOf(sourceFile, bytes),
       product: options.product, version: options.version, sensitivity: options.sensitivity, originalFileName: path.basename(sourceFile),
       storedPath: `originals/${storedName}`, contentFingerprint: sha256(bytes), registeredAt: new Date().toISOString(),
       excludeFromPublicFixture: options.sensitivity !== "public",
@@ -102,6 +138,11 @@ export class ProductSourceService {
         return { id: `section-${index + 1}`, title: firstLine.slice(0, 80), content, locator: { page: index + 1, entry: entry.entryName } };
       }).filter((item) => item.content.length > 0);
       if (!sections.length) warnings.push("文件中未提取到可用正文，可能包含扫描图片或不受支持的嵌入内容。");
+    } else if (source.format === "axure-html") {
+      const extracted = extractAxureHtml(sourcePath);
+      sections = extracted.sections;
+      warnings.push(...extracted.warnings);
+      if (!sections.length) status = "manual-input-required";
     } else if (source.format === "axure-rp") {
       status = "manual-input-required";
       warnings.push("Axure RP 专有文件暂不进行不可靠推断；请提供 Axure HTML 导出包或人工转录页面索引。 ");

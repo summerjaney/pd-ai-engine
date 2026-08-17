@@ -45,6 +45,7 @@ import { ProductSourceService } from "./source-material/service.js";
 import { PRODUCT_SOURCE_SENSITIVITIES, PRODUCT_SOURCE_TYPES } from "./source-material/types.js";
 import type { MaterialKnowledgeDerivation, ProductSourceSensitivity, ProductSourceType } from "./source-material/types.js";
 import { compareMaterialCandidates, deriveMaterialKnowledge, writeMaterialComparison } from "./source-material/derivation.js";
+import { prepareMaterialPromotionPackage, promoteMaterialPackage } from "./source-material/promotion.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -90,6 +91,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae material extract <资料ID> --source-root <目录>
   pae material derive <解析JSON> [--out <目录>]
   pae material compare <候选JSON> --knowledge-dir <平台知识目录> [--out <目录>]
+  pae material package <候选JSON> <比较JSON> <审核JSON> [--out <目录>]
+  pae material promote <晋升包JSON> --knowledge-dir <平台知识目录>
   pae design status <需求目录>
   pae design confirm <需求目录> --gate requirement|solution|prd [--note <说明>]
   pae design check <需求目录>
@@ -414,6 +417,27 @@ async function main(): Promise<void> {
     console.log("知识候选比较：PENDING_PRODUCT_MANAGER_REVIEW");
     console.log(`重复：${report.comparisons.filter((item) => item.decision === "duplicate").length}；新增：${report.comparisons.filter((item) => item.decision === "new-knowledge").length}；待判断：${report.comparisons.filter((item) => !["duplicate", "new-knowledge"].includes(item.decision)).length}`);
     console.log(`比较报告：${output.markdownPath}`);
+    console.log(`审核决定：${output.reviewPath}`);
+    return;
+  }
+
+  if (args[0] === "material" && args[1] === "package" && Boolean(args[2]) && Boolean(args[3]) && Boolean(args[4])) {
+    validateArgs(args);
+    const output = await prepareMaterialPromotionPackage(path.resolve(args[2]), path.resolve(args[3]), path.resolve(args[4]), option(args, "--out") ? path.resolve(option(args, "--out")!) : undefined);
+    console.log("产品资料知识晋升包：APPROVED_FOR_EXPLICIT_PROMOTION");
+    console.log(`已审核新增知识：${output.promotion.candidates.length}`);
+    console.log(`晋升包：${output.jsonPath}`);
+    return;
+  }
+
+  if (args[0] === "material" && args[1] === "promote" && Boolean(args[2])) {
+    validateArgs(args);
+    const knowledgeDirectory = option(args, "--knowledge-dir");
+    if (!knowledgeDirectory) throw new Error("material promote 必须显式提供 --knowledge-dir <平台知识目录>。");
+    const output = await promoteMaterialPackage(path.resolve(args[2]), path.resolve(knowledgeDirectory));
+    console.log("产品资料知识晋升：PASS");
+    console.log(`正式知识：${output.acceptedIds.join("、")}`);
+    console.log(`历史快照：${output.snapshotPath}`);
     return;
   }
 

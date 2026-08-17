@@ -7,14 +7,16 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - v1.5.0 开发中：新增独立的真实产品资料目录，支持资料类型、产品、版本、敏感级别、内容指纹和公开样例排除标记。
-- 新增 Markdown、TXT、JSON、DOCX 与 PPTX 资料解析，统一输出带章节、页码或压缩包条目定位的解析结果；Axure RP 专有内容明确降级为 HTML 导出包或人工补充，不进行不可靠推断。
+- 新增 Markdown、TXT、JSON、DOCX、PPTX 与 Axure HTML 导出 ZIP 资料解析，统一输出带章节、页码或压缩包条目定位的解析结果；Axure RP 专有内容明确降级为 HTML 导出包或人工补充，不进行不可靠推断。
 - 新增从产品资料提取平台能力、页面模式、组件和约束草稿候选的流程，候选保留原文证据且必须经过产品经理复核。
-- 新增候选与 v1.4.0 正式平台知识目录的重复、补充及新增比较报告；比较过程只读，不自动覆盖正式知识。
-- 新增 `material add/list/extract/derive/compare` CLI 命令。
+- 新增候选与 v1.4.0 正式平台知识目录的重复、补充、新版本、冲突及新增比较报告；比较过程只读，不自动覆盖正式知识。
+- 新增产品经理审核决定、晋升包和显式晋升流程；默认决定为 pending，正式目录版本变化或候选 ID 冲突会阻止写入。
+- 将 v1.4.0 与 v1.5.0 的正式知识写入统一到共享安全晋升服务，保留目录校验、历史快照和禁止覆盖门禁。
+- 新增 `material add/list/extract/derive/compare/package/promote` CLI 命令。
 
 ### Validation
 
-- v1.5.0 第一批新增测试 7/7 通过；全量自动化测试 281/281 通过。
+- v1.5.0 新增测试 11/11 通过；全量自动化测试 285/285 通过。
 - TypeScript 类型检查通过。
 - MasterGo 真实画布仍为独立保留人工验收项。
 
