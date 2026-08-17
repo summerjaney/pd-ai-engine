@@ -46,6 +46,7 @@ import { PRODUCT_SOURCE_SENSITIVITIES, PRODUCT_SOURCE_TYPES } from "./source-mat
 import type { MaterialKnowledgeDerivation, ProductSourceSensitivity, ProductSourceType } from "./source-material/types.js";
 import { compareMaterialCandidates, deriveMaterialKnowledge, writeMaterialComparison } from "./source-material/derivation.js";
 import { prepareMaterialPromotionPackage, promoteMaterialPackage } from "./source-material/promotion.js";
+import { LlmMaterialKnowledgeExtractor } from "./source-material/extractor.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -89,7 +90,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
-  pae material derive <解析JSON> [--out <目录>]
+  pae material derive <解析JSON> [--extractor rule|llm] [--out <目录>]
   pae material compare <候选JSON> --knowledge-dir <平台知识目录> [--out <目录>]
   pae material package <候选JSON> <比较JSON> <审核JSON> [--out <目录>]
   pae material promote <晋升包JSON> --knowledge-dir <平台知识目录>
@@ -137,6 +138,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --source-root <目录>     产品资料工作目录，默认 sources/platform
   --product <标识>         产品资料所属产品
   --version <版本>         产品资料版本
+  --extractor <模式>       资料知识提取器：rule（默认）或 llm
   --gate <节点>             设计确认节点：requirement|solution|prd
   --type <类型>             来源类型：requirement|interview|meeting-note|screenshot|existing-feature|prd|prototype|other
   --sensitivity <级别>      来源敏感级别：public|internal|confidential
@@ -176,7 +178,7 @@ const VALID_OPTIONS = new Set([
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
-  "--workspace", "--ids", "--knowledge-dir", "--source-root", "--product", "--version",
+  "--workspace", "--ids", "--knowledge-dir", "--source-root", "--product", "--version", "--extractor",
   "--gate",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
@@ -398,8 +400,17 @@ async function main(): Promise<void> {
 
   if (args[0] === "material" && args[1] === "derive" && Boolean(args[2])) {
     validateArgs(args);
-    const output = await deriveMaterialKnowledge(path.resolve(args[2]), option(args, "--out") ? path.resolve(option(args, "--out")!) : undefined);
+    const extractorMode = option(args, "--extractor") ?? "rule";
+    if (extractorMode !== "rule" && extractorMode !== "llm") throw new Error("--extractor 仅支持 rule 或 llm。");
+    let extractor;
+    if (extractorMode === "llm") {
+      const config = loadLlmConfig(process.env, { provider: option(args, "--provider"), model: option(args, "--model") });
+      if (config.provider !== "openai") throw new Error("LLM资料知识提取必须配置 openai Provider。");
+      extractor = new LlmMaterialKnowledgeExtractor(new OpenAiProvider({ apiKey: config.apiKey!, model: config.model, baseUrl: config.baseUrl, timeoutMs: config.timeoutMs }), config.maxRetries + 1);
+    }
+    const output = await deriveMaterialKnowledge(path.resolve(args[2]), option(args, "--out") ? path.resolve(option(args, "--out")!) : undefined, { extractor });
     console.log("产品资料知识候选：PENDING_PRODUCT_MANAGER_REVIEW");
+    console.log(`提取器：${output.report.extractor?.id} [${output.report.extractor?.mode}]${output.report.extractor?.model ? ` ${output.report.extractor.model}` : ""}`);
     console.log(`候选：${output.report.candidates.length}`);
     console.log(`审核文件：${output.markdownPath}`);
     return;

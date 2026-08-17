@@ -9,6 +9,8 @@ import { compareMaterialCandidates, deriveMaterialKnowledge, writeMaterialCompar
 import { PlatformKnowledgeService } from "../src/platform-knowledge/service.js";
 import type { MaterialKnowledgeDerivation } from "../src/source-material/types.js";
 import { prepareMaterialPromotionPackage, promoteMaterialPackage } from "../src/source-material/promotion.js";
+import { LlmMaterialKnowledgeExtractor } from "../src/source-material/extractor.js";
+import type { LlmGenerationRequest, LlmGenerationResponse, LlmProvider, LlmProviderInfo } from "../src/llm/types.js";
 
 test("v1.5.0 registers sensitive product material with a stable fingerprint and private-fixture gate", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pae-v150-source-"));
@@ -70,16 +72,22 @@ test("v1.5.0 recognizes an Axure HTML export ZIP and extracts page text", async 
   const zip = new AdmZip();
   zip.addFile("index.html", Buffer.from("<html><title>Axure Prototype</title></html>"));
   zip.addFile("resources/scripts/axure/axure.js", Buffer.from("// axure"));
-  zip.addFile("data/document.js", Buffer.from('{"pageName":"组织结构"}'));
-  zip.addFile("pages/organization.html", Buffer.from("<html><head><title>组织结构</title></head><body><h1>组织结构</h1><p>页面支持组织树和组织列表管理。</p></body></html>"));
+  zip.addFile("data/document.js", Buffer.from('loadDocument({"sitemap":{"rootNodes":[{"pageName":"组织机构","type":"Folder","children":[{"pageName":"组织结构","type":"Wireframe","url":"organization.html"},{"pageName":"用户管理","type":"Wireframe","url":"users.html"}]}]}});'));
+  zip.addFile("pages/organization.html", Buffer.from("<html><head><title>组织结构</title></head><body><h1>组织结构</h1><p>页面支持组织树和组织列表管理。</p><a href=\"users.html\">用户管理</a></body></html>"));
+  zip.addFile("pages/users.html", Buffer.from("<html><head><title>用户管理</title></head><body><h1>用户管理</h1><p>维护组织下的用户。</p></body></html>"));
   zip.writeZip(file);
   const service = new ProductSourceService();
   const source = await service.add(path.join(root, "sources"), file, { type: "prototype", sensitivity: "internal", product: "base-platform" });
   assert.equal(source.format, "axure-html");
   const output = await service.extract(path.join(root, "sources"), source.id);
   assert.equal(output.report.status, "extracted");
-  assert.equal(output.report.sections[0].title, "组织结构");
-  assert.match(output.report.sections[0].content, /组织树和组织列表管理/);
+  const organization = output.report.sections.find((item) => item.title === "组织结构")!;
+  const folder = output.report.sections.find((item) => item.title === "组织机构")!;
+  const users = output.report.sections.find((item) => item.title === "用户管理")!;
+  assert.match(organization.content, /组织树和组织列表管理/);
+  assert.equal(organization.parentId, folder.id);
+  assert.ok(output.report.relations?.some((item) => item.type === "parent-child" && item.from === folder.id && item.to === organization.id));
+  assert.ok(output.report.relations?.some((item) => item.type === "links-to" && item.from === organization.id && item.to === users.id));
   assert.match(output.report.warnings.join(" "), /动态交互.*人工|真实画布验收/);
 });
 
@@ -94,6 +102,59 @@ test("v1.5.0 derives draft candidates only and keeps the product-manager gate", 
   assert.ok(output.report.candidates.length >= 3);
   assert.ok(output.report.candidates.every((item) => item.status === "draft" && item.entity.status === "draft"));
   assert.match(await readFile(output.markdownPath, "utf8"), /必须由产品经理复核/);
+});
+
+class MaterialTestProvider implements LlmProvider {
+  calls = 0;
+  constructor(private readonly responses: string[]) {}
+  async generate(_request: Readonly<LlmGenerationRequest>): Promise<LlmGenerationResponse> {
+    const content = this.responses[Math.min(this.calls, this.responses.length - 1)]; this.calls += 1;
+    return { content, model: "material-test-model", provider: "mock" };
+  }
+  modelInfo(): LlmProviderInfo { return { id: "mock", model: "material-test-model" }; }
+  async healthCheck(): Promise<void> {}
+}
+
+test("v1.5.0 LLM extractor retries invalid evidence and accepts only exact source quotes", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-v150-llm-"));
+  const extractionPath = path.join(root, "extraction.json");
+  await writeFile(extractionPath, JSON.stringify({ schemaVersion: "1.5", extractedAt: "2026-08-17T00:00:00Z", status: "extracted", warnings: [], relations: [],
+    source: { id: "source.design", name: "平台设计说明书", type: "product-design", format: "md", product: "base-platform", version: "3.0.0", sensitivity: "internal", originalFileName: "design.md", storedPath: "originals/design.md", contentFingerprint: "sha256:source", registeredAt: "2026-08-17T00:00:00Z", excludeFromPublicFixture: true },
+    sections: [{ id: "section-1", title: "组织规则", locator: { section: "组织规则" }, content: "组织编码必须在平台范围内唯一。" }],
+  }));
+  const provider = new MaterialTestProvider([
+    JSON.stringify({ candidates: [{ kind: "constraint", name: "组织编码唯一", description: "组织编码必须唯一。", evidenceExcerpt: "模型虚构的证据", sectionId: "section-1", confidence: "high" }] }),
+    JSON.stringify({ candidates: [{ kind: "constraint", name: "组织编码唯一", description: "组织编码必须在平台范围内唯一。", evidenceExcerpt: "组织编码必须在平台范围内唯一。", sectionId: "section-1", confidence: "high", severity: "error" }] }),
+  ]);
+  const output = await deriveMaterialKnowledge(extractionPath, undefined, { extractor: new LlmMaterialKnowledgeExtractor(provider, 2) });
+  assert.equal(provider.calls, 2);
+  assert.equal(output.report.extractor?.mode, "llm");
+  assert.equal(output.report.extractor?.model, "material-test-model");
+  assert.equal(output.report.candidates[0].evidence.excerpt, "组织编码必须在平台范围内唯一。");
+});
+
+test("v1.5.0 LLM extractor blocks hallucinated evidence after retries", async () => {
+  const extraction = { schemaVersion: "1.5" as const, extractedAt: "2026-08-17T00:00:00Z", status: "extracted" as const, warnings: [], relations: [],
+    source: { id: "source.design", name: "平台设计说明书", type: "product-design" as const, format: "md" as const, product: "base-platform", sensitivity: "internal" as const, originalFileName: "design.md", storedPath: "originals/design.md", contentFingerprint: "sha256:source", registeredAt: "2026-08-17T00:00:00Z", excludeFromPublicFixture: true },
+    sections: [{ id: "section-1", title: "组织规则", locator: { section: "组织规则" }, content: "组织编码必须唯一。" }] };
+  const invalid = JSON.stringify({ candidates: [{ kind: "constraint", name: "虚构规则", description: "虚构规则", evidenceExcerpt: "原文不存在", sectionId: "section-1", confidence: "high" }] });
+  await assert.rejects(() => new LlmMaterialKnowledgeExtractor(new MaterialTestProvider([invalid, invalid]), 2).extract(extraction), /evidenceExcerpt 不是来源原文/);
+});
+
+test("v1.5.0 sanitized base-platform material completes register-extract-derive-compare", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-v150-real-material-"));
+  const sourceRoot = path.join(root, "sources");
+  const service = new ProductSourceService();
+  const source = await service.add(sourceRoot, path.resolve("test/fixtures/v1.5.0/base-platform-material.md"), { type: "product-design", sensitivity: "internal", product: "base-platform", version: "3.0.0" });
+  const extraction = await service.extract(sourceRoot, source.id);
+  const derivation = await deriveMaterialKnowledge(extraction.jsonPath);
+  const comparison = compareMaterialCandidates(derivation.report, await new PlatformKnowledgeService().load(path.resolve("knowledge/platform")));
+  assert.equal(extraction.report.status, "extracted");
+  assert.ok(derivation.report.candidates.some((item) => item.kind === "capability"));
+  assert.ok(derivation.report.candidates.some((item) => item.kind === "constraint"));
+  assert.ok(derivation.report.candidates.every((item) => item.evidence.sourceId === source.id && item.evidence.excerpt.length > 0));
+  assert.ok(comparison.comparisons.every((item) => item.requiresHumanConfirmation));
+  assert.doesNotMatch(JSON.stringify({ extraction: extraction.report, derivation: derivation.report }), /summerjaney|LDP2\.0|五矿/);
 });
 
 test("v1.5.0 comparison detects duplicates without overwriting formal knowledge", async () => {

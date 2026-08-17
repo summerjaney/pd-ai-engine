@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import AdmZip from "adm-zip";
-import type { ExtractedSection, ProductSourceCatalog, ProductSourceExtraction, ProductSourceRecord, ProductSourceSensitivity, ProductSourceType } from "./types.js";
+import type { ExtractedRelation, ExtractedSection, ProductSourceCatalog, ProductSourceExtraction, ProductSourceRecord, ProductSourceSensitivity, ProductSourceType } from "./types.js";
 
 const CATALOG = "source-catalog.json";
 
@@ -58,29 +58,60 @@ function stripHtml(value: string): string {
     .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h[1-6]|tr)>/gi, "\n"));
 }
 
-function extractAxureHtml(sourcePath: string): { sections: ExtractedSection[]; warnings: string[] } {
+function parseAxureDocument(raw: string): unknown {
+  const start = raw.indexOf("{"); const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) return undefined;
+  try { return JSON.parse(raw.slice(start, end + 1)); } catch { return undefined; }
+}
+
+function extractAxureHtml(sourcePath: string): { sections: ExtractedSection[]; relations: ExtractedRelation[]; warnings: string[] } {
   const zip = new AdmZip(sourcePath);
   const warnings: string[] = [];
+  const relations: ExtractedRelation[] = [];
   const entries = zip.getEntries().filter((entry) => !entry.isDirectory);
+  const documentEntry = entries.find((entry) => /(^|\/)data\/document\.js$/i.test(entry.entryName));
+  const document = documentEntry ? parseAxureDocument(documentEntry.getData().toString("utf8")) as { sitemap?: { rootNodes?: unknown[] } } | undefined : undefined;
+  const sitemapSections: ExtractedSection[] = [];
+  const walk = (nodes: unknown[], parentId?: string) => nodes.forEach((value) => {
+    const node = value as { pageName?: string; type?: string; url?: string; children?: unknown[] };
+    if (!node.pageName) return;
+    const id = `axure-${slug(`${node.type ?? "page"}-${node.pageName}`)}`;
+    const isFolder = /folder/i.test(node.type ?? "");
+    sitemapSections.push({ id, title: node.pageName, content: isFolder ? `Axure 页面分组：${node.pageName}` : `Axure 页面：${node.pageName}`,
+      parentId, pageType: isFolder ? "folder" : "page", url: node.url, locator: { entry: documentEntry?.entryName } });
+    if (parentId) relations.push({ type: "parent-child", from: parentId, to: id, evidence: documentEntry?.entryName ?? "data/document.js" });
+    if (Array.isArray(node.children)) walk(node.children, id);
+  });
+  if (Array.isArray(document?.sitemap?.rootNodes)) walk(document.sitemap.rootNodes);
   const pageEntries = entries.filter((entry) => /\.html?$/i.test(entry.entryName)
     && !/(^|\/)(index|start)\.html?$/i.test(entry.entryName)
     && !/(^|\/)resources\//i.test(entry.entryName));
-  const sections: ExtractedSection[] = pageEntries.map((entry, index) => {
+  const htmlSections: ExtractedSection[] = pageEntries.map((entry, index) => {
     const raw = entry.getData().toString("utf8");
     const title = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/<[^>]+>/g, "").trim()
       || raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, "").trim()
       || path.basename(entry.entryName, path.extname(entry.entryName));
-    return { id: `section-${index + 1}`, title: title || `页面${index + 1}`, content: stripHtml(raw), locator: { page: index + 1, entry: entry.entryName } };
+    const url = entry.entryName.replace(/^pages\//, "");
+    const sitemap = sitemapSections.find((item) => item.url === url || item.url === entry.entryName || item.title === title);
+    const section = { id: sitemap?.id ?? `section-${index + 1}`, title: title || `页面${index + 1}`, content: stripHtml(raw), parentId: sitemap?.parentId,
+      pageType: "page" as const, url: sitemap?.url ?? url, locator: { page: index + 1, entry: entry.entryName } };
+    for (const link of raw.matchAll(/href=["']([^"'#]+\.html?)["']/gi)) {
+      const target = sitemapSections.find((item) => item.url === link[1] || item.url?.endsWith(`/${link[1]}`));
+      if (target) relations.push({ type: "links-to", from: section.id, to: target.id, evidence: `${entry.entryName} href=${link[1]}` });
+    }
+    return section;
   }).filter((item) => item.content.length > 0);
+  const byId = new Map(htmlSections.map((item) => [item.id, item]));
+  const sections = sitemapSections.map((item) => byId.get(item.id) ?? item);
+  for (const item of htmlSections) if (!sections.some((section) => section.id === item.id)) sections.push(item);
   if (!sections.length) {
-    const documentEntry = entries.find((entry) => /(^|\/)data\/document\.js$/i.test(entry.entryName));
     const raw = documentEntry?.getData().toString("utf8") ?? "";
     const names = [...raw.matchAll(/["']pageName["']\s*:\s*["']([^"']+)["']/g)].map((match) => match[1]);
     names.forEach((name, index) => sections.push({ id: `section-${index + 1}`, title: name, content: `Axure 页面：${name}`, locator: { page: index + 1, entry: documentEntry?.entryName } }));
   }
   if (!sections.length) warnings.push("Axure HTML 包中未识别到独立页面；请检查是否包含完整导出数据。 ");
   warnings.push("Axure HTML 解析仅提取页面层级与静态文本，动态交互仍需人工或真实画布验收。");
-  return { sections, warnings };
+  return { sections, relations, warnings };
 }
 
 export class ProductSourceService {
@@ -124,6 +155,7 @@ export class ProductSourceService {
     if (path.relative(root, sourcePath).startsWith("..")) throw new Error("产品资料路径越界。");
     const warnings: string[] = [];
     let sections: ExtractedSection[] = [];
+    let relations: ExtractedRelation[] = [];
     let status: ProductSourceExtraction["status"] = "extracted";
     if (["md", "txt"].includes(source.format)) sections = sectionsFromText(await readFile(sourcePath, "utf8"));
     else if (source.format === "json") sections = sectionsFromText(JSON.stringify(JSON.parse(await readFile(sourcePath, "utf8")), null, 2));
@@ -141,6 +173,7 @@ export class ProductSourceService {
     } else if (source.format === "axure-html") {
       const extracted = extractAxureHtml(sourcePath);
       sections = extracted.sections;
+      relations = extracted.relations;
       warnings.push(...extracted.warnings);
       if (!sections.length) status = "manual-input-required";
     } else if (source.format === "axure-rp") {
@@ -150,13 +183,14 @@ export class ProductSourceService {
       status = "manual-input-required";
       warnings.push(`暂不支持 ${source.format} 自动解析。`);
     }
-    const report: ProductSourceExtraction = { schemaVersion: "1.5", source, extractedAt: new Date().toISOString(), status, sections, warnings };
+    const report: ProductSourceExtraction = { schemaVersion: "1.5", source, extractedAt: new Date().toISOString(), status, sections, relations, warnings };
     const output = path.join(root, "extracted", source.id);
     await mkdir(output, { recursive: true });
     const jsonPath = path.join(output, "extraction.json");
     const markdownPath = path.join(output, "extraction.md");
     const markdown = [`# ${source.name} 资料解析`, "", `- 状态：${status}`, `- 来源：${source.id}`, `- 指纹：${source.contentFingerprint}`, "",
-      ...warnings.map((item) => `> ${item}\n`), ...sections.flatMap((item) => [`## ${item.title}`, "", item.content, ""])].join("\n");
+      ...warnings.map((item) => `> ${item}\n`), ...(relations.length ? ["## 页面关系", "", ...relations.map((item) => `- ${item.type}: ${item.from} → ${item.to}`), ""] : []),
+      ...sections.flatMap((item) => [`## ${item.title}`, "", item.parentId ? `- 上级：${item.parentId}\n` : "", item.content, ""])].join("\n");
     await Promise.all([writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8"), writeFile(markdownPath, `${markdown.trim()}\n`, "utf8")]);
     return { report, jsonPath, markdownPath };
   }

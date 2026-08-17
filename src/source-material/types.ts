@@ -29,7 +29,17 @@ export interface ExtractedSection {
   id: string;
   title: string;
   content: string;
+  parentId?: string;
+  pageType?: "folder" | "page" | "document-section";
+  url?: string;
   locator: { page?: number; section?: string; entry?: string };
+}
+
+export interface ExtractedRelation {
+  type: "parent-child" | "links-to";
+  from: string;
+  to: string;
+  evidence: string;
 }
 
 export interface ProductSourceExtraction {
@@ -38,6 +48,7 @@ export interface ProductSourceExtraction {
   extractedAt: string;
   status: "extracted" | "manual-input-required";
   sections: ExtractedSection[];
+  relations?: ExtractedRelation[];
   warnings: string[];
 }
 
@@ -62,6 +73,7 @@ export interface MaterialKnowledgeDerivation {
   sourceId: string;
   status: "pending-product-manager-review";
   generatedAt: string;
+  extractor?: { id: string; mode: "rule" | "llm"; model?: string };
   candidates: MaterialKnowledgeCandidate[];
 }
 

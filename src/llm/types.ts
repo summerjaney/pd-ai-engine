@@ -3,7 +3,7 @@ import type { StageId } from "../domain/types.js";
 export type LlmProviderId = "mock" | "openai";
 
 export interface LlmGenerationRequest {
-  stage: StageId;
+  stage: StageId | "material-knowledge-derivation";
   systemPrompt: string;
   userPrompt: string;
   model?: string;

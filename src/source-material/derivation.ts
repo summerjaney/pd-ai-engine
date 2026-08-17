@@ -1,50 +1,46 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { PlatformKnowledgeCatalog, PlatformKnowledgeEntity, PlatformKnowledgeKind } from "../platform-knowledge/types.js";
+import type { PlatformKnowledgeCatalog, PlatformKnowledgeEntity } from "../platform-knowledge/types.js";
 import type { CandidateComparison, MaterialKnowledgeCandidate, MaterialKnowledgeComparisonReport, MaterialKnowledgeDerivation, MaterialReviewDecisionFile, ProductSourceExtraction } from "./types.js";
-
-const signals: Array<{ kind: PlatformKnowledgeKind; words: string[] }> = [
-  { kind: "capability", words: ["管理", "支持", "能力", "功能", "维护"] },
-  { kind: "pattern", words: ["页面", "列表", "树表", "流程", "布局", "模式"] },
-  { kind: "component", words: ["组件", "表格", "表单", "选择器", "组织树", "弹窗", "抽屉"] },
-  { kind: "constraint", words: ["必须", "不得", "唯一", "校验", "限制", "禁止", "前提"] },
-];
+import type { ExtractedKnowledgeProposal, MaterialKnowledgeExtractor } from "./extractor.js";
+import { RuleBasedMaterialKnowledgeExtractor } from "./extractor.js";
 
 function slug(value: string): string { return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ".").replace(/^\.|\.$/g, "").slice(0, 72) || "candidate"; }
 function fingerprint(value: string): string { return `sha256:${createHash("sha256").update(value).digest("hex")}`; }
-function sentences(value: string): string[] { return value.split(/(?<=[。！？!?；;\n])/u).map((item) => item.trim()).filter((item) => item.length >= 6); }
 
-function entityFor(kind: PlatformKnowledgeKind, id: string, name: string, description: string, extraction: ProductSourceExtraction): PlatformKnowledgeEntity {
+function entityFor(proposal: ExtractedKnowledgeProposal, id: string, extraction: ProductSourceExtraction): PlatformKnowledgeEntity {
+  const { kind, name, description } = proposal;
   const base = { id, kind, name, description, version: "0.1.0", status: "draft" as const, tags: [extraction.source.product, extraction.source.type],
     source: { type: "product-design" as const, document: extraction.source.name, section: name, version: extraction.source.version }, references: [] };
-  if (kind === "capability") return { ...base, kind, domain: "pending-classification", module: "pending-classification", level: "platform", supportedScenarios: [description], constraints: [] };
+  if (kind === "capability") return { ...base, kind, domain: proposal.domain ?? "pending-classification", module: proposal.module ?? "pending-classification", level: "platform", supportedScenarios: [description], constraints: [] };
   if (kind === "pattern") return { ...base, kind, applicableScenarios: [description], nonApplicableScenarios: [], pageStructure: [], interactionRules: [] };
-  if (kind === "component") return { ...base, kind, componentType: "pending-classification", usageRules: [description] };
-  if (kind === "constraint") return { ...base, kind, severity: /必须|不得|禁止|唯一/.test(description) ? "error" : "warning", rule: description };
+  if (kind === "component") return { ...base, kind, componentType: proposal.componentType ?? "pending-classification", usageRules: [description] };
+  if (kind === "constraint") return { ...base, kind, severity: proposal.severity ?? (/必须|不得|禁止|唯一/.test(description) ? "error" : "warning"), rule: description };
   return { ...base, kind: "case", requirement: description, decision: "platform-extension", outcome: "待产品经理补充" };
 }
 
-export async function deriveMaterialKnowledge(extractionPath: string, outputDirectory?: string): Promise<{ report: MaterialKnowledgeDerivation; jsonPath: string; markdownPath: string }> {
+export async function deriveMaterialKnowledge(extractionPath: string, outputDirectory?: string, options: { extractor?: MaterialKnowledgeExtractor } = {}): Promise<{ report: MaterialKnowledgeDerivation; jsonPath: string; markdownPath: string }> {
   const extraction = JSON.parse(await readFile(extractionPath, "utf8")) as ProductSourceExtraction;
   if (extraction.schemaVersion !== "1.5" || extraction.status !== "extracted") throw new Error("资料尚未完成可用解析，不能生成知识候选。");
   const candidates: MaterialKnowledgeCandidate[] = [];
   const seen = new Set<string>();
-  for (const section of extraction.sections) {
-    for (const sentence of sentences(section.content)) {
-      const match = signals.find((signal) => signal.words.some((word) => sentence.includes(word)));
-      if (!match) continue;
-      const name = sentence.replace(/^[\d.、（）()\s-]+/, "").slice(0, 28).replace(/[。；;，,：:]$/, "") || section.title;
-      const id = `${match.kind}.${slug(name)}`;
+  const extractor: MaterialKnowledgeExtractor = options.extractor ?? new RuleBasedMaterialKnowledgeExtractor();
+  const proposals = await extractor.extract(extraction);
+  const sections = new Map(extraction.sections.map((item) => [item.id, item]));
+  for (const proposal of proposals) {
+      const section = sections.get(proposal.sectionId);
+      if (!section) throw new Error(`知识候选引用了不存在的来源章节：${proposal.sectionId}`);
+      const id = `${proposal.kind}.${slug(proposal.name)}`;
       if (seen.has(id)) continue;
       seen.add(id);
-      candidates.push({ id, kind: match.kind, status: "draft", confidence: sentence.length >= 12 ? "medium" : "low",
-        entity: entityFor(match.kind, id, name, sentence, extraction),
+      candidates.push({ id, kind: proposal.kind, status: "draft", confidence: proposal.confidence,
+        entity: entityFor(proposal, id, extraction),
         evidence: { sourceId: extraction.source.id, sectionId: section.id, sectionTitle: section.title, locator: section.locator,
-          excerpt: sentence.slice(0, 240), contentFingerprint: fingerprint(sentence) } });
-    }
+          excerpt: proposal.evidenceExcerpt.slice(0, 240), contentFingerprint: fingerprint(proposal.evidenceExcerpt) } });
   }
-  const report: MaterialKnowledgeDerivation = { schemaVersion: "1.5", sourceId: extraction.source.id, status: "pending-product-manager-review", generatedAt: new Date().toISOString(), candidates };
+  const report: MaterialKnowledgeDerivation = { schemaVersion: "1.5", sourceId: extraction.source.id, status: "pending-product-manager-review", generatedAt: new Date().toISOString(),
+    extractor: { id: extractor.id, mode: extractor.mode, model: extractor.model }, candidates };
   const directory = outputDirectory ?? path.join(path.dirname(extractionPath), "knowledge-candidates");
   await mkdir(directory, { recursive: true });
   const jsonPath = path.join(directory, "candidates.json");
