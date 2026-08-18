@@ -55,6 +55,8 @@ import { generateDesignUnitPlan, writeDesignUnitTraceability } from "./design-un
 import { captureRequirementDesignSnapshot, readRequirementChangeReport, writeRequirementChangeReport } from "./incremental-change/service.js";
 import { finalizeComplexRequirement, prepareComplexRequirement } from "./complex-requirement/service.js";
 import { analyzePortfolioRelationships, assessRequirementPortfolio, buildRequirementPortfolio } from "./release-portfolio/service.js";
+import { generateReleaseOptions, readReleaseOptions, selectReleaseScope } from "./release-planning/service.js";
+import type { ReleaseOptionId } from "./release-planning/types.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -113,6 +115,9 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae portfolio build <项目目录>
   pae portfolio assess <项目目录>
   pae portfolio relate <项目目录>
+  pae release plan <项目目录> --version <版本>
+  pae release options <项目目录> --version <版本>
+  pae release select <项目目录> --version <版本> --option <方案ID> [--include <需求ID列表>] [--defer <需求ID列表>]
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -207,7 +212,7 @@ const VALID_OPTIONS = new Set([
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
   "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
-  "--gate",
+  "--gate", "--include", "--defer",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
 
@@ -597,6 +602,26 @@ async function main(): Promise<void> {
     console.log(`关系/阻断：${result.analysis.summary.total}/${result.analysis.summary.blocker}`);
     console.log(`关系报告：${result.markdownPath}`);
     console.log(`关系图谱：${result.graphPath}`);
+    return;
+  }
+
+  if (args[0] === "release" && ["plan", "options", "select"].includes(args[1] ?? "") && Boolean(args[2])) {
+    validateArgs(args);
+    const version = option(args, "--version"); if (!version) throw new Error("release 命令必须提供 --version <版本>。");
+    const projectDirectory = path.resolve(args[2]);
+    if (args[1] === "plan") {
+      const result = await generateReleaseOptions(projectDirectory, version);
+      console.log(`版本候选方案：${result.optionSet.options.length}`); console.log(`方案报告：${result.markdownPath}`);
+    } else if (args[1] === "options") {
+      const result = await readReleaseOptions(projectDirectory, version);
+      for (const item of result.options) console.log(`${item.id} ${item.name}：${item.includedRequirementIds.join("、") || "无"}`);
+    } else {
+      const selected = option(args, "--option") as ReleaseOptionId | undefined; const allowed: ReleaseOptionId[] = ["foundation-first", "value-first", "risk-control"];
+      if (!selected || !allowed.includes(selected)) throw new Error(`--option 必须是：${allowed.join("、")}`);
+      const split = (value?: string): string[] | undefined => value ? value.split(",").map((item) => item.trim()).filter(Boolean) : undefined;
+      const result = await selectReleaseScope(projectDirectory, version, selected, split(option(args, "--include")), split(option(args, "--defer")), option(args, "--note"));
+      console.log("版本范围选择：SELECTED"); console.log(`纳入：${result.decision.includedRequirementIds.join("、")}`); console.log(`决策记录：${result.path}`);
+    }
     return;
   }
 

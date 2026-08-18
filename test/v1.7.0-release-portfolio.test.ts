@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { analyzePortfolioRelationships, assessRequirementPortfolio, buildRequirementPortfolio } from "../src/release-portfolio/service.js";
+import { generateReleaseOptions, selectReleaseScope } from "../src/release-planning/service.js";
 
 async function json(file: string, value: unknown): Promise<void> { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(value), "utf8"); }
 
@@ -71,4 +72,38 @@ test("v1.7.0 识别跨需求依赖、冲突、重叠和共享回归范围", asyn
   assert.ok(types.has("depends-on")); assert.ok(types.has("enables")); assert.ok(types.has("overlaps-with")); assert.ok(types.has("shares-regression-scope")); assert.ok(types.has("should-bundle-with"));
   assert.ok(result.analysis.summary.blocker >= 1);
   assert.match(await readFile(result.graphPath, "utf8"), /flowchart TD/);
+});
+
+test("v1.7.0 生成三类版本方案并由产品经理显式选择", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-release-options-"));
+  await json(path.join(root, "project.json"), { projectId: "base-platform" });
+  for (const [id, name, modules] of [["REQ-501", "organization", ["module.organization"]], ["REQ-502", "permission", ["module.permission"]]]) {
+    const dir = path.join(root, "requirements", `${id}-${name}`);
+    await json(path.join(dir, "requirement.json"), { requirementId: id, requirementName: name, productVersion: "2.5.0", revision: 1 });
+    await json(path.join(dir, "02-product-outline/solution-options/solution-decision.json"), { status: "selected", selectedOptionId: "platform-enhancement" });
+    await json(path.join(dir, "02-product-outline/design-units/design-unit-plan.json"), { units: modules.map((moduleId) => ({ moduleId })) });
+    await json(path.join(dir, "12-acceptance/complex-requirement/acceptance-report.json"), { status: "PASS" });
+    await json(path.join(dir, "00-platform-analysis/cross-module-impact/module-impact-report.json"), { impacts: modules.map((moduleId) => ({ moduleId, level: "DIRECT" })), dependencyEdges: [] });
+  }
+  const generated = await generateReleaseOptions(root, "2.5.0");
+  assert.deepEqual(generated.optionSet.options.map((item) => item.id), ["foundation-first", "value-first", "risk-control"]);
+  const selected = await selectReleaseScope(root, "2.5.0", "foundation-first", ["REQ-501", "REQ-502"]);
+  assert.equal(selected.decision.status, "selected");
+  assert.deepEqual(selected.decision.includedRequirementIds, ["REQ-501", "REQ-502"]);
+});
+
+test("v1.7.0 版本范围缺少前置依赖时阻断选择", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-release-dependency-"));
+  await json(path.join(root, "project.json"), { projectId: "base-platform" });
+  const base = path.join(root, "requirements", "REQ-601-organization"); const dependent = path.join(root, "requirements", "REQ-602-permission");
+  for (const [dir, id, name, units] of [[base, "REQ-601", "organization", ["module.organization"]], [dependent, "REQ-602", "permission", ["module.organization", "module.permission"]]]) {
+    await json(path.join(dir, "requirement.json"), { requirementId: id, requirementName: name, productVersion: "2.6.0", revision: 1 });
+    await json(path.join(dir, "02-product-outline/solution-options/solution-decision.json"), { status: "selected", selectedOptionId: "platform-enhancement" });
+    await json(path.join(dir, "02-product-outline/design-units/design-unit-plan.json"), { units: units.map((moduleId) => ({ moduleId })) });
+    await json(path.join(dir, "12-acceptance/complex-requirement/acceptance-report.json"), { status: "PASS" });
+  }
+  await json(path.join(base, "00-platform-analysis/cross-module-impact/module-impact-report.json"), { impacts: [{ moduleId: "module.organization", level: "DIRECT" }], dependencyEdges: [] });
+  await json(path.join(dependent, "00-platform-analysis/cross-module-impact/module-impact-report.json"), { impacts: [{ moduleId: "module.organization", level: "INDIRECT" }, { moduleId: "module.permission", level: "DIRECT" }], dependencyEdges: [] });
+  await generateReleaseOptions(root, "2.6.0");
+  await assert.rejects(() => selectReleaseScope(root, "2.6.0", "value-first", ["REQ-602"], ["REQ-601"]), /缺少前置依赖/);
 });
