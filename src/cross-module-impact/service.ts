@@ -47,12 +47,12 @@ function boundary(report: Omit<CrossModuleImpactReport, "boundary" | "unknowns">
   if (BOUNDARY_SIGNALS.architecture.test(content)) {
     recommendation = "architecture-assessment";
     confidence = "high";
-    basis = ["需求涉及底层模型、兼容或历史数据迁移。", "必须先评估存量数据和版本升级策略。"]; 
+    basis = ["需求涉及底层模型、兼容或历史数据迁移。", "必须先评估存量数据和版本升级策略。"];
     alternatives = ["platform-enhancement", "project-validation"];
   } else if (BOUNDARY_SIGNALS.project.test(content) && !BOUNDARY_SIGNALS.platform.test(content)) {
     recommendation = "project-customization";
     confidence = "medium";
-    basis = ["需求明确包含单一项目或客户专用信号。", "尚无证据证明该能力具有跨项目复用价值。"]; 
+    basis = ["需求明确包含单一项目或客户专用信号。", "尚无证据证明该能力具有跨项目复用价值。"];
     alternatives = ["project-validation", "platform-capability"];
   } else if (direct.length >= 2 || report.summary.total >= 3 || BOUNDARY_SIGNALS.platform.test(content)) {
     recommendation = "platform-enhancement";
@@ -62,7 +62,7 @@ function boundary(report: Omit<CrossModuleImpactReport, "boundary" | "unknowns">
   } else {
     recommendation = "project-validation";
     confidence = "low";
-    basis = ["当前只识别到有限模块影响，平台化证据不足。", "需要确认是否已有配置能力及是否存在重复项目需求。"]; 
+    basis = ["当前只识别到有限模块影响，平台化证据不足。", "需要确认是否已有配置能力及是否存在重复项目需求。"];
     alternatives = ["configuration", "platform-enhancement", "project-customization"];
   }
   return { recommendation, confidence, basis, alternatives, status: "pending-product-manager-confirmation", requiresHumanConfirmation: true };
