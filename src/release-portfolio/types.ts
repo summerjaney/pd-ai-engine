@@ -54,3 +54,24 @@ export interface PortfolioAssessment {
   requirements: RequirementAssessment[];
   summary: { total: number; confirmed: number; awaitingReview: number };
 }
+
+export type RequirementRelationshipType = "depends-on" | "conflicts-with" | "overlaps-with" | "enables" | "should-bundle-with" | "shares-regression-scope";
+
+export interface RequirementRelationship {
+  id: string;
+  sourceRequirementId: string;
+  targetRequirementId: string;
+  type: RequirementRelationshipType;
+  severity: "INFO" | "IMPORTANT" | "BLOCKER";
+  moduleIds: string[];
+  reason: string;
+  evidence: string[];
+  requiresProductManagerReview: boolean;
+}
+
+export interface PortfolioRelationshipAnalysis {
+  schemaVersion: "1.7";
+  generatedAt: string;
+  relationships: RequirementRelationship[];
+  summary: Record<RequirementRelationshipType, number> & { total: number; blocker: number };
+}

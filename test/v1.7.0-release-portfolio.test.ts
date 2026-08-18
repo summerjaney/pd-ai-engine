@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assessRequirementPortfolio, buildRequirementPortfolio } from "../src/release-portfolio/service.js";
+import { analyzePortfolioRelationships, assessRequirementPortfolio, buildRequirementPortfolio } from "../src/release-portfolio/service.js";
 
 async function json(file: string, value: unknown): Promise<void> { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(value), "utf8"); }
 
@@ -51,4 +51,24 @@ test("v1.7.0 建议评分与产品经理业务复核严格分离", async () => {
   assert.equal(confirmed.assessment.requirements[0].reviewStatus, "CONFIRMED");
   assert.ok((confirmed.assessment.requirements[0].finalPriorityScore ?? 0) > 0);
   assert.match(await readFile(confirmed.markdownPath, "utf8"), /P[0-3]/);
+});
+
+test("v1.7.0 识别跨需求依赖、冲突、重叠和共享回归范围", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-relations-"));
+  await json(path.join(root, "project.json"), { projectId: "base-platform" });
+  const left = path.join(root, "requirements", "REQ-401-organization-model");
+  const right = path.join(root, "requirements", "REQ-402-organization-permission");
+  for (const [dir, id, name, option] of [[left, "REQ-401", "organization-model", "platform-enhancement"], [right, "REQ-402", "organization-permission", "product-extension"]]) {
+    await json(path.join(dir, "requirement.json"), { requirementId: id, requirementName: name, productVersion: "2.4.0", revision: 1 });
+    await json(path.join(dir, "02-product-outline/solution-options/solution-decision.json"), { status: "selected", selectedOptionId: option });
+    await json(path.join(dir, "02-product-outline/design-units/design-unit-plan.json"), { units: [{ moduleId: "module.organization" }, { moduleId: "module.permission" }] });
+    await json(path.join(dir, "12-acceptance/complex-requirement/acceptance-report.json"), { status: "PASS" });
+  }
+  await json(path.join(left, "00-platform-analysis/cross-module-impact/module-impact-report.json"), { impacts: [{ moduleId: "module.organization", level: "DIRECT" }, { moduleId: "module.permission", level: "REGRESSION" }], dependencyEdges: [] });
+  await json(path.join(right, "00-platform-analysis/cross-module-impact/module-impact-report.json"), { impacts: [{ moduleId: "module.organization", level: "INDIRECT" }, { moduleId: "module.permission", level: "DIRECT" }], dependencyEdges: [] });
+  const result = await analyzePortfolioRelationships(root);
+  const types = new Set(result.analysis.relationships.map((item) => item.type));
+  assert.ok(types.has("depends-on")); assert.ok(types.has("enables")); assert.ok(types.has("overlaps-with")); assert.ok(types.has("shares-regression-scope")); assert.ok(types.has("should-bundle-with"));
+  assert.ok(result.analysis.summary.blocker >= 1);
+  assert.match(await readFile(result.graphPath, "utf8"), /flowchart TD/);
 });

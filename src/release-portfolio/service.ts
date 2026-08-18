@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { PortfolioAdmissionCheck, PortfolioAssessment, PortfolioRequirement, ProductManagerValueReview, ReleaseAdmissionStatus, RequirementAssessment, RequirementPortfolio } from "./types.js";
+import type { PortfolioAdmissionCheck, PortfolioAssessment, PortfolioRelationshipAnalysis, PortfolioRequirement, ProductManagerValueReview, ReleaseAdmissionStatus, RequirementAssessment, RequirementPortfolio, RequirementRelationship, RequirementRelationshipType } from "./types.js";
 
 async function optionalJson<T>(file: string): Promise<T | undefined> {
   try { return JSON.parse(await readFile(file, "utf8")) as T; }
@@ -134,4 +134,76 @@ export async function assessRequirementPortfolio(projectDirectory: string): Prom
 export function renderPortfolioAssessment(assessment: PortfolioAssessment): string {
   const rows = assessment.requirements.map((item) => `| ${item.requirementId} | ${item.admissionStatus} | ${item.structuralValue.platformReuse}/${item.structuralValue.scenarioCoverage} | ${item.deliveryCost.average} | ${item.technicalPriorityIndex} | ${item.reviewStatus} | ${item.finalPriorityScore ?? "-"} | ${item.priorityBand ?? "-"} |`).join("\n");
   return `# 需求价值、成本与优先级评估\n\n- 候选需求：${assessment.summary.total}\n- 已确认：${assessment.summary.confirmed}\n- 待产品经理复核：${assessment.summary.awaitingReview}\n\n| 需求 | 准入 | 平台复用/场景覆盖 | 交付成本 | 技术建议指数 | 人工复核 | 最终分数 | 优先级 |\n|---|---|---|---:|---:|---|---:|---|\n${rows}\n\n> 技术建议指数只使用可追踪的结构数据，不等同于最终业务优先级。填写 product-manager-review.json 后重新执行评估，才会生成最终分数和 P0–P3 建议。\n`;
+}
+
+interface RelationshipEvidence {
+  direct: string[];
+  indirect: string[];
+  regression: string[];
+  edges: Array<{ from: string; to: string; type: string; reason: string }>;
+}
+
+async function loadRelationshipEvidence(projectDirectory: string, item: PortfolioRequirement): Promise<RelationshipEvidence> {
+  const report = await optionalJson<{ impacts?: Array<{ moduleId?: string; level?: string }>; dependencyEdges?: RelationshipEvidence["edges"] }>(path.join(projectDirectory, item.directory, "00-platform-analysis", "cross-module-impact", "module-impact-report.json"));
+  const impacts = report?.impacts ?? [];
+  const byLevel = (level: string): string[] => impacts.filter((impact) => impact.level === level && impact.moduleId).map((impact) => impact.moduleId!).sort();
+  return { direct: byLevel("DIRECT"), indirect: byLevel("INDIRECT"), regression: byLevel("REGRESSION"), edges: report?.dependencyEdges ?? [] };
+}
+
+function intersection(left: string[], right: string[]): string[] { const values = new Set(right); return [...new Set(left.filter((item) => values.has(item)))].sort(); }
+
+function relationship(source: PortfolioRequirement, target: PortfolioRequirement, type: RequirementRelationshipType, moduleIds: string[], reason: string, evidence: string[], severity: RequirementRelationship["severity"], review = false): RequirementRelationship {
+  return { id: `REL-${source.requirementId}-${target.requirementId}-${type}`.replace(/[^A-Za-z0-9-]/g, "-"), sourceRequirementId: source.requirementId, targetRequirementId: target.requirementId, type, severity, moduleIds, reason, evidence, requiresProductManagerReview: review };
+}
+
+function analyzePair(left: PortfolioRequirement, right: PortfolioRequirement, leftEvidence: RelationshipEvidence, rightEvidence: RelationshipEvidence): RequirementRelationship[] {
+  const results: RequirementRelationship[] = [];
+  const shared = intersection(left.moduleIds, right.moduleIds);
+  const sharedDirect = intersection(leftEvidence.direct, rightEvidence.direct);
+  const leftEnablesRight = intersection(leftEvidence.direct, [...rightEvidence.indirect, ...rightEvidence.regression]);
+  const rightEnablesLeft = intersection(rightEvidence.direct, [...leftEvidence.indirect, ...leftEvidence.regression]);
+  if (shared.length) results.push(relationship(left, right, "overlaps-with", shared, "两个需求影响相同的平台模块，需要合并检查设计边界。", shared.map((id) => `shared-module:${id}`), sharedDirect.length ? "IMPORTANT" : "INFO"));
+  if (leftEnablesRight.length) {
+    results.push(relationship(left, right, "enables", leftEnablesRight, `${left.requirementId} 的直接变更为 ${right.requirementId} 提供基础能力。`, leftEnablesRight.map((id) => `direct-to-indirect:${id}`), "IMPORTANT"));
+    results.push(relationship(right, left, "depends-on", leftEnablesRight, `${right.requirementId} 依赖 ${left.requirementId} 直接建设的模块能力。`, leftEnablesRight.map((id) => `dependency-module:${id}`), "BLOCKER"));
+  }
+  if (rightEnablesLeft.length) {
+    results.push(relationship(right, left, "enables", rightEnablesLeft, `${right.requirementId} 的直接变更为 ${left.requirementId} 提供基础能力。`, rightEnablesLeft.map((id) => `direct-to-indirect:${id}`), "IMPORTANT"));
+    results.push(relationship(left, right, "depends-on", rightEnablesLeft, `${left.requirementId} 依赖 ${right.requirementId} 直接建设的模块能力。`, rightEnablesLeft.map((id) => `dependency-module:${id}`), "BLOCKER"));
+  }
+  const sharedRegression = intersection([...leftEvidence.direct, ...leftEvidence.regression], [...rightEvidence.direct, ...rightEvidence.regression]);
+  if (sharedRegression.length) results.push(relationship(left, right, "shares-regression-scope", sharedRegression, "两个需求共享回归模块，应合并安排测试范围。", sharedRegression.map((id) => `regression-module:${id}`), "IMPORTANT"));
+  if (sharedDirect.length && left.selectedOptionId && right.selectedOptionId && left.selectedOptionId !== right.selectedOptionId) results.push(relationship(left, right, "conflicts-with", sharedDirect, "同一直接影响模块采用了不同实施路径，需要产品经理确认统一边界。", [`option:${left.selectedOptionId}`, `option:${right.selectedOptionId}`, ...sharedDirect.map((id) => `direct-module:${id}`)], "BLOCKER", true));
+  if (shared.length >= 2 && left.admissionStatus === "READY" && right.admissionStatus === "READY") results.push(relationship(left, right, "should-bundle-with", shared, "两个已准入需求共享多个模块，同版本实施可减少重复设计和回归成本。", shared.map((id) => `bundle-module:${id}`), "IMPORTANT", true));
+  return results;
+}
+
+export async function analyzePortfolioRelationships(projectDirectory: string): Promise<{ analysis: PortfolioRelationshipAnalysis; jsonPath: string; markdownPath: string; graphPath: string }> {
+  const { portfolio } = await buildRequirementPortfolio(projectDirectory);
+  const evidence = new Map<string, RelationshipEvidence>();
+  for (const item of portfolio.requirements) evidence.set(item.requirementId, await loadRelationshipEvidence(projectDirectory, item));
+  const relationships: RequirementRelationship[] = [];
+  for (let i = 0; i < portfolio.requirements.length; i += 1) for (let j = i + 1; j < portfolio.requirements.length; j += 1) {
+    const left = portfolio.requirements[i]; const right = portfolio.requirements[j];
+    relationships.push(...analyzePair(left, right, evidence.get(left.requirementId)!, evidence.get(right.requirementId)!));
+  }
+  relationships.sort((a, b) => a.id.localeCompare(b.id));
+  const summary: PortfolioRelationshipAnalysis["summary"] = { total: relationships.length, blocker: relationships.filter((item) => item.severity === "BLOCKER").length, "depends-on": 0, "conflicts-with": 0, "overlaps-with": 0, enables: 0, "should-bundle-with": 0, "shares-regression-scope": 0 };
+  for (const item of relationships) summary[item.type] += 1;
+  const analysis: PortfolioRelationshipAnalysis = { schemaVersion: "1.7", generatedAt: new Date().toISOString(), relationships, summary };
+  const target = path.join(projectDirectory, "product", "portfolio"); await mkdir(target, { recursive: true });
+  const jsonPath = path.join(target, "requirement-relationships.json"); const markdownPath = path.join(target, "requirement-relationships.md"); const graphPath = path.join(target, "requirement-relationships.mmd");
+  await Promise.all([writeFile(jsonPath, `${JSON.stringify(analysis, null, 2)}\n`, "utf8"), writeFile(markdownPath, renderPortfolioRelationships(analysis), "utf8"), writeFile(graphPath, renderPortfolioRelationshipGraph(analysis), "utf8")]);
+  return { analysis, jsonPath, markdownPath, graphPath };
+}
+
+export function renderPortfolioRelationships(analysis: PortfolioRelationshipAnalysis): string {
+  const rows = analysis.relationships.map((item) => `| ${item.sourceRequirementId} | ${item.type} | ${item.targetRequirementId} | ${item.severity} | ${item.moduleIds.join("、") || "-"} | ${item.reason} |`).join("\n");
+  return `# 跨需求关系分析\n\n- 关系：${analysis.summary.total}\n- 阻断关系：${analysis.summary.blocker}\n- 依赖/冲突/重叠：${analysis.summary["depends-on"]}/${analysis.summary["conflicts-with"]}/${analysis.summary["overlaps-with"]}\n\n| 来源需求 | 关系 | 目标需求 | 严重度 | 模块 | 原因 |\n|---|---|---|---|---|---|\n${rows}\n`;
+}
+
+export function renderPortfolioRelationshipGraph(analysis: PortfolioRelationshipAnalysis): string {
+  const nodes = [...new Set(analysis.relationships.flatMap((item) => [item.sourceRequirementId, item.targetRequirementId]))].sort();
+  const lines = analysis.relationships.filter((item) => ["depends-on", "conflicts-with", "should-bundle-with"].includes(item.type)).map((item) => `  ${item.sourceRequirementId.replace(/-/g, "_")} -->|${item.type}| ${item.targetRequirementId.replace(/-/g, "_")}`);
+  return `flowchart TD\n${nodes.map((id) => `  ${id.replace(/-/g, "_")}["${id}"]`).join("\n")}\n${lines.join("\n")}\n`;
 }
