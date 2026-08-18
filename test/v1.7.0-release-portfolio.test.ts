@@ -6,6 +6,7 @@ import test from "node:test";
 import { analyzePortfolioRelationships, assessRequirementPortfolio, buildRequirementPortfolio } from "../src/release-portfolio/service.js";
 import { generateReleaseOptions, selectReleaseScope } from "../src/release-planning/service.js";
 import { detectReleaseChanges, establishReleaseBaseline } from "../src/release-planning/baseline.js";
+import { finalizeReleasePlanning } from "../src/release-planning/delivery.js";
 
 async function json(file: string, value: unknown): Promise<void> { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(value), "utf8"); }
 
@@ -125,4 +126,23 @@ test("v1.7.0 建立正式版本基线并检测需求修订变化", async () => {
   await json(path.join(req, "requirement.json"), { requirementId: "REQ-701", requirementName: "form-linkage", productVersion: "2.7.0", revision: 2 });
   const changed = await detectReleaseChanges(root, "2.7.0");
   assert.equal(changed.report.status, "CHANGE_DETECTED"); assert.deepEqual(changed.report.changes.revisedRequirements, ["REQ-701"]); assert.equal(changed.report.invalidatedConfirmation, true);
+});
+
+test("v1.7.0 生成可追踪的正式版本规划交付包", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-release-delivery-"));
+  await json(path.join(root, "project.json"), { projectId: "base-platform", projectName: "基础平台" });
+  const req = path.join(root, "requirements", "REQ-801-report-permission");
+  await json(path.join(req, "requirement.json"), { requirementId: "REQ-801", requirementName: "report-permission", productVersion: "2.8.0", revision: 1 });
+  await json(path.join(req, "02-product-outline/solution-options/solution-decision.json"), { status: "selected", selectedOptionId: "platform-enhancement" });
+  await json(path.join(req, "02-product-outline/design-units/design-unit-plan.json"), { units: [{ moduleId: "module.reporting" }, { moduleId: "module.permission" }] });
+  await json(path.join(req, "12-acceptance/complex-requirement/acceptance-report.json"), { status: "PASS" });
+  await json(path.join(req, "00-platform-analysis/cross-module-impact/module-impact-report.json"), { impacts: [{ moduleId: "module.reporting", level: "DIRECT" }, { moduleId: "module.permission", level: "INDIRECT" }], dependencyEdges: [] });
+  const reviewPath = path.join(root, "product", "portfolio", "product-manager-review.json");
+  await json(reviewPath, { schemaVersion: "1.7", reviews: { "REQ-801": { businessUrgency: 5, customerCoverage: 4, strategicAlignment: 5, note: "确认进入版本" } } });
+  await generateReleaseOptions(root, "2.8.0"); await selectReleaseScope(root, "2.8.0", "foundation-first", ["REQ-801"]); await establishReleaseBaseline(root, "2.8.0");
+  const result = await finalizeReleasePlanning(root, "2.8.0", "完善报表数据权限的平台通用能力");
+  assert.equal(result.acceptance.status, "PASS");
+  const manifest = JSON.parse(await readFile(result.manifestPath, "utf8")) as { files: Array<{ name: string; sha256: string }> };
+  assert.ok(manifest.files.some((item) => item.name === "requirement-matrix.md" && item.sha256.length === 64));
+  assert.match(await readFile(path.join(result.directory, "release-plan.md"), "utf8"), /完善报表数据权限/);
 });

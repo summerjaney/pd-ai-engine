@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v1.6.0`。PAE 已能将真实产品资料转化为平台知识，并利用平台知识完成跨模块复杂需求影响分析、方案比较、设计单元追踪和增量变更管理。
+当前版本为 `v1.7.0`。PAE 已能将多个真实平台需求汇总为需求组合，完成准入、价值成本评估、跨需求关系分析、版本方案比较、范围确认、正式基线和版本规划交付。
 
 ## 成果物组织模型
 
@@ -370,6 +370,28 @@ node dist/cli.js change status <需求目录>
 ```
 
 未受影响的设计单元会原样保留；变化模块重新计算；退出范围的单元明确移除。变更不会隐式覆盖原正式设计计划，必须重新完成方案确认。
+
+## 平台版本规划与需求组合管理（v1.7.0）
+
+v1.7.0 将 v1.6.0 的单需求设计能力提升为多需求版本规划。PAE 会汇总项目需求池，区分 `READY`、`CONDITIONAL`、`BLOCKED` 和 `STALE`，生成结构价值、交付成本和技术建议指数；业务紧急程度、客户覆盖及战略匹配仍必须由产品经理复核。
+
+```bash
+node dist/cli.js portfolio build output/<project>
+node dist/cli.js portfolio assess output/<project>
+node dist/cli.js portfolio relate output/<project>
+node dist/cli.js release plan output/<project> --version 2.1.0
+node dist/cli.js release select output/<project> --version 2.1.0 --option foundation-first
+```
+
+版本范围确认会阻断未知需求、失效需求和缺失前置依赖。确认后显式建立版本基线，并在需求修订、准入状态或跨需求关系变化时使原确认失效，但不会自动覆盖正式基线：
+
+```bash
+node dist/cli.js release baseline output/<project> --version 2.1.0
+node dist/cli.js release detect output/<project> --version 2.1.0
+node dist/cli.js release finalize output/<project> --version 2.1.0 --objective "完善组织与权限基础能力"
+```
+
+整合验收通过后，`releases/v{version}/` 会包含版本目标与范围、需求矩阵、模块影响、依赖关系、风险登记、回归范围、验收报告和带 SHA-256 的交付清单。
 
 ## 当前边界
 
