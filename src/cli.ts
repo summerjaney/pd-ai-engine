@@ -57,6 +57,7 @@ import { finalizeComplexRequirement, prepareComplexRequirement } from "./complex
 import { analyzePortfolioRelationships, assessRequirementPortfolio, buildRequirementPortfolio } from "./release-portfolio/service.js";
 import { generateReleaseOptions, readReleaseOptions, selectReleaseScope } from "./release-planning/service.js";
 import type { ReleaseOptionId } from "./release-planning/types.js";
+import { detectReleaseChanges, establishReleaseBaseline, readReleaseStatus } from "./release-planning/baseline.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -118,6 +119,9 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae release plan <项目目录> --version <版本>
   pae release options <项目目录> --version <版本>
   pae release select <项目目录> --version <版本> --option <方案ID> [--include <需求ID列表>] [--defer <需求ID列表>]
+  pae release baseline <项目目录> --version <版本>
+  pae release detect <项目目录> --version <版本>
+  pae release status <项目目录> --version <版本>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -622,6 +626,14 @@ async function main(): Promise<void> {
       const result = await selectReleaseScope(projectDirectory, version, selected, split(option(args, "--include")), split(option(args, "--defer")), option(args, "--note"));
       console.log("版本范围选择：SELECTED"); console.log(`纳入：${result.decision.includedRequirementIds.join("、")}`); console.log(`决策记录：${result.path}`);
     }
+    return;
+  }
+
+  if (args[0] === "release" && ["baseline", "detect", "status"].includes(args[1] ?? "") && Boolean(args[2])) {
+    validateArgs(args); const version = option(args, "--version"); if (!version) throw new Error("release 命令必须提供 --version <版本>。"); const projectDirectory = path.resolve(args[2]);
+    if (args[1] === "baseline") { const result = await establishReleaseBaseline(projectDirectory, version); console.log(`版本基线：#${result.baseline.sequence}`); console.log(`正式基线：${result.path}`); }
+    else if (args[1] === "detect") { const result = await detectReleaseChanges(projectDirectory, version); console.log(`版本变化：${result.report.status}`); console.log(`变化报告：${result.markdownPath}`); if (result.report.status === "CHANGE_DETECTED") process.exitCode = 2; }
+    else { const result = await readReleaseStatus(projectDirectory, version); console.log(`版本基线：#${result.baseline.sequence}`); console.log(`版本状态：${result.change?.status ?? "NOT_CHECKED"}`); }
     return;
   }
 

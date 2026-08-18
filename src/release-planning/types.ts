@@ -33,3 +33,33 @@ export interface ReleaseScopeDecision {
   selectedAt: string;
   selectedBy: "product-manager";
 }
+
+export interface ReleaseBaseline {
+  schemaVersion: "1.7";
+  productVersion: string;
+  sequence: number;
+  status: "confirmed";
+  establishedAt: string;
+  decisionFingerprint: string;
+  inputFingerprint: string;
+  includedRequirements: Array<{ requirementId: string; revision: number; admissionStatus: string; moduleIds: string[] }>;
+  deferredRequirementIds: string[];
+  relationshipFingerprint: string;
+}
+
+export interface ReleaseChangeReport {
+  schemaVersion: "1.7";
+  productVersion: string;
+  baselineSequence: number;
+  checkedAt: string;
+  status: "CURRENT" | "CHANGE_DETECTED";
+  changes: {
+    addedRequirements: string[];
+    removedRequirements: string[];
+    revisedRequirements: string[];
+    admissionChanges: string[];
+    relationshipChanged: boolean;
+    invalidIncludedRequirements: string[];
+  };
+  invalidatedConfirmation: boolean;
+}

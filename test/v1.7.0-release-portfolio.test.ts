@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { analyzePortfolioRelationships, assessRequirementPortfolio, buildRequirementPortfolio } from "../src/release-portfolio/service.js";
 import { generateReleaseOptions, selectReleaseScope } from "../src/release-planning/service.js";
+import { detectReleaseChanges, establishReleaseBaseline } from "../src/release-planning/baseline.js";
 
 async function json(file: string, value: unknown): Promise<void> { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(value), "utf8"); }
 
@@ -106,4 +107,22 @@ test("v1.7.0 版本范围缺少前置依赖时阻断选择", async () => {
   await json(path.join(dependent, "00-platform-analysis/cross-module-impact/module-impact-report.json"), { impacts: [{ moduleId: "module.organization", level: "INDIRECT" }, { moduleId: "module.permission", level: "DIRECT" }], dependencyEdges: [] });
   await generateReleaseOptions(root, "2.6.0");
   await assert.rejects(() => selectReleaseScope(root, "2.6.0", "value-first", ["REQ-602"], ["REQ-601"]), /缺少前置依赖/);
+});
+
+test("v1.7.0 建立正式版本基线并检测需求修订变化", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-release-baseline-"));
+  await json(path.join(root, "project.json"), { projectId: "base-platform" });
+  const req = path.join(root, "requirements", "REQ-701-form-linkage");
+  await json(path.join(req, "requirement.json"), { requirementId: "REQ-701", requirementName: "form-linkage", productVersion: "2.7.0", revision: 1 });
+  await json(path.join(req, "02-product-outline/solution-options/solution-decision.json"), { status: "selected", selectedOptionId: "platform-enhancement" });
+  await json(path.join(req, "02-product-outline/design-units/design-unit-plan.json"), { units: [{ moduleId: "module.form" }] });
+  await json(path.join(req, "12-acceptance/complex-requirement/acceptance-report.json"), { status: "PASS" });
+  await json(path.join(req, "00-platform-analysis/cross-module-impact/module-impact-report.json"), { impacts: [{ moduleId: "module.form", level: "DIRECT" }], dependencyEdges: [] });
+  await generateReleaseOptions(root, "2.7.0"); await selectReleaseScope(root, "2.7.0", "foundation-first", ["REQ-701"]);
+  const established = await establishReleaseBaseline(root, "2.7.0"); assert.equal(established.baseline.sequence, 1);
+  await assert.rejects(() => establishReleaseBaseline(root, "2.7.0"), /禁止重复建立/);
+  const current = await detectReleaseChanges(root, "2.7.0"); assert.equal(current.report.status, "CURRENT");
+  await json(path.join(req, "requirement.json"), { requirementId: "REQ-701", requirementName: "form-linkage", productVersion: "2.7.0", revision: 2 });
+  const changed = await detectReleaseChanges(root, "2.7.0");
+  assert.equal(changed.report.status, "CHANGE_DETECTED"); assert.deepEqual(changed.report.changes.revisedRequirements, ["REQ-701"]); assert.equal(changed.report.invalidatedConfirmation, true);
 });
