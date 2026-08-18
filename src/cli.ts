@@ -54,7 +54,7 @@ import type { SolutionOptionId } from "./solution-options/types.js";
 import { generateDesignUnitPlan, writeDesignUnitTraceability } from "./design-units/service.js";
 import { captureRequirementDesignSnapshot, readRequirementChangeReport, writeRequirementChangeReport } from "./incremental-change/service.js";
 import { finalizeComplexRequirement, prepareComplexRequirement } from "./complex-requirement/service.js";
-import { buildRequirementPortfolio } from "./release-portfolio/service.js";
+import { assessRequirementPortfolio, buildRequirementPortfolio } from "./release-portfolio/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -111,6 +111,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae complex prepare <需求目录> <需求文件> [--module-dir <平台模块目录>]
   pae complex finalize <需求目录> <需求文件>
   pae portfolio build <项目目录>
+  pae portfolio assess <项目目录>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -575,6 +576,16 @@ async function main(): Promise<void> {
     console.log(`候选需求：${result.portfolio.summary.total}`);
     console.log(`READY/CONDITIONAL/BLOCKED/STALE：${result.portfolio.summary.READY}/${result.portfolio.summary.CONDITIONAL}/${result.portfolio.summary.BLOCKED}/${result.portfolio.summary.STALE}`);
     console.log(`组合报告：${result.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "portfolio" && args[1] === "assess" && Boolean(args[2])) {
+    validateArgs(args);
+    const result = await assessRequirementPortfolio(path.resolve(args[2]));
+    console.log("需求组合评估：ASSESSED");
+    console.log(`已确认/待复核：${result.assessment.summary.confirmed}/${result.assessment.summary.awaitingReview}`);
+    console.log(`产品经理复核：${result.reviewPath}`);
+    console.log(`评估报告：${result.markdownPath}`);
     return;
   }
 

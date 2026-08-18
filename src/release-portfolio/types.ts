@@ -26,3 +26,31 @@ export interface RequirementPortfolio {
   requirements: PortfolioRequirement[];
   summary: Record<ReleaseAdmissionStatus, number> & { total: number };
 }
+
+export interface ProductManagerValueReview {
+  businessUrgency: 1 | 2 | 3 | 4 | 5 | null;
+  customerCoverage: 1 | 2 | 3 | 4 | 5 | null;
+  strategicAlignment: 1 | 2 | 3 | 4 | 5 | null;
+  note: string;
+}
+
+export interface RequirementAssessment {
+  requirementId: string;
+  admissionStatus: ReleaseAdmissionStatus;
+  evidence: { moduleCount: number; designUnitCount: number; selectedOptionId?: string };
+  structuralValue: { platformReuse: number; scenarioCoverage: number };
+  deliveryCost: { designComplexity: number; moduleBreadth: number; implementationRisk: number; regressionScope: number; average: number };
+  productManagerReview: ProductManagerValueReview;
+  reviewStatus: "AWAITING_PM_REVIEW" | "CONFIRMED";
+  technicalPriorityIndex: number;
+  finalPriorityScore?: number;
+  priorityBand?: "P0" | "P1" | "P2" | "P3";
+}
+
+export interface PortfolioAssessment {
+  schemaVersion: "1.7";
+  generatedAt: string;
+  portfolioGeneratedAt: string;
+  requirements: RequirementAssessment[];
+  summary: { total: number; confirmed: number; awaitingReview: number };
+}
