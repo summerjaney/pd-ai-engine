@@ -54,6 +54,11 @@ import type { SolutionOptionId } from "./solution-options/types.js";
 import { generateDesignUnitPlan, writeDesignUnitTraceability } from "./design-units/service.js";
 import { captureRequirementDesignSnapshot, readRequirementChangeReport, writeRequirementChangeReport } from "./incremental-change/service.js";
 import { finalizeComplexRequirement, prepareComplexRequirement } from "./complex-requirement/service.js";
+import { analyzePortfolioRelationships, assessRequirementPortfolio, buildRequirementPortfolio } from "./release-portfolio/service.js";
+import { generateReleaseOptions, readReleaseOptions, selectReleaseScope } from "./release-planning/service.js";
+import type { ReleaseOptionId } from "./release-planning/types.js";
+import { detectReleaseChanges, establishReleaseBaseline, readReleaseStatus } from "./release-planning/baseline.js";
+import { finalizeReleasePlanning } from "./release-planning/delivery.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -109,6 +114,16 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae change status <需求目录>
   pae complex prepare <需求目录> <需求文件> [--module-dir <平台模块目录>]
   pae complex finalize <需求目录> <需求文件>
+  pae portfolio build <项目目录>
+  pae portfolio assess <项目目录>
+  pae portfolio relate <项目目录>
+  pae release plan <项目目录> --version <版本>
+  pae release options <项目目录> --version <版本>
+  pae release select <项目目录> --version <版本> --option <方案ID> [--include <需求ID列表>] [--defer <需求ID列表>]
+  pae release baseline <项目目录> --version <版本>
+  pae release detect <项目目录> --version <版本>
+  pae release status <项目目录> --version <版本>
+  pae release finalize <项目目录> --version <版本> --objective <版本目标>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -203,7 +218,7 @@ const VALID_OPTIONS = new Set([
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
   "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
-  "--gate",
+  "--gate", "--include", "--defer", "--objective",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
 
@@ -564,6 +579,71 @@ async function main(): Promise<void> {
       if (result.report.status !== "PASS") process.exitCode = 1;
     }
     return;
+  }
+
+  if (args[0] === "portfolio" && args[1] === "build" && Boolean(args[2])) {
+    validateArgs(args);
+    const result = await buildRequirementPortfolio(path.resolve(args[2]));
+    console.log("需求组合：BUILT");
+    console.log(`候选需求：${result.portfolio.summary.total}`);
+    console.log(`READY/CONDITIONAL/BLOCKED/STALE：${result.portfolio.summary.READY}/${result.portfolio.summary.CONDITIONAL}/${result.portfolio.summary.BLOCKED}/${result.portfolio.summary.STALE}`);
+    console.log(`组合报告：${result.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "portfolio" && args[1] === "assess" && Boolean(args[2])) {
+    validateArgs(args);
+    const result = await assessRequirementPortfolio(path.resolve(args[2]));
+    console.log("需求组合评估：ASSESSED");
+    console.log(`已确认/待复核：${result.assessment.summary.confirmed}/${result.assessment.summary.awaitingReview}`);
+    console.log(`产品经理复核：${result.reviewPath}`);
+    console.log(`评估报告：${result.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "portfolio" && args[1] === "relate" && Boolean(args[2])) {
+    validateArgs(args);
+    const result = await analyzePortfolioRelationships(path.resolve(args[2]));
+    console.log("跨需求关系分析：ANALYZED");
+    console.log(`关系/阻断：${result.analysis.summary.total}/${result.analysis.summary.blocker}`);
+    console.log(`关系报告：${result.markdownPath}`);
+    console.log(`关系图谱：${result.graphPath}`);
+    return;
+  }
+
+  if (args[0] === "release" && ["plan", "options", "select"].includes(args[1] ?? "") && Boolean(args[2])) {
+    validateArgs(args);
+    const version = option(args, "--version"); if (!version) throw new Error("release 命令必须提供 --version <版本>。");
+    const projectDirectory = path.resolve(args[2]);
+    if (args[1] === "plan") {
+      const result = await generateReleaseOptions(projectDirectory, version);
+      console.log(`版本候选方案：${result.optionSet.options.length}`); console.log(`方案报告：${result.markdownPath}`);
+    } else if (args[1] === "options") {
+      const result = await readReleaseOptions(projectDirectory, version);
+      for (const item of result.options) console.log(`${item.id} ${item.name}：${item.includedRequirementIds.join("、") || "无"}`);
+    } else {
+      const selected = option(args, "--option") as ReleaseOptionId | undefined; const allowed: ReleaseOptionId[] = ["foundation-first", "value-first", "risk-control"];
+      if (!selected || !allowed.includes(selected)) throw new Error(`--option 必须是：${allowed.join("、")}`);
+      const split = (value?: string): string[] | undefined => value ? value.split(",").map((item) => item.trim()).filter(Boolean) : undefined;
+      const result = await selectReleaseScope(projectDirectory, version, selected, split(option(args, "--include")), split(option(args, "--defer")), option(args, "--note"));
+      console.log("版本范围选择：SELECTED"); console.log(`纳入：${result.decision.includedRequirementIds.join("、")}`); console.log(`决策记录：${result.path}`);
+    }
+    return;
+  }
+
+  if (args[0] === "release" && ["baseline", "detect", "status"].includes(args[1] ?? "") && Boolean(args[2])) {
+    validateArgs(args); const version = option(args, "--version"); if (!version) throw new Error("release 命令必须提供 --version <版本>。"); const projectDirectory = path.resolve(args[2]);
+    if (args[1] === "baseline") { const result = await establishReleaseBaseline(projectDirectory, version); console.log(`版本基线：#${result.baseline.sequence}`); console.log(`正式基线：${result.path}`); }
+    else if (args[1] === "detect") { const result = await detectReleaseChanges(projectDirectory, version); console.log(`版本变化：${result.report.status}`); console.log(`变化报告：${result.markdownPath}`); if (result.report.status === "CHANGE_DETECTED") process.exitCode = 2; }
+    else { const result = await readReleaseStatus(projectDirectory, version); console.log(`版本基线：#${result.baseline.sequence}`); console.log(`版本状态：${result.change?.status ?? "NOT_CHECKED"}`); }
+    return;
+  }
+
+  if (args[0] === "release" && args[1] === "finalize" && Boolean(args[2])) {
+    validateArgs(args); const version = option(args, "--version"); const objective = option(args, "--objective");
+    if (!version || !objective) throw new Error("release finalize 必须提供 --version 和 --objective。");
+    const result = await finalizeReleasePlanning(path.resolve(args[2]), version, objective);
+    console.log(`版本规划整合验收：${result.acceptance.status}`); console.log(`交付目录：${result.directory}`); console.log(`交付清单：${result.manifestPath}`); return;
   }
 
   if (args[0] === "material" && args[1] === "add" && Boolean(args[2])) {
