@@ -1,6 +1,6 @@
 {
   "name": "pd-ai-engine",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "面向产品经理的 AI 产品设计工作流引擎",
   "type": "module",
   "bin": {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -47,6 +47,13 @@ import type { MaterialKnowledgeDerivation, ProductSourceSensitivity, ProductSour
 import { compareMaterialCandidates, deriveMaterialKnowledge, writeMaterialComparison } from "./source-material/derivation.js";
 import { prepareMaterialPromotionPackage, promoteMaterialPackage } from "./source-material/promotion.js";
 import { LlmMaterialKnowledgeExtractor } from "./source-material/extractor.js";
+import { PlatformModuleService } from "./platform-modules/service.js";
+import { analyzeCrossModuleImpact, renderCrossModuleImpact, renderCrossModuleMermaid } from "./cross-module-impact/service.js";
+import { evaluateSolutionGate, readSolutionComparison, selectSolution, writeSolutionComparison } from "./solution-options/service.js";
+import type { SolutionOptionId } from "./solution-options/types.js";
+import { generateDesignUnitPlan, writeDesignUnitTraceability } from "./design-units/service.js";
+import { captureRequirementDesignSnapshot, readRequirementChangeReport, writeRequirementChangeReport } from "./incremental-change/service.js";
+import { finalizeComplexRequirement, prepareComplexRequirement } from "./complex-requirement/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -87,6 +94,21 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae knowledge search <关键词> [--knowledge-dir <平台知识目录>]
   pae capability analyze <需求文件> [--knowledge-dir <平台知识目录>] [--out <JSON文件>]
   pae capability gap <需求文件> [--knowledge-dir <平台知识目录>] [--out <Markdown文件>]
+  pae module validate [--module-dir <平台模块目录>]
+  pae module list [--module-dir <平台模块目录>]
+  pae module show <模块ID> [--module-dir <平台模块目录>]
+  pae module graph [--module-dir <平台模块目录>] [--out <Mermaid文件>]
+  pae impact analyze <需求文件> [--module-dir <平台模块目录>] [--out <报告目录>]
+  pae solution compare <影响分析JSON> --out <需求目录>
+  pae solution list <需求目录>
+  pae solution select <需求目录> --option <方案ID> --scope <范围> [--note <说明>]
+  pae design-unit generate <需求目录> <影响分析JSON>
+  pae design-unit check <需求目录>
+  pae change snapshot <需求目录> <需求文件> <影响分析JSON>
+  pae change detect <需求目录> <需求文件> <影响分析JSON>
+  pae change status <需求目录>
+  pae complex prepare <需求目录> <需求文件> [--module-dir <平台模块目录>]
+  pae complex finalize <需求目录> <需求文件>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -135,6 +157,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   --workspace <文件>        产品工作空间 pae.workspace.json
   --ids <ID列表>            仅接受指定知识候选，多个 ID 使用英文逗号分隔
   --knowledge-dir <目录>   平台知识库目录，默认 knowledge/platform
+  --module-dir <目录>      平台模块目录，默认 knowledge/platform/modules
+  --option <方案ID>        实施方案：configuration|platform-enhancement|product-extension|project-customization|architecture-assessment
   --source-root <目录>     产品资料工作目录，默认 sources/platform
   --product <标识>         产品资料所属产品
   --version <版本>         产品资料版本
@@ -178,7 +202,7 @@ const VALID_OPTIONS = new Set([
   "--out", "--provider", "--model", "--knowledge-mode", "--help", "-h",
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
-  "--workspace", "--ids", "--knowledge-dir", "--source-root", "--product", "--version", "--extractor",
+  "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
   "--gate",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
@@ -359,6 +383,186 @@ async function main(): Promise<void> {
       await writeFile(target, rendered, "utf8");
       console.log(`平台能力${args[1] === "analyze" ? "分析" : "差距报告"}：${target}`);
     } else console.log(rendered.trimEnd());
+    return;
+  }
+
+  if (args[0] === "module" && ["validate", "list", "show", "graph"].includes(args[1] ?? "")) {
+    validateArgs(args);
+    const service = new PlatformModuleService();
+    const directory = path.resolve(option(args, "--module-dir") ?? "knowledge/platform/modules");
+    const catalog = await service.load(directory);
+    if (args[1] === "validate") {
+      console.log("平台模块目录校验：PASS");
+      console.log(`产品：${catalog.productId}；目录版本：${catalog.version}；模块：${catalog.modules.length}`);
+      return;
+    }
+    if (args[1] === "list") {
+      console.log(`平台模块：${catalog.modules.length}`);
+      for (const module of catalog.modules) console.log(`${module.id} [${module.status}] ${module.name}；依赖 ${module.dependencies.length}`);
+      return;
+    }
+    if (args[1] === "show") {
+      if (!args[2] || args[2].startsWith("-")) throw new Error("module show 必须提供模块 ID。");
+      const module = catalog.byId.get(args[2]);
+      if (!module) throw new Error(`未找到平台模块：${args[2]}`);
+      console.log(JSON.stringify(module, null, 2));
+      return;
+    }
+    const rendered = service.renderMermaid(catalog);
+    const output = option(args, "--out");
+    if (output) {
+      const target = path.resolve(output);
+      await writeFile(target, rendered, "utf8");
+      console.log(`平台模块依赖图：${target}`);
+    } else console.log(rendered.trimEnd());
+    return;
+  }
+
+  if (args[0] === "impact" && args[1] === "analyze" && Boolean(args[2])) {
+    validateArgs(args);
+    const sourcePath = path.resolve(args[2]);
+    const content = await readFile(sourcePath, "utf8");
+    validateRequirementContent(content, sourcePath);
+    const moduleService = new PlatformModuleService();
+    const catalog = await moduleService.load(path.resolve(option(args, "--module-dir") ?? "knowledge/platform/modules"));
+    const report = analyzeCrossModuleImpact({ sourcePath, title: getTitle(content, sourcePath), content }, catalog);
+    const output = option(args, "--out");
+    if (output) {
+      const directory = path.resolve(output);
+      await mkdir(directory, { recursive: true });
+      const jsonPath = path.join(directory, "module-impact-report.json");
+      const markdownPath = path.join(directory, "module-impact-report.md");
+      const graphPath = path.join(directory, "dependency-graph.mmd");
+      await Promise.all([
+        writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8"),
+        writeFile(markdownPath, renderCrossModuleImpact(report), "utf8"),
+        writeFile(graphPath, renderCrossModuleMermaid(report), "utf8"),
+      ]);
+      console.log(`跨模块影响分析：${report.boundary.status}`);
+      console.log(`直接/间接/回归：${report.summary.direct}/${report.summary.indirect}/${report.summary.regression}`);
+      console.log(`平台化建议：${report.boundary.recommendation}（${report.boundary.confidence}）`);
+      console.log(`分析报告：${markdownPath}`);
+    } else console.log(renderCrossModuleImpact(report).trimEnd());
+    return;
+  }
+
+  if (args[0] === "solution" && args[1] === "compare" && Boolean(args[2])) {
+    validateArgs(args);
+    const output = option(args, "--out");
+    if (!output) throw new Error("solution compare 必须提供 --out <需求目录>。");
+    const report = JSON.parse(await readFile(path.resolve(args[2]), "utf8"));
+    if (report.schemaVersion !== "1.6" || !report.requirement?.fingerprint || !report.moduleCatalog?.version || !Array.isArray(report.impacts)) throw new Error("影响分析JSON结构无效。");
+    const result = await writeSolutionComparison(path.resolve(output), report);
+    console.log("实施方案比较：pending-product-manager-selection");
+    console.log(`候选方案：${result.comparison.options.length}`);
+    console.log(`建议方案：${result.comparison.recommendedOptionId}`);
+    console.log(`比较报告：${result.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "solution" && args[1] === "list" && Boolean(args[2])) {
+    validateArgs(args);
+    const requirementDirectory = path.resolve(args[2]);
+    const comparison = await readSolutionComparison(requirementDirectory);
+    const gate = await evaluateSolutionGate(requirementDirectory);
+    console.log(`实施方案：${comparison.options.length}；门禁：${gate.status}`);
+    for (const item of comparison.options) console.log(`${item.id}${item.recommended ? " [推荐]" : ""} ${item.name}`);
+    console.log(`允许继续正式设计：${gate.canProceed ? "是" : "否"}`);
+    return;
+  }
+
+  if (args[0] === "solution" && args[1] === "select" && Boolean(args[2])) {
+    validateArgs(args);
+    const selected = option(args, "--option") as SolutionOptionId | undefined;
+    const scope = option(args, "--scope");
+    const allowed: SolutionOptionId[] = ["configuration", "platform-enhancement", "product-extension", "project-customization", "architecture-assessment"];
+    if (!selected || !allowed.includes(selected)) throw new Error(`--option 必须是：${allowed.join("、")}`);
+    if (!scope) throw new Error("solution select 必须提供 --scope <范围>。");
+    const result = await selectSolution(path.resolve(args[2]), selected, scope, option(args, "--note"));
+    console.log("实施方案选择：SELECTED");
+    console.log(`方案：${result.decision.selectedOptionId}`);
+    console.log(`范围：${result.decision.scope}`);
+    console.log(`决策记录：${result.path}`);
+    return;
+  }
+
+  if (args[0] === "design-unit" && args[1] === "generate" && Boolean(args[2]) && Boolean(args[3])) {
+    validateArgs(args);
+    const report = JSON.parse(await readFile(path.resolve(args[3]), "utf8"));
+    if (report.schemaVersion !== "1.6" || !report.requirement?.fingerprint || !Array.isArray(report.impacts)) throw new Error("影响分析JSON结构无效。");
+    const result = await generateDesignUnitPlan(path.resolve(args[2]), report);
+    console.log("复杂需求设计单元：GENERATED");
+    console.log(`已选方案：${result.plan.selectedOptionId}`);
+    console.log(`设计单元：${result.plan.units.length}`);
+    console.log(`设计单元计划：${result.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "design-unit" && args[1] === "check" && Boolean(args[2])) {
+    validateArgs(args);
+    const result = await writeDesignUnitTraceability(path.resolve(args[2]));
+    console.log(`设计单元跨成果物追踪：${result.report.valid ? "PASS" : "FAIL"}`);
+    console.log(`覆盖：${result.report.summary.coveredReferenceCount}/${result.report.summary.expectedReferenceCount}`);
+    console.log(`追踪报告：${result.markdownPath}`);
+    if (!result.report.valid) process.exitCode = 1;
+    return;
+  }
+
+  if (args[0] === "change" && ["snapshot", "detect"].includes(args[1] ?? "") && Boolean(args[2]) && Boolean(args[3]) && Boolean(args[4])) {
+    validateArgs(args);
+    const sourcePath = path.resolve(args[3]);
+    const content = await readFile(sourcePath, "utf8");
+    validateRequirementContent(content, sourcePath);
+    const input = { sourcePath, title: getTitle(content, sourcePath), content };
+    const report = JSON.parse(await readFile(path.resolve(args[4]), "utf8"));
+    if (report.schemaVersion !== "1.6" || !report.requirement?.fingerprint || !Array.isArray(report.impacts)) throw new Error("影响分析JSON结构无效。");
+    if (args[1] === "snapshot") {
+      const result = await captureRequirementDesignSnapshot(path.resolve(args[2]), input, report);
+      console.log(`需求设计快照：#${result.snapshot.sequence}`);
+      console.log(`设计单元：${result.snapshot.designUnitPlan.units.length}`);
+      console.log(`快照：${result.path}`);
+    } else {
+      const result = await writeRequirementChangeReport(path.resolve(args[2]), input, report);
+      console.log(`需求变更检测：${result.report.status}`);
+      console.log(`影响/保留设计单元：${result.report.summary.affectedUnits}/${result.report.summary.preservedUnits}`);
+      console.log(`变更报告：${result.markdownPath}`);
+      if (result.report.status === "CHANGE_DETECTED") process.exitCode = 2;
+    }
+    return;
+  }
+
+  if (args[0] === "change" && args[1] === "status" && Boolean(args[2])) {
+    validateArgs(args);
+    const report = await readRequirementChangeReport(path.resolve(args[2]));
+    console.log(`需求变更：${report.status}`);
+    console.log(`模块新增/修改/移除：${report.summary.addedModules}/${report.summary.modifiedModules}/${report.summary.removedModules}`);
+    console.log(`设计单元影响/保留：${report.summary.affectedUnits}/${report.summary.preservedUnits}`);
+    console.log(`需要重新确认：${report.invalidatedConfirmations.join("、") || "无"}`);
+    return;
+  }
+
+  if (args[0] === "complex" && ["prepare", "finalize"].includes(args[1] ?? "") && Boolean(args[2]) && Boolean(args[3])) {
+    validateArgs(args);
+    const sourcePath = path.resolve(args[3]);
+    const content = await readFile(sourcePath, "utf8");
+    validateRequirementContent(content, sourcePath);
+    const input = { sourcePath, title: getTitle(content, sourcePath), content };
+    const requirementDirectory = path.resolve(args[2]);
+    if (args[1] === "prepare") {
+      const result = await prepareComplexRequirement(requirementDirectory, input, path.resolve(option(args, "--module-dir") ?? "knowledge/platform/modules"));
+      console.log(`复杂需求准备：${result.status}`);
+      console.log(`直接/间接/回归：${result.impact.summary.direct}/${result.impact.summary.indirect}/${result.impact.summary.regression}`);
+      console.log(`建议方案：${result.impact.boundary.recommendation}`);
+      console.log(`方案比较：${result.comparisonPath}`);
+      if (result.status === "WAITING_SOLUTION_SELECTION") process.exitCode = 2;
+    } else {
+      const result = await finalizeComplexRequirement(requirementDirectory, input);
+      console.log(`跨模块复杂需求验收：${result.report.status}`);
+      console.log(`设计单元/引用：${result.report.designUnits.count}/${result.report.designUnits.referenceCount}`);
+      console.log(`正式快照：#${result.report.snapshotSequence ?? 0}`);
+      console.log(`验收报告：${result.markdownPath}`);
+      if (result.report.status !== "PASS") process.exitCode = 1;
+    }
     return;
   }
 

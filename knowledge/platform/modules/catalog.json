@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.6",
+  "version": "1.6.0",
+  "productId": "base-platform",
+  "entries": [
+    "organization.json",
+    "permission.json",
+    "form.json",
+    "workflow.json",
+    "reporting.json"
+  ]
+}

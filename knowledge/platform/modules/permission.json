@@ -1,0 +1,15 @@
+{
+  "id": "module.permission",
+  "name": "权限管理",
+  "description": "维护角色、功能权限和数据访问范围。",
+  "version": "3.0.0",
+  "status": "confirmed",
+  "responsibilities": ["角色授权", "功能权限", "数据权限"],
+  "coreObjects": ["Role", "Permission", "DataScope"],
+  "capabilities": [],
+  "dependencies": [
+    { "moduleId": "module.organization", "type": "permission", "description": "数据范围依赖组织层级和人员归属。", "required": true }
+  ],
+  "extensionPoints": ["权限策略扩展", "自定义数据范围"],
+  "source": { "document": "基础平台3.0概要设计", "section": "权限管理" }
+}

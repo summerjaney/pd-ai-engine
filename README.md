@@ -4,7 +4,7 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v1.5.0`。PAE 已从真实需求设计闭环和平台知识复用，扩展到真实产品资料解析、知识候选生产、人工审核与安全晋升。
+当前版本为 `v1.6.0`。PAE 已能将真实产品资料转化为平台知识，并利用平台知识完成跨模块复杂需求影响分析、方案比较、设计单元追踪和增量变更管理。
 
 ## 成果物组织模型
 
@@ -342,6 +342,34 @@ node dist/cli.js material promote promotion/promotion-package.json --knowledge-d
 资料知识提取器默认使用确定性的 `rule` 模式，也可选择 `llm`。LLM模式不是自由生成：返回值必须是严格JSON，候选类型、章节ID、置信度均需通过结构校验，且 `evidenceExcerpt` 必须逐字存在于来源章节。无法提供原文证据的候选在重试后仍会被拒绝。
 
 `material compare` 会同时生成 `review-decision.json`，所有候选默认是 `pending`。产品经理必须填写 `reviewedAt` 并将每项明确设为 `accept-new`、`merge-source`、`create-version` 或 `reject`。只有比较结果为 `new-knowledge` 的候选可以使用 `accept-new`；生成晋升包本身仍不会修改正式知识，必须再显式执行 `material promote`。
+
+## 跨模块复杂需求设计（v1.6.0）
+
+v1.6.0 在正式平台知识之上建立平台模块图谱，能够识别需求对组织机构、权限、表单、流程、报表等模块的直接、间接和回归影响，并生成多个可比较的实施方案。方案只作为建议，必须由产品经理明确选择并填写实施范围。
+
+```bash
+node dist/cli.js complex prepare <需求目录> path/to/requirement.md
+node dist/cli.js solution list <需求目录>
+node dist/cli.js solution select <需求目录> \
+  --option platform-enhancement \
+  --scope "组织、权限、表单、流程和报表"
+```
+
+正式设计完成后执行整合验收：
+
+```bash
+node dist/cli.js complex finalize <需求目录> path/to/requirement.md
+```
+
+PAE 会将复杂需求拆分为稳定的 `DU-*` 设计单元，并通过 `[design-unit:<ID>]` 追踪需求分析、方案、架构、流程、页面、原型、PRD和评审。成果物或引用缺失时验收失败。完成后可建立显式快照，并在需求变化时只重算受影响单元：
+
+```bash
+node dist/cli.js change snapshot <需求目录> <需求文件> <影响分析JSON>
+node dist/cli.js change detect <需求目录> <新需求文件> <新影响分析JSON>
+node dist/cli.js change status <需求目录>
+```
+
+未受影响的设计单元会原样保留；变化模块重新计算；退出范围的单元明确移除。变更不会隐式覆盖原正式设计计划，必须重新完成方案确认。
 
 ## 当前边界
 
