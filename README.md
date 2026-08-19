@@ -4,7 +4,17 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v1.7.0`。PAE 已能将多个真实平台需求汇总为需求组合，完成准入、价值成本评估、跨需求关系分析、版本方案比较、范围确认、正式基线和版本规划交付。
+当前版本为 `v1.8.0`。PAE 在多需求版本规划之上增加竞品功能证据建模、平台能力映射与人工取舍门禁。
+
+## 竞品驱动的功能规划（v1.8.0）
+
+竞品资料必须先整理为带证据引用的结构化档案，再与脱敏的平台能力基线对标。分析只生成“采用、调整采用、不采用、待研究”候选，不会自动写入正式平台知识。
+
+```bash
+node dist/cli.js competitor analyze examples/v1.8.0/weaver-application-role.json \
+  --baseline examples/v1.8.0/base-platform-capabilities.json \
+  --out output/competitor-analysis/weaver
+```
 
 ## 成果物组织模型
 

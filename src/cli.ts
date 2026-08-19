@@ -59,6 +59,7 @@ import { generateReleaseOptions, readReleaseOptions, selectReleaseScope } from "
 import type { ReleaseOptionId } from "./release-planning/types.js";
 import { detectReleaseChanges, establishReleaseBaseline, readReleaseStatus } from "./release-planning/baseline.js";
 import { finalizeReleasePlanning } from "./release-planning/delivery.js";
+import { analyzeCompetitor } from "./competitor-analysis/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -124,6 +125,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae release detect <项目目录> --version <版本>
   pae release status <项目目录> --version <版本>
   pae release finalize <项目目录> --version <版本> --objective <版本目标>
+  pae competitor analyze <竞品档案JSON> --baseline <平台能力JSON> --out <报告目录>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -218,7 +220,7 @@ const VALID_OPTIONS = new Set([
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
   "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
-  "--gate", "--include", "--defer", "--objective",
+  "--gate", "--include", "--defer", "--objective", "--baseline",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
 
@@ -268,6 +270,17 @@ async function main(): Promise<void> {
     console.log(`PAE 环境诊断：${report.status}`);
     for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
     if (report.status === "NOT_READY") process.exitCode = 1;
+    return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "analyze" && Boolean(args[2])) {
+    validateArgs(args);
+    const baseline = option(args, "--baseline"); const output = option(args, "--out");
+    if (!baseline || !output) throw new Error("competitor analyze 必须提供 --baseline <平台能力JSON> 和 --out <报告目录>。");
+    const result = await analyzeCompetitor(path.resolve(args[2]), path.resolve(baseline), path.resolve(output));
+    console.log("竞品能力对标：PENDING_PRODUCT_MANAGER_REVIEW");
+    console.log(`功能：${result.report.summary.total}；已具备/部分具备/未具备：${result.report.summary.available}/${result.report.summary.partial}/${result.report.summary.missing}`);
+    console.log(`分析报告：${result.markdownPath}`);
     return;
   }
 

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.8",
+  "id": "weaver-e-builder",
+  "name": "泛微低代码平台（脱敏示例）",
+  "features": [
+    {
+      "id": "feature.application-role",
+      "name": "应用角色",
+      "module": "权限",
+      "scenario": "应用管理员为应用建立角色并配置可见功能范围",
+      "actors": ["应用管理员"],
+      "operations": ["新建角色", "授权应用", "配置功能权限"],
+      "keywords": ["角色", "权限", "应用授权"],
+      "evidenceIds": ["EVD-001"]
+    },
+    {
+      "id": "feature.application-publish",
+      "name": "应用发布",
+      "module": "应用",
+      "scenario": "应用完成设计后发布为可使用的业务模块",
+      "actors": ["应用管理员"],
+      "operations": ["预览", "发布", "停用"],
+      "keywords": ["应用", "发布", "生命周期"],
+      "evidenceIds": ["EVD-002"]
+    }
+  ],
+  "evidence": [
+    { "id": "EVD-001", "source": "公开产品说明整理", "excerpt": "支持将应用授权给指定人员，并共享应用开发能力。" },
+    { "id": "EVD-002", "source": "公开产品说明整理", "excerpt": "应用中心支持功能设计、整体预览、应用发布及操作日志。" }
+  ]
+}

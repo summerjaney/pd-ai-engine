@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pae.local/schemas/v1.8/competitor-profile.schema.json",
+  "title": "PAE Competitor Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "features", "evidence"],
+  "properties": {
+    "schemaVersion": { "const": "1.8" },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "features": { "type": "array", "items": { "$ref": "#/$defs/feature" } },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+  },
+  "$defs": {
+    "strings": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "feature": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "module", "scenario", "actors", "operations", "keywords", "evidenceIds"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 }, "name": { "type": "string", "minLength": 1 },
+        "module": { "type": "string", "minLength": 1 }, "scenario": { "type": "string", "minLength": 1 },
+        "actors": { "$ref": "#/$defs/strings" }, "operations": { "$ref": "#/$defs/strings" },
+        "keywords": { "$ref": "#/$defs/strings" }, "evidenceIds": { "$ref": "#/$defs/strings" }
+      }
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false, "required": ["id", "source", "excerpt"],
+      "properties": { "id": { "type": "string", "minLength": 1 }, "source": { "type": "string", "minLength": 1 }, "excerpt": { "type": "string", "minLength": 1 } }
+    }
+  }
+}
