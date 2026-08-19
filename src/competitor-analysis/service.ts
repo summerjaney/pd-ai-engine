@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prepareRequirementOutput } from "../output/requirement-output.js";
-import type { CompetitorAnalysisReport, CompetitorDecision, CompetitorFeature, CompetitorFeatureAssessment, CompetitorProfile, CompetitorReview, PlatformCapabilityBaseline } from "./types.js";
+import { buildRequirementPortfolio } from "../release-portfolio/service.js";
+import type { CompetitorAnalysisReport, CompetitorCandidate, CompetitorCandidateBacklog, CompetitorDecision, CompetitorFeature, CompetitorFeatureAssessment, CompetitorPriorityReviewItem, CompetitorProfile, CompetitorReview, PlatformCapabilityBaseline } from "./types.js";
 
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 const hashReport = (report: CompetitorAnalysisReport): string => hash(JSON.stringify(report));
@@ -102,6 +103,72 @@ export async function createRequirementFromCompetitor(directory: string, project
   const inputPath = path.join(prepared.requirementDirectory, "00-requirement-input.md");
   await writeFile(path.join(originDirectory, "decision.json"), `${JSON.stringify({ schemaVersion: "1.8", analysisHash: review.analysisHash, competitor: report.competitor, product: report.product, feature, decision }, null, 2)}\n`, "utf8");
   return { requirementDirectory: prepared.requirementDirectory, inputPath };
+}
+
+const emptyPriorityReview = (): CompetitorPriorityReviewItem => ({ userValue: null, platformGenerality: null, businessUrgency: null, implementationComplexity: null, architectureFit: null, note: "" });
+
+function validPriorityReview(item: CompetitorPriorityReviewItem): boolean {
+  return [item.userValue, item.platformGenerality, item.businessUrgency, item.implementationComplexity, item.architectureFit].every((value) => Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 5);
+}
+
+export async function prioritizeCompetitorCandidates(directory: string): Promise<{ candidates: CompetitorCandidate[]; reviewPath: string; jsonPath: string; markdownPath: string }> {
+  const report = await readAnalysis(directory);
+  const review = JSON.parse(await readFile(path.join(directory, "competitor-review.json"), "utf8")) as CompetitorReview;
+  if (review.analysisHash !== hashReport(report)) throw new Error("竞品审核已失效，不能进行优先级评估。");
+  const eligible = report.assessments.filter((feature) => ["adopt", "adapt"].includes(review.decisions?.[feature.featureId]?.decision ?? ""));
+  const reviewPath = path.join(directory, "competitor-priority-review.json");
+  let saved: { schemaVersion?: string; analysisHash?: string; reviews?: Record<string, CompetitorPriorityReviewItem> } | undefined;
+  try { saved = JSON.parse(await readFile(reviewPath, "utf8")); } catch {}
+  const reviews: Record<string, CompetitorPriorityReviewItem> = {};
+  for (const feature of eligible) reviews[feature.featureId] = saved?.analysisHash === review.analysisHash ? saved.reviews?.[feature.featureId] ?? emptyPriorityReview() : emptyPriorityReview();
+  await writeFile(reviewPath, `${JSON.stringify({ schemaVersion: "1.8", analysisHash: review.analysisHash, reviews }, null, 2)}\n`, "utf8");
+  const candidates = eligible.map((feature): CompetitorCandidate => {
+    const decision = review.decisions[feature.featureId]!; const values = reviews[feature.featureId]!;
+    const technicalSuggestionScore = feature.status === "missing" ? 75 : feature.status === "partial" ? 85 : 60;
+    const candidate: CompetitorCandidate = { featureId: feature.featureId, featureName: feature.featureName, decision: decision.decision as "adopt" | "adapt", scope: decision.scope, technicalSuggestionScore, reviewStatus: validPriorityReview(values) ? "CONFIRMED" : "AWAITING_PM_REVIEW", productManagerReview: values };
+    if (candidate.reviewStatus === "CONFIRMED") {
+      candidate.finalPriorityScore = Math.round(((Number(values.userValue) + Number(values.platformGenerality) + Number(values.businessUrgency) + Number(values.architectureFit) + (6 - Number(values.implementationComplexity))) / 5) * 20);
+      candidate.priorityBand = candidate.finalPriorityScore >= 85 ? "P0" : candidate.finalPriorityScore >= 70 ? "P1" : candidate.finalPriorityScore >= 50 ? "P2" : "P3";
+    }
+    return candidate;
+  }).sort((a, b) => (b.finalPriorityScore ?? b.technicalSuggestionScore) - (a.finalPriorityScore ?? a.technicalSuggestionScore) || a.featureId.localeCompare(b.featureId));
+  const jsonPath = path.join(directory, "competitor-priority-assessment.json"); const markdownPath = path.join(directory, "competitor-priority-assessment.md");
+  await Promise.all([writeFile(jsonPath, `${JSON.stringify({ schemaVersion: "1.8", analysisHash: review.analysisHash, candidates }, null, 2)}\n`, "utf8"), writeFile(markdownPath, renderPriorityAssessment(candidates), "utf8")]);
+  return { candidates, reviewPath, jsonPath, markdownPath };
+}
+
+function renderPriorityAssessment(candidates: CompetitorCandidate[]): string {
+  const rows = candidates.map((item) => `| ${item.featureId} | ${item.featureName} | ${item.decision} | ${item.technicalSuggestionScore} | ${item.reviewStatus} | ${item.finalPriorityScore ?? "-"} | ${item.priorityBand ?? "-"} |`).join("\n");
+  return `# 竞品候选功能优先级评估\n\n| 功能ID | 功能 | 取舍 | 技术建议分 | 产品经理复核 | 最终分数 | 优先级 |\n|---|---|---|---:|---|---:|---|\n${rows}\n\n> 技术建议分不包含业务判断。只有完整填写五项产品经理评分后，才生成最终分数和 P0–P3。\n`;
+}
+
+export async function buildCompetitorBacklog(directory: string, projectDirectory: string): Promise<{ backlog: CompetitorCandidateBacklog; jsonPath: string; markdownPath: string; portfolioPath?: string }> {
+  const report = await readAnalysis(directory); const prioritized = await prioritizeCompetitorCandidates(directory);
+  const linked = new Map<string, { requirementId: string; requirementDirectory: string }>();
+  try {
+    const entries = await readdir(path.join(projectDirectory, "requirements"), { withFileTypes: true });
+    for (const entry of entries.filter((item) => item.isDirectory())) {
+      const requirementDirectory = path.join(projectDirectory, "requirements", entry.name);
+      try {
+        const origin = JSON.parse(await readFile(path.join(requirementDirectory, "00-sources/competitor-origin/decision.json"), "utf8")) as { feature?: { featureId?: string }; analysisHash?: string };
+        const metadata = JSON.parse(await readFile(path.join(requirementDirectory, "requirement.json"), "utf8")) as { requirementId?: string };
+        if (origin.analysisHash === hashReport(report) && origin.feature?.featureId && metadata.requirementId) linked.set(origin.feature.featureId, { requirementId: metadata.requirementId, requirementDirectory: path.relative(projectDirectory, requirementDirectory) });
+      } catch {}
+    }
+  } catch {}
+  let portfolio: Awaited<ReturnType<typeof buildRequirementPortfolio>> | undefined;
+  if (linked.size) portfolio = await buildRequirementPortfolio(projectDirectory);
+  const candidates = prioritized.candidates.map((candidate) => {
+    const match = linked.get(candidate.featureId); const portfolioItem = match ? portfolio?.portfolio.requirements.find((item) => item.requirementId === match.requirementId) : undefined;
+    return { ...candidate, ...(match ?? {}), portfolioAdmissionStatus: portfolioItem?.admissionStatus, syncStatus: match ? "LINKED" as const : "NOT_CREATED" as const };
+  });
+  const summary = { total: candidates.length, confirmed: candidates.filter((item) => item.reviewStatus === "CONFIRMED").length, awaitingReview: candidates.filter((item) => item.reviewStatus !== "CONFIRMED").length, linked: candidates.filter((item) => item.syncStatus === "LINKED").length, notCreated: candidates.filter((item) => item.syncStatus === "NOT_CREATED").length };
+  const backlog: CompetitorCandidateBacklog = { schemaVersion: "1.8", generatedAt: new Date().toISOString(), competitor: report.competitor, analysisHash: hashReport(report), candidates, summary };
+  const target = path.join(projectDirectory, "product", "portfolio"); await mkdir(target, { recursive: true });
+  const jsonPath = path.join(target, "competitor-candidate-backlog.json"); const markdownPath = path.join(target, "competitor-candidate-backlog.md");
+  const rows = candidates.map((item) => `| ${item.featureId} | ${item.featureName} | ${item.priorityBand ?? "-"} | ${item.syncStatus} | ${item.requirementId ?? "-"} | ${item.portfolioAdmissionStatus ?? "-"} |`).join("\n");
+  await Promise.all([writeFile(jsonPath, `${JSON.stringify(backlog, null, 2)}\n`, "utf8"), writeFile(markdownPath, `# 竞品候选需求池\n\n| 竞品功能 | 功能名称 | 优先级 | 同步状态 | PAE需求 | 版本准入 |\n|---|---|---|---|---|---|\n${rows}\n`, "utf8")]);
+  return { backlog, jsonPath, markdownPath, portfolioPath: portfolio?.jsonPath };
 }
 
 export function renderCompetitorAnalysis(report: CompetitorAnalysisReport): string {

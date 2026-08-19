@@ -71,3 +71,33 @@ export interface CompetitorReview {
   analysisHash: string;
   decisions: Record<string, CompetitorReviewDecision>;
 }
+
+export interface CompetitorPriorityReviewItem {
+  userValue: 1 | 2 | 3 | 4 | 5 | null;
+  platformGenerality: 1 | 2 | 3 | 4 | 5 | null;
+  businessUrgency: 1 | 2 | 3 | 4 | 5 | null;
+  implementationComplexity: 1 | 2 | 3 | 4 | 5 | null;
+  architectureFit: 1 | 2 | 3 | 4 | 5 | null;
+  note: string;
+}
+
+export interface CompetitorCandidate {
+  featureId: string;
+  featureName: string;
+  decision: "adopt" | "adapt";
+  scope: string;
+  technicalSuggestionScore: number;
+  reviewStatus: "AWAITING_PM_REVIEW" | "CONFIRMED";
+  productManagerReview: CompetitorPriorityReviewItem;
+  finalPriorityScore?: number;
+  priorityBand?: "P0" | "P1" | "P2" | "P3";
+}
+
+export interface CompetitorCandidateBacklog {
+  schemaVersion: "1.8";
+  generatedAt: string;
+  competitor: { id: string; name: string };
+  analysisHash: string;
+  candidates: Array<CompetitorCandidate & { requirementId?: string; requirementDirectory?: string; portfolioAdmissionStatus?: string; syncStatus: "LINKED" | "NOT_CREATED" }>;
+  summary: { total: number; confirmed: number; awaitingReview: number; linked: number; notCreated: number };
+}

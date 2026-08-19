@@ -26,6 +26,16 @@ node dist/cli.js competitor create-requirement output/competitor-analysis/weaver
   --id REQ-1801 --name application-role --product-version 3.1.0
 ```
 
+创建需求前后可生成优先级评估和候选需求池。首次执行 `prioritize` 会生成待填写的五维产品经理评分文件；填写后再次执行才产生最终优先级：
+
+```bash
+node dist/cli.js competitor prioritize output/competitor-analysis/weaver
+node dist/cli.js competitor backlog output/competitor-analysis/weaver \
+  --project-dir output/base-platform
+```
+
+候选池会关联已经创建的标准需求，并复用 v1.7.0 的 `READY / CONDITIONAL / BLOCKED / STALE` 版本准入状态。
+
 ## 成果物组织模型
 
 ```text
