@@ -36,6 +36,13 @@ node dist/cli.js competitor backlog output/competitor-analysis/weaver \
 
 候选池会关联已经创建的标准需求，并复用 v1.7.0 的 `READY / CONDITIONAL / BLOCKED / STALE` 版本准入状态。
 
+完成全部功能取舍、候选五维评分和标准需求关联后，可执行正式验收并生成带 SHA-256 清单的 ZIP：
+
+```bash
+node dist/cli.js competitor finalize output/competitor-analysis/weaver \
+  --project-dir output/base-platform
+```
+
 ## 成果物组织模型
 
 ```text

@@ -61,6 +61,7 @@ import { detectReleaseChanges, establishReleaseBaseline, readReleaseStatus } fro
 import { finalizeReleasePlanning } from "./release-planning/delivery.js";
 import { analyzeCompetitor, buildCompetitorBacklog, createRequirementFromCompetitor, prioritizeCompetitorCandidates, reviewCompetitorFeature } from "./competitor-analysis/service.js";
 import type { CompetitorDecision } from "./competitor-analysis/types.js";
+import { finalizeCompetitorDelivery } from "./competitor-analysis/delivery.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -131,6 +132,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae competitor create-requirement <报告目录> --feature <功能ID> --project-dir <项目目录> --id <需求编号> --name <需求标识>
   pae competitor prioritize <报告目录>
   pae competitor backlog <报告目录> --project-dir <项目目录>
+  pae competitor finalize <报告目录> --project-dir <项目目录>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -315,6 +317,12 @@ async function main(): Promise<void> {
     validateArgs(args); const projectDirectory = option(args, "--project-dir"); if (!projectDirectory) throw new Error("competitor backlog 必须提供 --project-dir <项目目录>。");
     const result = await buildCompetitorBacklog(path.resolve(args[2]), path.resolve(projectDirectory));
     console.log(`竞品候选需求池：${result.backlog.summary.linked}/${result.backlog.summary.total} 已关联标准需求`); console.log(`候选需求池：${result.markdownPath}`); if (result.portfolioPath) console.log(`v1.7.0 需求组合：${result.portfolioPath}`); return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "finalize" && Boolean(args[2])) {
+    validateArgs(args); const projectDirectory = option(args, "--project-dir"); if (!projectDirectory) throw new Error("competitor finalize 必须提供 --project-dir <项目目录>。");
+    const result = await finalizeCompetitorDelivery(path.resolve(args[2]), path.resolve(projectDirectory));
+    console.log(`竞品分析正式验收：${result.acceptance.status}`); console.log(`交付清单：${result.manifestPath}`); console.log(`正式交付包：${result.zipPath}`); return;
   }
 
   if (args[0] === "extension" && args[1] === "validate" && Boolean(args[2])) {

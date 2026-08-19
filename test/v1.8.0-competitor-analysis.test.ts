@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { analyzeCompetitor, buildCompetitorBacklog, createRequirementFromCompetitor, prioritizeCompetitorCandidates, reviewCompetitorFeature } from "../src/competitor-analysis/service.js";
+import { finalizeCompetitorDelivery } from "../src/competitor-analysis/delivery.js";
+
+const execFileAsync = promisify(execFile);
+const repoRoot = path.resolve(import.meta.dirname, "..");
 
 async function json(file: string, value: unknown): Promise<void> { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, "utf8"); }
 
@@ -69,4 +75,29 @@ test("v1.8.0 将产品经理优先级评估和已创建需求接入版本组合"
   await createRequirementFromCompetitor(analysisDirectory, projectDirectory, "role", "REQ-1802", "application-role");
   const backlog = await buildCompetitorBacklog(analysisDirectory, projectDirectory); assert.equal(backlog.backlog.summary.linked, 1); assert.equal(backlog.backlog.candidates[0]?.requirementId, "REQ-1802"); assert.equal(backlog.backlog.candidates[0]?.portfolioAdmissionStatus, "CONDITIONAL");
   assert.ok(backlog.portfolioPath); assert.match(await readFile(backlog.markdownPath, "utf8"), /REQ-1802/);
+  const delivery = await finalizeCompetitorDelivery(analysisDirectory, projectDirectory); assert.equal(delivery.acceptance.status, "PASS");
+  const zip = await readFile(delivery.zipPath); assert.equal(zip.subarray(0, 2).toString(), "PK");
+  const manifest = JSON.parse(await readFile(delivery.manifestPath, "utf8")) as { artifacts: Array<{ sha256: string }>; archive: { sha256: string } };
+  assert.ok(manifest.artifacts.every((item) => item.sha256.length === 64)); assert.equal(manifest.archive.sha256.length, 64);
+});
+
+test("v1.8.0 正式验收阻断未评分或未关联需求的候选功能", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-competitor-delivery-gate-")); const analysisDirectory = path.join(root, "analysis");
+  await json(path.join(root, "competitor.json"), { schemaVersion: "1.8", id: "x", name: "X", features: [{ id: "f", name: "功能", module: "应用", scenario: "场景", actors: ["管理员"], operations: ["操作"], keywords: ["应用"], evidenceIds: ["E1"] }], evidence: [{ id: "E1", source: "公开文档", excerpt: "证据" }] });
+  await json(path.join(root, "baseline.json"), { schemaVersion: "1.8", product: { id: "base", name: "基础平台" }, capabilities: [] });
+  await analyzeCompetitor(path.join(root, "competitor.json"), path.join(root, "baseline.json"), analysisDirectory); await reviewCompetitorFeature(analysisDirectory, "f", "adopt", "平台通用能力"); await prioritizeCompetitorCandidates(analysisDirectory);
+  const projectDirectory = path.join(root, "base"); await json(path.join(projectDirectory, "project.json"), { projectId: "base", projectName: "基础平台" });
+  await assert.rejects(() => finalizeCompetitorDelivery(analysisDirectory, projectDirectory), /五维评分.*关联标准 PAE 需求/);
+});
+
+test("v1.8.0 CLI 完成竞品分析到正式交付端到端闭环", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pae-competitor-cli-")); const analysis = path.join(root, "analysis"); const project = path.join(root, "base");
+  const profile = path.join(root, "competitor.json"); const baseline = path.join(root, "baseline.json");
+  await json(profile, { schemaVersion: "1.8", id: "weaver", name: "泛微", features: [{ id: "role", name: "应用角色", module: "权限", scenario: "配置应用角色", actors: ["管理员"], operations: ["授权"], keywords: ["角色"], evidenceIds: ["E1"] }], evidence: [{ id: "E1", source: "公开文档", excerpt: "应用角色" }] });
+  await json(baseline, { schemaVersion: "1.8", product: { id: "base", name: "基础平台" }, capabilities: [] }); await json(path.join(project, "project.json"), { projectId: "base", projectName: "基础平台", productVersion: "3.2.0" });
+  const cli = path.join(repoRoot, "src", "cli.ts"); const run = (args: string[]) => execFileAsync(process.execPath, ["--import", "tsx", cli, ...args], { cwd: repoRoot, timeout: 30_000 });
+  await run(["competitor", "analyze", profile, "--baseline", baseline, "--out", analysis]); await run(["competitor", "review", analysis, "--feature", "role", "--decision", "adapt", "--scope", "应用角色"]); await run(["competitor", "prioritize", analysis]);
+  const priorityPath = path.join(analysis, "competitor-priority-review.json"); const priority = JSON.parse(await readFile(priorityPath, "utf8")) as { reviews: Record<string, unknown> }; priority.reviews.role = { userValue: 5, platformGenerality: 5, businessUrgency: 4, implementationComplexity: 2, architectureFit: 5, note: "确认" }; await json(priorityPath, priority);
+  await run(["competitor", "prioritize", analysis]); await run(["competitor", "create-requirement", analysis, "--feature", "role", "--project-dir", project, "--id", "REQ-CLI-180", "--name", "application-role"]);
+  const finalized = await run(["competitor", "finalize", analysis, "--project-dir", project]); assert.match(finalized.stdout, /竞品分析正式验收：PASS/); assert.equal((await readFile(path.join(analysis, "formal-delivery/competitor-analysis-delivery.zip"))).subarray(0, 2).toString(), "PK");
 });
