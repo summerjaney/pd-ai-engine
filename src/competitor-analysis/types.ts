@@ -36,6 +36,9 @@ export interface CompetitorFeatureAssessment {
   featureId: string;
   featureName: string;
   competitorModule: string;
+  scenario: string;
+  actors: string[];
+  operations: string[];
   matchedCapabilityIds: string[];
   status: PlatformCapabilityStatus;
   decision: CompetitorDecision;
@@ -49,6 +52,22 @@ export interface CompetitorAnalysisReport {
   generatedAt: string;
   competitor: { id: string; name: string };
   product: { id: string; name: string };
+  sourceHashes: { profile: string; baseline: string };
   assessments: CompetitorFeatureAssessment[];
   summary: Record<PlatformCapabilityStatus, number> & Record<CompetitorDecision, number> & { total: number };
+}
+
+export interface CompetitorReviewDecision {
+  featureId: string;
+  decision: CompetitorDecision;
+  scope: string;
+  note: string;
+  reviewedAt: string;
+}
+
+export interface CompetitorReview {
+  schemaVersion: "1.8";
+  status: "pending" | "reviewed";
+  analysisHash: string;
+  decisions: Record<string, CompetitorReviewDecision>;
 }

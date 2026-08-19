@@ -16,6 +16,16 @@ node dist/cli.js competitor analyze examples/v1.8.0/weaver-application-role.json
   --out output/competitor-analysis/weaver
 ```
 
+产品经理必须逐项确认取舍，只有 `adopt` 或 `adapt` 可以转换为标准需求：
+
+```bash
+node dist/cli.js competitor review output/competitor-analysis/weaver \
+  --feature feature.application-role --decision adapt --scope "应用级角色与功能授权"
+node dist/cli.js competitor create-requirement output/competitor-analysis/weaver \
+  --feature feature.application-role --project-dir output/base-platform \
+  --id REQ-1801 --name application-role --product-version 3.1.0
+```
+
 ## 成果物组织模型
 
 ```text

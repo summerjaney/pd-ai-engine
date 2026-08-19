@@ -59,7 +59,8 @@ import { generateReleaseOptions, readReleaseOptions, selectReleaseScope } from "
 import type { ReleaseOptionId } from "./release-planning/types.js";
 import { detectReleaseChanges, establishReleaseBaseline, readReleaseStatus } from "./release-planning/baseline.js";
 import { finalizeReleasePlanning } from "./release-planning/delivery.js";
-import { analyzeCompetitor } from "./competitor-analysis/service.js";
+import { analyzeCompetitor, createRequirementFromCompetitor, reviewCompetitorFeature } from "./competitor-analysis/service.js";
+import type { CompetitorDecision } from "./competitor-analysis/types.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -126,6 +127,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae release status <项目目录> --version <版本>
   pae release finalize <项目目录> --version <版本> --objective <版本目标>
   pae competitor analyze <竞品档案JSON> --baseline <平台能力JSON> --out <报告目录>
+  pae competitor review <报告目录> --feature <功能ID> --decision adopt|adapt|reject|research --scope <适用范围>
+  pae competitor create-requirement <报告目录> --feature <功能ID> --project-dir <项目目录> --id <需求编号> --name <需求标识>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -220,7 +223,7 @@ const VALID_OPTIONS = new Set([
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
   "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
-  "--gate", "--include", "--defer", "--objective", "--baseline",
+  "--gate", "--include", "--defer", "--objective", "--baseline", "--feature", "--project-dir",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
 
@@ -282,6 +285,22 @@ async function main(): Promise<void> {
     console.log(`功能：${result.report.summary.total}；已具备/部分具备/未具备：${result.report.summary.available}/${result.report.summary.partial}/${result.report.summary.missing}`);
     console.log(`分析报告：${result.markdownPath}`);
     return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "review" && Boolean(args[2])) {
+    validateArgs(args);
+    const feature = option(args, "--feature"); const decision = option(args, "--decision") as CompetitorDecision | undefined; const scope = option(args, "--scope");
+    if (!feature || !decision || !scope) throw new Error("competitor review 必须提供 --feature、--decision 和 --scope。");
+    const result = await reviewCompetitorFeature(path.resolve(args[2]), feature, decision, scope, option(args, "--note"));
+    console.log(`竞品功能审核：${result.review.status.toUpperCase()}`); console.log(`审核记录：${result.path}`); return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "create-requirement" && Boolean(args[2])) {
+    validateArgs(args);
+    const feature = option(args, "--feature"); const projectDirectory = option(args, "--project-dir"); const id = option(args, "--id"); const name = option(args, "--name");
+    if (!feature || !projectDirectory || !id || !name) throw new Error("competitor create-requirement 必须提供 --feature、--project-dir、--id 和 --name。");
+    const result = await createRequirementFromCompetitor(path.resolve(args[2]), path.resolve(projectDirectory), feature, id, name, option(args, "--product-version"));
+    console.log("竞品功能转标准需求：CREATED"); console.log(`需求设计包：${result.requirementDirectory}`); console.log(`需求输入：${result.inputPath}`); return;
   }
 
   if (args[0] === "extension" && args[1] === "validate" && Boolean(args[2])) {
