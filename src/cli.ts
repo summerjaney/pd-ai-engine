@@ -59,6 +59,9 @@ import { generateReleaseOptions, readReleaseOptions, selectReleaseScope } from "
 import type { ReleaseOptionId } from "./release-planning/types.js";
 import { detectReleaseChanges, establishReleaseBaseline, readReleaseStatus } from "./release-planning/baseline.js";
 import { finalizeReleasePlanning } from "./release-planning/delivery.js";
+import { analyzeCompetitor, buildCompetitorBacklog, createRequirementFromCompetitor, prioritizeCompetitorCandidates, reviewCompetitorFeature } from "./competitor-analysis/service.js";
+import type { CompetitorDecision } from "./competitor-analysis/types.js";
+import { finalizeCompetitorDelivery } from "./competitor-analysis/delivery.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -124,6 +127,12 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae release detect <项目目录> --version <版本>
   pae release status <项目目录> --version <版本>
   pae release finalize <项目目录> --version <版本> --objective <版本目标>
+  pae competitor analyze <竞品档案JSON> --baseline <平台能力JSON> --out <报告目录>
+  pae competitor review <报告目录> --feature <功能ID> --decision adopt|adapt|reject|research --scope <适用范围>
+  pae competitor create-requirement <报告目录> --feature <功能ID> --project-dir <项目目录> --id <需求编号> --name <需求标识>
+  pae competitor prioritize <报告目录>
+  pae competitor backlog <报告目录> --project-dir <项目目录>
+  pae competitor finalize <报告目录> --project-dir <项目目录>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -218,7 +227,7 @@ const VALID_OPTIONS = new Set([
   "--dry-run", "--json", "--write", "--confirm-write", "--resume", "--pass", "--evidence", "--page", "--format", "--level", "--project-dir",
   "--decision", "--scope", "--note",
   "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
-  "--gate", "--include", "--defer", "--objective",
+  "--gate", "--include", "--defer", "--objective", "--baseline", "--feature", "--project-dir",
   "--type", "--sensitivity", "--label", "--exclude-from-analysis",
 ]);
 
@@ -269,6 +278,51 @@ async function main(): Promise<void> {
     for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
     if (report.status === "NOT_READY") process.exitCode = 1;
     return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "analyze" && Boolean(args[2])) {
+    validateArgs(args);
+    const baseline = option(args, "--baseline"); const output = option(args, "--out");
+    if (!baseline || !output) throw new Error("competitor analyze 必须提供 --baseline <平台能力JSON> 和 --out <报告目录>。");
+    const result = await analyzeCompetitor(path.resolve(args[2]), path.resolve(baseline), path.resolve(output));
+    console.log("竞品能力对标：PENDING_PRODUCT_MANAGER_REVIEW");
+    console.log(`功能：${result.report.summary.total}；已具备/部分具备/未具备：${result.report.summary.available}/${result.report.summary.partial}/${result.report.summary.missing}`);
+    console.log(`分析报告：${result.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "review" && Boolean(args[2])) {
+    validateArgs(args);
+    const feature = option(args, "--feature"); const decision = option(args, "--decision") as CompetitorDecision | undefined; const scope = option(args, "--scope");
+    if (!feature || !decision || !scope) throw new Error("competitor review 必须提供 --feature、--decision 和 --scope。");
+    const result = await reviewCompetitorFeature(path.resolve(args[2]), feature, decision, scope, option(args, "--note"));
+    console.log(`竞品功能审核：${result.review.status.toUpperCase()}`); console.log(`审核记录：${result.path}`); return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "create-requirement" && Boolean(args[2])) {
+    validateArgs(args);
+    const feature = option(args, "--feature"); const projectDirectory = option(args, "--project-dir"); const id = option(args, "--id"); const name = option(args, "--name");
+    if (!feature || !projectDirectory || !id || !name) throw new Error("competitor create-requirement 必须提供 --feature、--project-dir、--id 和 --name。");
+    const result = await createRequirementFromCompetitor(path.resolve(args[2]), path.resolve(projectDirectory), feature, id, name, option(args, "--product-version"));
+    console.log("竞品功能转标准需求：CREATED"); console.log(`需求设计包：${result.requirementDirectory}`); console.log(`需求输入：${result.inputPath}`); return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "prioritize" && Boolean(args[2])) {
+    validateArgs(args); const result = await prioritizeCompetitorCandidates(path.resolve(args[2]));
+    console.log(`竞品候选优先级：${result.candidates.filter((item) => item.reviewStatus === "CONFIRMED").length}/${result.candidates.length} 已确认`);
+    console.log(`产品经理评分：${result.reviewPath}`); console.log(`评估报告：${result.markdownPath}`); return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "backlog" && Boolean(args[2])) {
+    validateArgs(args); const projectDirectory = option(args, "--project-dir"); if (!projectDirectory) throw new Error("competitor backlog 必须提供 --project-dir <项目目录>。");
+    const result = await buildCompetitorBacklog(path.resolve(args[2]), path.resolve(projectDirectory));
+    console.log(`竞品候选需求池：${result.backlog.summary.linked}/${result.backlog.summary.total} 已关联标准需求`); console.log(`候选需求池：${result.markdownPath}`); if (result.portfolioPath) console.log(`v1.7.0 需求组合：${result.portfolioPath}`); return;
+  }
+
+  if (args[0] === "competitor" && args[1] === "finalize" && Boolean(args[2])) {
+    validateArgs(args); const projectDirectory = option(args, "--project-dir"); if (!projectDirectory) throw new Error("competitor finalize 必须提供 --project-dir <项目目录>。");
+    const result = await finalizeCompetitorDelivery(path.resolve(args[2]), path.resolve(projectDirectory));
+    console.log(`竞品分析正式验收：${result.acceptance.status}`); console.log(`交付清单：${result.manifestPath}`); console.log(`正式交付包：${result.zipPath}`); return;
   }
 
   if (args[0] === "extension" && args[1] === "validate" && Boolean(args[2])) {

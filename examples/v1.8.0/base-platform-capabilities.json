@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.8",
+  "product": { "id": "base-platform", "name": "基础平台（脱敏示例）" },
+  "capabilities": [
+    { "id": "capability.permission-role", "name": "角色权限", "module": "权限", "keywords": ["角色", "权限"] },
+    { "id": "capability.application-management", "name": "应用管理", "module": "应用", "keywords": ["应用", "生命周期"] }
+  ]
+}
