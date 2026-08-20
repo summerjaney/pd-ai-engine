@@ -4,7 +4,29 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v1.8.0`。PAE 在多需求版本规划之上增加竞品功能证据建模、平台能力映射与人工取舍门禁。
+当前版本为 `v1.9.0`。PAE 已形成“市场证据 → 问题与价值假设 → 需求价值链 → 版本目标 → 发布后复盘”的人工决策闭环。
+
+## 市场证据驱动的版本决策（v1.9.0）
+
+登记可追溯的竞品、客户反馈、业务指标或内部洞察；敏感证据默认不会导出到公开交付包：
+
+```bash
+node dist/cli.js evidence add examples/v1.9.0/customer-role-feedback.json --evidence-dir output/base-platform/market-evidence
+node dist/cli.js discovery derive --evidence-dir output/base-platform/market-evidence --discovery-dir output/base-platform/discovery
+```
+
+问题、机会和价值假设必须经产品经理逐项确认。随后为标准需求建立价值链并绑定可验证指标：
+
+```bash
+node dist/cli.js value link output/base-platform/requirements/REQ-1901-role-experience \
+  --discovery-dir output/base-platform/discovery \
+  --problem problem.customer.role-configuration \
+  --opportunity opportunity.customer.role-configuration \
+  --hypothesis value-hypothesis.customer.role-configuration \
+  --metric examples/v1.9.0/role-completion-metric.json
+```
+
+版本范围确认后，使用 `release objective set` 绑定版本目标与成功指标；发布后使用 `release retrospect` 录入实际结果。`release market-finalize` 会校验完整链路并生成不包含内部、机密市场证据的 ZIP 交付包。
 
 ## 竞品驱动的功能规划（v1.8.0）
 

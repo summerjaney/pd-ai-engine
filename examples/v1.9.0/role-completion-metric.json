@@ -1,0 +1,9 @@
+{
+  "id": "metric.role-configuration-completion",
+  "name": "角色配置一次完成率",
+  "definition": "一次配置后无需补充功能授权的角色配置占比。",
+  "baseline": "待采集",
+  "target": "上线后提升 20%",
+  "observationWindow": "发布后 30 天",
+  "dataSource": "脱敏运营统计"
+}

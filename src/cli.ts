@@ -62,6 +62,13 @@ import { finalizeReleasePlanning } from "./release-planning/delivery.js";
 import { analyzeCompetitor, buildCompetitorBacklog, createRequirementFromCompetitor, prioritizeCompetitorCandidates, reviewCompetitorFeature } from "./competitor-analysis/service.js";
 import type { CompetitorDecision } from "./competitor-analysis/types.js";
 import { finalizeCompetitorDelivery } from "./competitor-analysis/delivery.js";
+import { MarketEvidenceService } from "./market-evidence/service.js";
+import { DiscoveryService } from "./discovery/service.js";
+import type { DiscoveryKind } from "./discovery/types.js";
+import { ValueChainService } from "./value-chain/service.js";
+import { ReleaseObjectiveService } from "./release-objective/service.js";
+import { ReleaseRetrospectiveService } from "./release-retrospective/service.js";
+import { finalizeMarketDelivery } from "./market-delivery/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -133,6 +140,20 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae competitor prioritize <报告目录>
   pae competitor backlog <报告目录> --project-dir <项目目录>
   pae competitor finalize <报告目录> --project-dir <项目目录>
+  pae evidence add <证据JSON> [--evidence-dir <目录>]
+  pae evidence list [--evidence-dir <目录>]
+  pae evidence show <证据ID> [--evidence-dir <目录>]
+  pae evidence validate [--evidence-dir <目录>]
+  pae evidence export-public [--evidence-dir <目录>] --out <JSON文件>
+  pae discovery derive [--evidence-dir <目录>] [--discovery-dir <目录>]
+  pae discovery review [--evidence-dir <目录>] [--discovery-dir <目录>] --kind problem|opportunity|value-hypothesis --id <ID> --action confirm|reject
+  pae discovery status [--evidence-dir <目录>] [--discovery-dir <目录>]
+  pae value link <需求目录> --discovery-dir <目录> --problem <ID> --opportunity <ID> --hypothesis <ID> --metric <指标JSON>
+  pae value check <需求目录> --discovery-dir <目录>
+  pae release objective set <项目目录> --version <版本> --input <目标JSON>
+  pae release objective check <项目目录> --version <版本>
+  pae release retrospect <项目目录> --version <版本> --input <实际结果JSON>
+  pae release market-finalize <项目目录> --version <版本> --evidence-dir <目录> --discovery-dir <目录>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -228,7 +249,7 @@ const VALID_OPTIONS = new Set([
   "--decision", "--scope", "--note",
   "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
   "--gate", "--include", "--defer", "--objective", "--baseline", "--feature", "--project-dir",
-  "--type", "--sensitivity", "--label", "--exclude-from-analysis",
+  "--type", "--sensitivity", "--label", "--exclude-from-analysis", "--evidence-dir", "--discovery-dir", "--kind", "--action", "--problem", "--opportunity", "--hypothesis", "--metric", "--input",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -278,6 +299,113 @@ async function main(): Promise<void> {
     for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
     if (report.status === "NOT_READY") process.exitCode = 1;
     return;
+  }
+
+  if (args[0] === "evidence" && ["add", "list", "show", "validate", "export-public"].includes(args[1] ?? "")) {
+    validateArgs(args);
+    const service = new MarketEvidenceService();
+    const directory = path.resolve(option(args, "--evidence-dir") ?? "output/market-evidence");
+    if (args[1] === "add") {
+      if (!args[2] || args[2].startsWith("-")) throw new Error("evidence add 必须提供证据 JSON 文件。");
+      const result = await service.add(directory, path.resolve(args[2]));
+      console.log("市场证据登记：PASS");
+      console.log(`证据：${result.evidence.id}；类型：${result.evidence.type}；敏感级别：${result.evidence.sensitivity}`);
+      console.log(`目录：${result.path}`);
+      return;
+    }
+    const catalog = await service.load(directory);
+    if (args[1] === "validate") {
+      console.log("市场证据目录校验：PASS");
+      console.log(`证据：${catalog.evidence.length}`);
+      return;
+    }
+    if (args[1] === "list") {
+      console.log(`市场证据：${catalog.evidence.length}`);
+      for (const item of catalog.evidence) console.log(`${item.id} [${item.type}/${item.sensitivity}] ${item.name}`);
+      return;
+    }
+    if (args[1] === "show") {
+      if (!args[2] || args[2].startsWith("-")) throw new Error("evidence show 必须提供证据 ID。");
+      const evidence = catalog.evidence.find((item) => item.id === args[2]);
+      if (!evidence) throw new Error(`未找到市场证据：${args[2]}`);
+      console.log(JSON.stringify(evidence, null, 2));
+      return;
+    }
+    const output = option(args, "--out");
+    if (!output) throw new Error("evidence export-public 必须提供 --out <JSON文件>。");
+    const target = await service.exportPublic(directory, path.resolve(output));
+    console.log(`市场证据公开导出：${target}`);
+    return;
+  }
+
+  if (args[0] === "discovery" && ["derive", "review", "status"].includes(args[1] ?? "")) {
+    validateArgs(args);
+    const evidenceDirectory = path.resolve(option(args, "--evidence-dir") ?? "output/market-evidence");
+    const discoveryDirectory = path.resolve(option(args, "--discovery-dir") ?? "output/discovery");
+    const service = new DiscoveryService();
+    if (args[1] === "derive") {
+      const result = await service.derive(evidenceDirectory, discoveryDirectory);
+      console.log(`市场发现草稿：${result.report.status}`);
+      console.log(`问题/机会/价值假设：${result.report.problems.length}/${result.report.opportunities.length}/${result.report.valueHypotheses.length}`);
+      console.log(`发现报告：${result.markdownPath}`);
+      return;
+    }
+    if (args[1] === "status") {
+      const result = await service.status(evidenceDirectory, discoveryDirectory);
+      const all = [...result.report.problems, ...result.report.opportunities, ...result.report.valueHypotheses];
+      console.log(`市场发现状态：${result.stale ? "STALE" : result.report.status.toUpperCase()}`);
+      console.log(`待审核/已确认/已拒绝：${all.filter((item) => item.review.status === "pending").length}/${all.filter((item) => item.review.status === "confirmed").length}/${all.filter((item) => item.review.status === "rejected").length}`);
+      return;
+    }
+    const kind = option(args, "--kind") as DiscoveryKind | undefined; const id = option(args, "--id"); const action = option(args, "--action");
+    if (!kind || !(["problem", "opportunity", "value-hypothesis"] as DiscoveryKind[]).includes(kind)) throw new Error("--kind 必须是：problem、opportunity 或 value-hypothesis。");
+    if (!id || !action || !["confirm", "reject"].includes(action)) throw new Error("discovery review 必须提供 --id 和 --action confirm|reject。");
+    const result = await service.review(evidenceDirectory, discoveryDirectory, kind, id, action === "confirm" ? "confirmed" : "rejected", option(args, "--note"));
+    console.log(`市场发现审核：${result.report.status}`); console.log(`审核记录：${result.jsonPath}`);
+    return;
+  }
+
+  if (args[0] === "value" && ["link", "check"].includes(args[1] ?? "") && Boolean(args[2])) {
+    validateArgs(args);
+    const discoveryDirectory = option(args, "--discovery-dir");
+    if (!discoveryDirectory) throw new Error("value 命令必须提供 --discovery-dir <目录>。");
+    const service = new ValueChainService(); const requirementDirectory = path.resolve(args[2]);
+    if (args[1] === "check") {
+      const result = await service.check(requirementDirectory, path.resolve(discoveryDirectory));
+      console.log(`需求价值链校验：${result.check.valid ? "PASS" : "FAIL"}`); console.log(`校验报告：${result.markdownPath}`);
+      if (!result.check.valid) process.exitCode = 1;
+      return;
+    }
+    const problemId = option(args, "--problem"); const opportunityId = option(args, "--opportunity"); const hypothesisId = option(args, "--hypothesis"); const metric = option(args, "--metric");
+    if (!problemId || !opportunityId || !hypothesisId || !metric) throw new Error("value link 必须提供 --problem、--opportunity、--hypothesis 和 --metric <指标JSON>。");
+    const result = await service.link(requirementDirectory, path.resolve(discoveryDirectory), { problemId, opportunityId, valueHypothesisId: hypothesisId }, path.resolve(metric));
+    console.log("需求价值链：LINKED"); console.log(`成功指标：${result.chain.successMetric.id}`); console.log(`价值链：${result.markdownPath}`);
+    return;
+  }
+
+  if (args[0] === "release" && args[1] === "objective" && ["set", "check"].includes(args[2] ?? "") && Boolean(args[3])) {
+    validateArgs(args); const version = option(args, "--version");
+    if (!version) throw new Error("release objective 必须提供 --version <版本>。");
+    const service = new ReleaseObjectiveService(); const projectDirectory = path.resolve(args[3]);
+    if (args[2] === "check") {
+      const result = await service.check(projectDirectory, version); console.log(`版本目标校验：${result.check.valid ? "PASS" : "FAIL"}`); console.log(`校验报告：${result.markdownPath}`); if (!result.check.valid) process.exitCode = 1; return;
+    }
+    const input = option(args, "--input"); if (!input) throw new Error("release objective set 必须提供 --input <目标JSON>。");
+    const result = await service.set(projectDirectory, version, path.resolve(input)); console.log("版本目标确认：PASS"); console.log(`目标：${result.objective.objective}`); console.log(`指标文件：${result.markdownPath}`); return;
+  }
+
+  if (args[0] === "release" && args[1] === "retrospect" && Boolean(args[2])) {
+    validateArgs(args); const version = option(args, "--version"); const input = option(args, "--input");
+    if (!version || !input) throw new Error("release retrospect 必须提供 --version <版本> 和 --input <实际结果JSON>。");
+    const result = await new ReleaseRetrospectiveService().record(path.resolve(args[2]), version, path.resolve(input));
+    console.log("发布后复盘：RECORDED"); console.log(`指标结果：${result.report.results.length}`); console.log(`复盘报告：${result.markdownPath}`); return;
+  }
+
+  if (args[0] === "release" && args[1] === "market-finalize" && Boolean(args[2])) {
+    validateArgs(args); const version = option(args, "--version"); const evidenceDirectory = option(args, "--evidence-dir"); const discoveryDirectory = option(args, "--discovery-dir");
+    if (!version || !evidenceDirectory || !discoveryDirectory) throw new Error("release market-finalize 必须提供 --version、--evidence-dir 和 --discovery-dir。");
+    const result = await finalizeMarketDelivery(path.resolve(args[2]), version, path.resolve(evidenceDirectory), path.resolve(discoveryDirectory));
+    console.log(`市场决策正式验收：${result.acceptance.status}`); console.log(`交付清单：${result.manifestPath}`); console.log(`正式交付包：${result.zipPath}`); return;
   }
 
   if (args[0] === "competitor" && args[1] === "analyze" && Boolean(args[2])) {

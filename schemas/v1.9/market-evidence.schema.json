@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pae.local/schemas/v1.9/market-evidence.schema.json",
+  "title": "PAE Market Evidence Input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "type", "source", "collectedAt", "sensitivity", "summary", "locator"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "type": { "enum": ["competitor", "customer-feedback", "business-metric", "internal-insight"] },
+    "source": { "type": "string", "minLength": 1 },
+    "collectedAt": { "type": "string", "format": "date-time" },
+    "sensitivity": { "enum": ["public", "internal", "confidential"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "locator": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "url": { "type": "string", "minLength": 1 }, "section": { "type": "string", "minLength": 1 }, "page": { "type": "integer", "minimum": 1 }, "recordId": { "type": "string", "minLength": 1 } },
+      "anyOf": [{ "required": ["url"] }, { "required": ["section"] }, { "required": ["page"] }, { "required": ["recordId"] }]
+    }
+  }
+}

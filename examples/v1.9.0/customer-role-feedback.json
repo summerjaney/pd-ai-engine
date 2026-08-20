@@ -1,0 +1,12 @@
+{
+  "id": "customer.role-configuration",
+  "name": "角色配置客户反馈",
+  "type": "customer-feedback",
+  "source": "脱敏客户访谈纪要",
+  "collectedAt": "2026-08-19T00:00:00.000Z",
+  "sensitivity": "internal",
+  "summary": "管理员反馈角色权限配置步骤复杂，容易遗漏关键功能授权。",
+  "locator": {
+    "recordId": "ROLE-FEEDBACK-001"
+  }
+}

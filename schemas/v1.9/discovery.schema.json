@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pae.local/schemas/v1.9/discovery.schema.json",
+  "title": "PAE Discovery Report",
+  "type": "object",
+  "required": ["schemaVersion", "generatedAt", "evidenceCatalogHash", "status", "problems", "opportunities", "valueHypotheses"],
+  "properties": {
+    "schemaVersion": { "const": "1.9" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "evidenceCatalogHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "status": { "enum": ["pending-product-manager-review", "reviewed"] },
+    "problems": { "type": "array" }, "opportunities": { "type": "array" }, "valueHypotheses": { "type": "array" }
+  }
+}
