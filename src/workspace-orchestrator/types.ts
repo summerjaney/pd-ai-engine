@@ -1,0 +1,7 @@
+export type WorkspaceSeverity = "INFO" | "WARNING" | "BLOCKER";
+export interface WorkspaceAction { id: string; stage: string; action: string; reason: string; requiredInputs: string[]; command: string; requiresHumanConfirmation: boolean; safeToAutoExecute: boolean; }
+export interface WorkspaceBlocker { id: string; severity: WorkspaceSeverity; source: string; affected: string; message: string; remediation: string; recheckCommand: string; }
+export interface WorkspaceDecision { id: string; source: string; status: "PENDING" | "CONFIRMED" | "STALE"; subject: string; path: string; }
+export interface WorkspaceRequirement { id: string; directory: string; stages: Record<string, boolean>; }
+export interface WorkspaceStatus { schemaVersion: "2.0"; generatedAt: string; project: { id: string; name: string; directory: string }; evidence: { count: number; discovery: "MISSING" | "PENDING" | "REVIEWED" | "STALE" }; competitor: { present: boolean; pendingReview: boolean }; requirements: WorkspaceRequirement[]; releases: Array<{ version: string; scope: boolean; objective: boolean; retrospective: boolean }>; decisions: WorkspaceDecision[]; blockers: WorkspaceBlocker[]; next: WorkspaceAction[]; }
+export interface WorkspaceRun { schemaVersion: "2.0"; id: string; startedAt: string; inputFingerprint: string; actions: Array<{ id: string; service: string; files: string[]; result: "PLANNED" | "COMPLETED" | "PAUSED" }>; pausedReason?: string; }

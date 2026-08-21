@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-21
+
+### Added
+
+- 新增工作流编排器，读取项目、市场证据、需求、设计和版本状态而不修改原有状态文件。
+- 新增 `pae workspace status/next/decisions/blockers/plan/continue/history/resume` 命令。
+- 新增安全续办审计记录、输入指纹与人工决策暂停边界。
+
 ## [1.9.0] - 2026-08-19
 
 ### Added
