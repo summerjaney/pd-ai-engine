@@ -4,7 +4,22 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v1.9.0`。PAE 已形成“市场证据 → 问题与价值假设 → 需求价值链 → 版本目标 → 发布后复盘”的人工决策闭环。
+当前版本为 `v2.0.0`。PAE 在既有设计与版本能力上新增工作流编排与安全续办。
+
+## 工作流编排与智能续办（v2.0.0）
+
+编排器只读取既有状态和成果，不覆盖原始状态文件。它输出真实进度、下一步、人工决策和阻断项，并将续办运行记录到独立审计目录：
+
+```bash
+node dist/cli.js workspace status output/<project>
+node dist/cli.js workspace next output/<project>
+node dist/cli.js workspace decisions output/<project>
+node dist/cli.js workspace blockers output/<project>
+node dist/cli.js workspace continue output/<project> --dry-run
+node dist/cli.js workspace continue output/<project> --execute --confirm
+```
+
+涉及产品经理审核、知识晋升、方案选择、版本范围、优先级或 MasterGo 真实画布验收时，编排器只会暂停并给出复查命令，绝不自动替代人工决策。
 
 ## 市场证据驱动的版本决策（v1.9.0）
 

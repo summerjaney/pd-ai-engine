@@ -68,6 +68,7 @@ import type { DiscoveryKind } from "./discovery/types.js";
 import { ValueChainService } from "./value-chain/service.js";
 import { ReleaseObjectiveService } from "./release-objective/service.js";
 import { ReleaseRetrospectiveService } from "./release-retrospective/service.js";
+import { WorkspaceOrchestrator } from "./workspace-orchestrator/service.js";
 import { finalizeMarketDelivery } from "./market-delivery/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
@@ -154,6 +155,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae release objective check <项目目录> --version <版本>
   pae release retrospect <项目目录> --version <版本> --input <实际结果JSON>
   pae release market-finalize <项目目录> --version <版本> --evidence-dir <目录> --discovery-dir <目录>
+  pae workspace status|next|decisions|blockers|plan|continue|history <项目目录> [--dry-run] [--execute --confirm] [--run <运行ID>]
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -249,7 +251,7 @@ const VALID_OPTIONS = new Set([
   "--decision", "--scope", "--note",
   "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
   "--gate", "--include", "--defer", "--objective", "--baseline", "--feature", "--project-dir",
-  "--type", "--sensitivity", "--label", "--exclude-from-analysis", "--evidence-dir", "--discovery-dir", "--kind", "--action", "--problem", "--opportunity", "--hypothesis", "--metric", "--input",
+  "--type", "--sensitivity", "--label", "--exclude-from-analysis", "--evidence-dir", "--discovery-dir", "--kind", "--action", "--problem", "--opportunity", "--hypothesis", "--metric", "--input", "--confirm", "--run", "--execute",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -299,6 +301,15 @@ async function main(): Promise<void> {
     for (const check of report.checks) console.log(`[${check.status}] ${check.message}`);
     if (report.status === "NOT_READY") process.exitCode = 1;
     return;
+  }
+
+  if (args[0] === "workspace" && ["status", "next", "decisions", "blockers", "plan", "continue", "history", "resume"].includes(args[1] ?? "") && Boolean(args[2])) {
+    validateArgs(args); const orchestrator = new WorkspaceOrchestrator(); const project = path.resolve(args[2]);
+    if (args[1] === "history") { console.log(JSON.stringify(await orchestrator.history(project), null, 2)); return; }
+    if (args[1] === "status") { const r = await orchestrator.writeStatus(project); console.log(`工作空间状态：${r.markdownPath}`); return; }
+    if (args[1] === "plan") { const r=await orchestrator.writePlan(project);console.log(`动态执行计划：${r.markdownPath}`);return; }
+    if (args[1] === "next" || args[1] === "decisions" || args[1] === "blockers") { const r = await orchestrator.inspect(project); const value = args[1] === "next" ? r.next : args[1] === "decisions" ? r.decisions : r.blockers; console.log(JSON.stringify(value, null, 2)); return; }
+    const run = await orchestrator.run(project, args.includes("--execute"), args.includes("--confirm"), args[1] === "resume" ? option(args,"--run") : undefined); console.log(`工作空间续办：${run.id}`); return;
   }
 
   if (args[0] === "evidence" && ["add", "list", "show", "validate", "export-public"].includes(args[1] ?? "")) {
