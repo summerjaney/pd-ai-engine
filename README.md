@@ -4,7 +4,22 @@ PAE（仓库名 `pd-ai-engine`，中文名“产品设计 AI 引擎”）是面�
 
 愿景：**One Prompt → One Product**。
 
-当前版本为 `v2.0.0`。PAE 在既有设计与版本能力上新增工作流编排与安全续办。
+当前开发版本为 `v2.1.0`。PAE 开始使用已有工作流编排能力完成低代码平台 AI 能力规划与产品设计。
+
+## 低代码平台 AI 产品规划（v2.1.0）
+
+v2.1.0 首轮新增可执行的 AI 产品规划流程：从目标用户、平台模块、候选场景与产品约束生成产品基线、AI 能力蓝图、场景优先级、MVP 范围草案和人工决策门禁。
+
+```bash
+node dist/cli.js ai plan output/lowcode-ai \
+  --input examples/lowcode-ai-v2.1.0/planning-input.json
+
+node dist/cli.js ai confirm output/lowcode-ai \
+  --scenarios ai-app-builder \
+  --scope "采购审批应用端到端搭建"
+```
+
+`ai plan` 只提供确定性推荐，不能替代产品经理选择首期范围。只有执行 `ai confirm` 后，规划门禁才会变为 `CONFIRMED` 并允许进入标准需求详细设计。
 
 ## 工作流编排与智能续办（v2.0.0）
 

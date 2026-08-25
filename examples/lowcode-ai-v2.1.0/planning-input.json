@@ -1,0 +1,56 @@
+{
+  "project": {
+    "id": "lowcode-ai",
+    "name": "低代码平台 AI 能力规划",
+    "productSystem": ["基础平台", "IDE", "APP", "EIM"],
+    "objective": "使用自然语言降低应用、表单和流程的搭建门槛，并形成可审查、可追踪、可回滚的 AI 产品设计方案。"
+  },
+  "targetUsers": [
+    { "id": "developer", "name": "开发与实施人员", "share": 70, "goals": ["提高搭建效率", "降低重复配置工作"] },
+    { "id": "operator", "name": "平台运维与业务配置人员", "share": 30, "goals": ["独立完成常见配置", "快速定位平台问题"] }
+  ],
+  "modules": [
+    { "id": "application", "name": "应用", "currentCapabilities": ["应用创建", "菜单配置"] },
+    { "id": "entity", "name": "数据模型", "currentCapabilities": ["实体与字段配置"] },
+    { "id": "form", "name": "表单", "currentCapabilities": ["表单设计", "字段校验"] },
+    { "id": "workflow", "name": "流程", "currentCapabilities": ["审批节点", "条件分支"] },
+    { "id": "permission", "name": "权限", "currentCapabilities": ["角色授权", "数据权限"] },
+    { "id": "report", "name": "报表", "currentCapabilities": ["指标与图表配置"] }
+  ],
+  "scenarios": [
+    {
+      "id": "ai-app-builder",
+      "name": "AI 应用搭建助手",
+      "description": "根据业务描述生成应用结构、数据模型、表单、流程和权限草案。",
+      "targetUserIds": ["developer", "operator"],
+      "moduleIds": ["application", "entity", "form", "workflow", "permission"],
+      "capabilities": ["需求理解", "结构化方案生成", "低代码 DSL 生成", "配置校验"],
+      "value": 5, "frequency": 5, "strategicFit": 5, "complexity": 4, "risk": 3,
+      "requiresHumanConfirmation": true
+    },
+    {
+      "id": "ai-configuration-assistant",
+      "name": "AI 配置助手",
+      "description": "解释平台能力并推荐配置路径。",
+      "targetUserIds": ["developer", "operator"],
+      "moduleIds": ["application", "form", "workflow", "permission"],
+      "capabilities": ["知识检索", "配置推荐"],
+      "value": 4, "frequency": 5, "strategicFit": 4, "complexity": 2, "risk": 2,
+      "requiresHumanConfirmation": false
+    },
+    {
+      "id": "ai-data-analysis",
+      "name": "AI 数据分析助手",
+      "description": "使用自然语言生成查询、指标和分析结论。",
+      "targetUserIds": ["operator"],
+      "moduleIds": ["report"],
+      "capabilities": ["自然语言查询", "指标生成", "数据解释"],
+      "value": 4, "frequency": 3, "strategicFit": 4, "complexity": 4, "risk": 5,
+      "requiresHumanConfirmation": true
+    }
+  ],
+  "constraints": {
+    "security": ["继承平台用户身份、角色和数据权限", "敏感数据不得进入未经批准的外部模型", "生成、执行和发布过程必须保留审计记录"],
+    "delivery": ["首期只生成配置草案，不允许无确认直接发布", "生成结果必须可预览、可修改、可校验和可回滚"]
+  }
+}

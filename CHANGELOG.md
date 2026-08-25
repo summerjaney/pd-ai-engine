@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.0] - Unreleased
+
+### Added
+
+- 新增低代码平台 AI 产品规划服务与 `ai plan`、`ai confirm` 命令。
+- 新增产品基线、AI 能力蓝图、场景优先级、MVP 草案和人工决策门禁。
+- 新增脱敏低代码 AI 规划示例与 v2.1.0 专项测试。
+
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]

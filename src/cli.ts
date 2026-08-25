@@ -70,6 +70,7 @@ import { ReleaseObjectiveService } from "./release-objective/service.js";
 import { ReleaseRetrospectiveService } from "./release-retrospective/service.js";
 import { WorkspaceOrchestrator } from "./workspace-orchestrator/service.js";
 import { finalizeMarketDelivery } from "./market-delivery/service.js";
+import { AiProductPlanningService } from "./ai-product-planning/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -156,6 +157,8 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae release retrospect <项目目录> --version <版本> --input <实际结果JSON>
   pae release market-finalize <项目目录> --version <版本> --evidence-dir <目录> --discovery-dir <目录>
   pae workspace status|next|decisions|blockers|plan|continue|history <项目目录> [--dry-run] [--execute --confirm] [--run <运行ID>]
+  pae ai plan <项目目录> --input <规划输入JSON>
+  pae ai confirm <项目目录> --scenarios <场景ID列表> --scope <首期范围> [--note <说明>]
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -251,7 +254,7 @@ const VALID_OPTIONS = new Set([
   "--decision", "--scope", "--note",
   "--workspace", "--ids", "--knowledge-dir", "--module-dir", "--option", "--source-root", "--product", "--version", "--extractor",
   "--gate", "--include", "--defer", "--objective", "--baseline", "--feature", "--project-dir",
-  "--type", "--sensitivity", "--label", "--exclude-from-analysis", "--evidence-dir", "--discovery-dir", "--kind", "--action", "--problem", "--opportunity", "--hypothesis", "--metric", "--input", "--confirm", "--run", "--execute",
+  "--type", "--sensitivity", "--label", "--exclude-from-analysis", "--evidence-dir", "--discovery-dir", "--kind", "--action", "--problem", "--opportunity", "--hypothesis", "--metric", "--input", "--confirm", "--run", "--execute", "--scenarios",
 ]);
 
 function validateArgs(args: string[]): void {
@@ -310,6 +313,29 @@ async function main(): Promise<void> {
     if (args[1] === "plan") { const r=await orchestrator.writePlan(project);console.log(`动态执行计划：${r.markdownPath}`);return; }
     if (args[1] === "next" || args[1] === "decisions" || args[1] === "blockers") { const r = await orchestrator.inspect(project); const value = args[1] === "next" ? r.next : args[1] === "decisions" ? r.decisions : r.blockers; console.log(JSON.stringify(value, null, 2)); return; }
     const run = await orchestrator.run(project, args.includes("--execute"), args.includes("--confirm"), args[1] === "resume" ? option(args,"--run") : undefined); console.log(`工作空间续办：${run.id}`); return;
+  }
+
+  if (args[0] === "ai" && ["plan", "confirm"].includes(args[1] ?? "") && Boolean(args[2])) {
+    validateArgs(args);
+    const service = new AiProductPlanningService();
+    const projectDirectory = path.resolve(args[2]);
+    if (args[1] === "plan") {
+      const input = option(args, "--input");
+      if (!input) throw new Error("ai plan 必须提供 --input <规划输入JSON>。");
+      const result = await service.plan(projectDirectory, path.resolve(input));
+      console.log(`AI 产品规划：${result.gate.status}`);
+      console.log(`推荐 MVP 场景：${result.gate.recommendedScenarioIds.join("、") || "无"}`);
+      console.log(`规划目录：${result.directory}`);
+      return;
+    }
+    const scenarios = option(args, "--scenarios")?.split(",").map((item) => item.trim()).filter(Boolean);
+    const scope = option(args, "--scope");
+    if (!scenarios?.length || !scope) throw new Error("ai confirm 必须提供 --scenarios <场景ID列表> 和 --scope <首期范围>。");
+    const result = await service.confirm(projectDirectory, scenarios, scope, option(args, "--note"));
+    console.log("AI MVP 范围确认：PASS");
+    console.log(`场景：${result.decision.scenarioIds.join("、")}`);
+    console.log(`决策记录：${result.path}`);
+    return;
   }
 
   if (args[0] === "evidence" && ["add", "list", "show", "validate", "export-public"].includes(args[1] ?? "")) {
