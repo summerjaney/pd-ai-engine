@@ -71,6 +71,7 @@ import { ReleaseRetrospectiveService } from "./release-retrospective/service.js"
 import { WorkspaceOrchestrator } from "./workspace-orchestrator/service.js";
 import { finalizeMarketDelivery } from "./market-delivery/service.js";
 import { AiProductPlanningService } from "./ai-product-planning/service.js";
+import { AiRequirementDesignService } from "./ai-requirement-design/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -159,6 +160,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae workspace status|next|decisions|blockers|plan|continue|history <项目目录> [--dry-run] [--execute --confirm] [--run <运行ID>]
   pae ai plan <项目目录> --input <规划输入JSON>
   pae ai confirm <项目目录> --scenarios <场景ID列表> --scope <首期范围> [--note <说明>]
+  pae ai create-requirement <项目目录> --input <设计输入JSON> --id <需求编号> --name <需求标识> [--product-version <版本>]
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -315,7 +317,7 @@ async function main(): Promise<void> {
     const run = await orchestrator.run(project, args.includes("--execute"), args.includes("--confirm"), args[1] === "resume" ? option(args,"--run") : undefined); console.log(`工作空间续办：${run.id}`); return;
   }
 
-  if (args[0] === "ai" && ["plan", "confirm"].includes(args[1] ?? "") && Boolean(args[2])) {
+  if (args[0] === "ai" && ["plan", "confirm", "create-requirement"].includes(args[1] ?? "") && Boolean(args[2])) {
     validateArgs(args);
     const service = new AiProductPlanningService();
     const projectDirectory = path.resolve(args[2]);
@@ -326,6 +328,15 @@ async function main(): Promise<void> {
       console.log(`AI 产品规划：${result.gate.status}`);
       console.log(`推荐 MVP 场景：${result.gate.recommendedScenarioIds.join("、") || "无"}`);
       console.log(`规划目录：${result.directory}`);
+      return;
+    }
+    if (args[1] === "create-requirement") {
+      const input = option(args, "--input"); const id = option(args, "--id"); const name = option(args, "--name");
+      if (!input || !id || !name) throw new Error("ai create-requirement 必须提供 --input、--id 和 --name。");
+      const result = await new AiRequirementDesignService().create(projectDirectory, path.resolve(input), id, name, option(args, "--product-version") ?? "2.1.0");
+      console.log(`AI 标准需求设计包：${result.manifest.status}`);
+      console.log(`业务对象/流程/状态与异常：${result.manifest.artifacts.length} 项成果`);
+      console.log(`需求目录：${result.requirementDirectory}`);
       return;
     }
     const scenarios = option(args, "--scenarios")?.split(",").map((item) => item.trim()).filter(Boolean);

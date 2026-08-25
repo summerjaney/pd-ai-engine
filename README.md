@@ -17,6 +17,11 @@ node dist/cli.js ai plan output/lowcode-ai \
 node dist/cli.js ai confirm output/lowcode-ai \
   --scenarios ai-app-builder \
   --scope "采购审批应用端到端搭建"
+
+node dist/cli.js ai create-requirement output/lowcode-ai \
+  --input examples/lowcode-ai-v2.1.0/ai-app-builder-design.json \
+  --id AI-001 \
+  --name ai-app-builder
 ```
 
 `ai plan` 只提供确定性推荐，不能替代产品经理选择首期范围。只有执行 `ai confirm` 后，规划门禁才会变为 `CONFIRMED` 并允许进入标准需求详细设计。

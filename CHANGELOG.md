@@ -7,6 +7,7 @@
 - 新增低代码平台 AI 产品规划服务与 `ai plan`、`ai confirm` 命令。
 - 新增产品基线、AI 能力蓝图、场景优先级、MVP 草案和人工决策门禁。
 - 新增脱敏低代码 AI 规划示例与 v2.1.0 专项测试。
+- 新增已确认 MVP 场景到标准需求设计包的转换，覆盖业务对象、主流程、任务状态、异常恢复和验收标准。
 
 All notable changes to this project will be documented in this file.
 
