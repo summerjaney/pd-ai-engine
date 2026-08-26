@@ -8,6 +8,7 @@
 - 新增产品基线、AI 能力蓝图、场景优先级、MVP 草案和人工决策门禁。
 - 新增脱敏低代码 AI 规划示例与 v2.1.0 专项测试。
 - 新增已确认 MVP 场景到标准需求设计包的转换，覆盖业务对象、主流程、任务状态、异常恢复和验收标准。
+- 新增五类低代码 DSL 契约校验、跨模块引用检查、依赖感知局部重生成及带快照回滚的待确认发布计划。
 
 All notable changes to this project will be documented in this file.
 

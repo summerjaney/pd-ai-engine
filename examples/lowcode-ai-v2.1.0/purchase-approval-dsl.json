@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "2.1",
+  "taskId": "BUILD-001",
+  "planConfirmed": true,
+  "targetApplication": {
+    "id": "APP-PURCHASE",
+    "name": "采购申请",
+    "description": "采购申请与条件审批应用",
+    "menus": [{ "id": "MENU-PURCHASE", "name": "采购申请", "targetId": "FORM-PURCHASE" }]
+  },
+  "entities": [{
+    "id": "ENTITY-PURCHASE",
+    "name": "采购申请",
+    "fields": [
+      { "id": "FIELD-ITEM", "name": "采购物品", "type": "text", "required": true },
+      { "id": "FIELD-QUANTITY", "name": "数量", "type": "number", "required": true },
+      { "id": "FIELD-BUDGET", "name": "预算", "type": "number", "required": true },
+      { "id": "FIELD-REASON", "name": "申请原因", "type": "textarea", "required": true }
+    ]
+  }],
+  "forms": [{ "id": "FORM-PURCHASE", "name": "采购申请表", "entityId": "ENTITY-PURCHASE", "fieldIds": ["FIELD-ITEM", "FIELD-QUANTITY", "FIELD-BUDGET", "FIELD-REASON"] }],
+  "workflows": [{
+    "id": "WF-PURCHASE", "name": "采购审批", "entityId": "ENTITY-PURCHASE",
+    "nodes": [
+      { "id": "NODE-START", "name": "提交申请", "type": "start" },
+      { "id": "NODE-DEPT", "name": "部门负责人审批", "type": "approval", "assignee": "department-manager" },
+      { "id": "NODE-LEADER", "name": "分管领导审批", "type": "approval", "assignee": "business-leader" },
+      { "id": "NODE-END", "name": "审批完成", "type": "end" }
+    ],
+    "transitions": [
+      { "id": "TR-01", "sourceId": "NODE-START", "targetId": "NODE-DEPT" },
+      { "id": "TR-02", "sourceId": "NODE-DEPT", "targetId": "NODE-LEADER", "condition": "FIELD-BUDGET > 50000" },
+      { "id": "TR-03", "sourceId": "NODE-DEPT", "targetId": "NODE-END", "condition": "FIELD-BUDGET <= 50000" },
+      { "id": "TR-04", "sourceId": "NODE-LEADER", "targetId": "NODE-END" }
+    ]
+  }],
+  "permissions": [
+    { "roleId": "ROLE-APPLICANT", "roleName": "申请人", "objectIds": ["APP-PURCHASE", "ENTITY-PURCHASE", "FORM-PURCHASE", "WF-PURCHASE"], "operations": ["create", "read", "update"] },
+    { "roleId": "ROLE-PUBLISHER", "roleName": "应用发布负责人", "objectIds": ["APP-PURCHASE"], "operations": ["read", "publish"] }
+  ],
+  "publish": { "targetEnvironment": "staging", "requiresConfirmation": true, "rollbackFromVersion": "purchase-app@0.0.0" }
+}

@@ -72,6 +72,7 @@ import { WorkspaceOrchestrator } from "./workspace-orchestrator/service.js";
 import { finalizeMarketDelivery } from "./market-delivery/service.js";
 import { AiProductPlanningService } from "./ai-product-planning/service.js";
 import { AiRequirementDesignService } from "./ai-requirement-design/service.js";
+import { AiConfigContractService } from "./ai-config-contract/service.js";
 
 const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
 
@@ -161,6 +162,7 @@ const HELP_TEMPLATE = `PAE — Product Design AI Engine v{VERSION}
   pae ai plan <项目目录> --input <规划输入JSON>
   pae ai confirm <项目目录> --scenarios <场景ID列表> --scope <首期范围> [--note <说明>]
   pae ai create-requirement <项目目录> --input <设计输入JSON> --id <需求编号> --name <需求标识> [--product-version <版本>]
+  pae ai validate-config <需求目录> --input <低代码DSL JSON>
   pae material add <资料文件> --source-root <目录> --type <类型> --sensitivity <级别> --product <产品>
   pae material list --source-root <目录>
   pae material extract <资料ID> --source-root <目录>
@@ -317,10 +319,20 @@ async function main(): Promise<void> {
     const run = await orchestrator.run(project, args.includes("--execute"), args.includes("--confirm"), args[1] === "resume" ? option(args,"--run") : undefined); console.log(`工作空间续办：${run.id}`); return;
   }
 
-  if (args[0] === "ai" && ["plan", "confirm", "create-requirement"].includes(args[1] ?? "") && Boolean(args[2])) {
+  if (args[0] === "ai" && ["plan", "confirm", "create-requirement", "validate-config"].includes(args[1] ?? "") && Boolean(args[2])) {
     validateArgs(args);
     const service = new AiProductPlanningService();
     const projectDirectory = path.resolve(args[2]);
+    if (args[1] === "validate-config") {
+      const input = option(args, "--input"); if (!input) throw new Error("ai validate-config 必须提供 --input <低代码DSL JSON>。");
+      const result = await new AiConfigContractService().validate(projectDirectory, path.resolve(input));
+      console.log(`AI 低代码配置契约：${result.report.status}`);
+      if (result.regenerationPlan) console.log(`局部重新生成：${result.regenerationPlan.regenerateModules.join("、")}`);
+      if (result.publishPlan) console.log(`发布计划：${result.publishPlan.status}`);
+      console.log(`契约目录：${result.directory}`);
+      if (result.report.status === "FAIL") process.exitCode = 1;
+      return;
+    }
     if (args[1] === "plan") {
       const input = option(args, "--input");
       if (!input) throw new Error("ai plan 必须提供 --input <规划输入JSON>。");
