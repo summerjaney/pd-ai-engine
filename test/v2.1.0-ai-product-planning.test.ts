@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { AiProductPlanningService } from "../src/ai-product-planning/service.js";
 import { AiRequirementDesignService } from "../src/ai-requirement-design/service.js";
 import { AiConfigContractService } from "../src/ai-config-contract/service.js";
+import { AiPrototypeDesignService } from "../src/ai-prototype-design/service.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const input = path.join(repositoryRoot, "examples", "lowcode-ai-v2.1.0", "planning-input.json");
@@ -19,6 +20,12 @@ async function preparedRequirement(): Promise<string> {
   await planning.plan(project, input);
   await planning.confirm(project, ["ai-app-builder"], "采购审批应用端到端搭建");
   return (await new AiRequirementDesignService().create(project, designInput, "AI-001", "ai-app-builder")).requirementDirectory;
+}
+
+async function preparedValidatedRequirement(): Promise<string> {
+  const requirement = await preparedRequirement();
+  await new AiConfigContractService().validate(requirement, dslInput);
+  return requirement;
 }
 
 test("v2.1.0 生成低代码 AI 产品规划五类成果并停在人工门禁", async () => {
@@ -105,4 +112,25 @@ test("v2.1.0 实体错误按依赖扩散但不误伤应用模块", async () => {
   const result = await new AiConfigContractService().validate(requirement, broken);
   assert.deepEqual(result.regenerationPlan?.regenerateModules, ["entity", "form", "workflow", "permission"]);
   assert.deepEqual(result.regenerationPlan?.preservedModules, ["application"]);
+});
+
+test("v2.1.0 DSL 未通过契约校验时禁止生成正式产品原型", async () => {
+  const requirement = await preparedRequirement();
+  await assert.rejects(() => new AiPrototypeDesignService().generate(requirement), /缺少低代码 DSL 契约/);
+});
+
+test("v2.1.0 生成十四页 AI 应用搭建助手原型并通过三类一致性检查", async () => {
+  const requirement = await preparedValidatedRequirement();
+  const result = await new AiPrototypeDesignService().generate(requirement);
+  assert.equal(result.status, "PASS");
+  assert.equal(result.pageCount, 14);
+  assert.equal(result.prototype.pages[0]?.id, "task-list");
+  assert.ok(result.prototype.pages.some((item) => item.id === "publish-confirm" && item.actions.some((action) => action.confirmation)));
+  const pageDirectory = path.join(requirement, "04-page-structure");
+  for (const file of ["page-plan-validation.json", "design-consistency.json", "interaction-consistency.json"]) {
+    assert.equal(JSON.parse(await readFile(path.join(pageDirectory, file), "utf8")).valid, true);
+  }
+  const masterGo = JSON.parse(await readFile(path.join(result.prototypeDirectory, "mastergo-data.json"), "utf8"));
+  assert.equal(masterGo.screens.length, 14);
+  assert.match(await readFile(path.join(result.prototypeDirectory, "prototype.html"), "utf8"), /AI 应用搭建助手/);
 });

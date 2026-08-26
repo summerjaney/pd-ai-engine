@@ -9,6 +9,7 @@
 - 新增脱敏低代码 AI 规划示例与 v2.1.0 专项测试。
 - 新增已确认 MVP 场景到标准需求设计包的转换，覆盖业务对象、主流程、任务状态、异常恢复和验收标准。
 - 新增五类低代码 DSL 契约校验、跨模块引用检查、依赖感知局部重生成及带快照回滚的待确认发布计划。
+- 新增 AI 应用搭建助手 14 页信息架构、页面流转、可执行 Prototype DSL、HTML/SVG 预览和 MasterGo 数据。
 
 All notable changes to this project will be documented in this file.
 
