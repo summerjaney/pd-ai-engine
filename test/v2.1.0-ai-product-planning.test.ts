@@ -8,6 +8,7 @@ import { AiProductPlanningService } from "../src/ai-product-planning/service.js"
 import { AiRequirementDesignService } from "../src/ai-requirement-design/service.js";
 import { AiConfigContractService } from "../src/ai-config-contract/service.js";
 import { AiPrototypeDesignService } from "../src/ai-prototype-design/service.js";
+import { AiProductDeliveryService } from "../src/ai-product-delivery/service.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const input = path.join(repositoryRoot, "examples", "lowcode-ai-v2.1.0", "planning-input.json");
@@ -133,4 +134,26 @@ test("v2.1.0 生成十四页 AI 应用搭建助手原型并通过三类一致性
   const masterGo = JSON.parse(await readFile(path.join(result.prototypeDirectory, "mastergo-data.json"), "utf8"));
   assert.equal(masterGo.screens.length, 14);
   assert.match(await readFile(path.join(result.prototypeDirectory, "prototype.html"), "utf8"), /AI 应用搭建助手/);
+});
+
+test("v2.1.0 原型未生成时禁止形成正式评审交付包", async () => {
+  const requirement = await preparedValidatedRequirement();
+  await assert.rejects(() => new AiProductDeliveryService().finalize(requirement), /prototype.json|ENOENT/);
+});
+
+test("v2.1.0 生成 PRD、完整追踪矩阵、评审包和真实项目验证报告", async () => {
+  const requirement = await preparedValidatedRequirement();
+  await new AiPrototypeDesignService().generate(requirement);
+  const result = await new AiProductDeliveryService().finalize(requirement);
+  assert.equal(result.report.status, "READY_FOR_HUMAN_REVIEW");
+  assert.deepEqual(result.report.traceability, { total: 8, passed: 8, missing: 0 });
+  assert.equal(result.files.length, 7);
+  const prd = await readFile(path.join(result.directory, "prd.md"), "utf8");
+  assert.match(prd, /发布确认/);
+  assert.match(prd, /\/ai-builder\/publish-confirm/);
+  assert.match(prd, /AC-08/);
+  const validation = JSON.parse(await readFile(path.join(result.directory, "project-validation-report.json"), "utf8"));
+  assert.equal(validation.status, "READY_FOR_HUMAN_REVIEW");
+  assert.equal(validation.knowledgeCandidates.length, 3);
+  assert.match(result.report.manualReviewItems.join("\n"), /MasterGo 真实画布/);
 });
