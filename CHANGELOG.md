@@ -10,6 +10,14 @@
 - 新增已确认 MVP 场景到标准需求设计包的转换，覆盖业务对象、主流程、任务状态、异常恢复和验收标准。
 - 新增五类低代码 DSL 契约校验、跨模块引用检查、依赖感知局部重生成及带快照回滚的待确认发布计划。
 - 新增 AI 应用搭建助手 14 页信息架构、页面流转、可执行 Prototype DSL、HTML/SVG 预览和 MasterGo 数据。
+- 新增 `ai finalize`，输出完整 PRD、需求—页面—DSL—验收标准追踪矩阵、设计评审包和真实项目验证报告。
+- 新增正式交付门禁，机器校验通过后仅进入 `READY_FOR_HUMAN_REVIEW`，保留真实平台、模型、MasterGo 与跨角色人工评审。
+
+### Validation
+
+- TypeScript 编译与 v2.1.0 专项测试 11/11 通过。
+- AI 产品设计 CLI 端到端链路通过，8 条验收标准全部完成追踪。
+- 历史全量回归 365/368 通过；3 个既有 v1.0.0 手册/PDF 交付用例因固定 120 秒上限被终止，未出现断言失败。
 
 All notable changes to this project will be documented in this file.
 

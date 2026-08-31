@@ -29,9 +29,12 @@ node dist/cli.js ai validate-config \
 
 node dist/cli.js ai design-prototype \
   output/lowcode-ai/requirements/AI-001-ai-app-builder
+
+node dist/cli.js ai finalize \
+  output/lowcode-ai/requirements/AI-001-ai-app-builder
 ```
 
-`ai plan` 只提供确定性推荐，不能替代产品经理选择首期范围。只有执行 `ai confirm` 后，规划门禁才会变为 `CONFIRMED` 并允许进入标准需求详细设计。
+`ai plan` 只提供确定性推荐，不能替代产品经理选择首期范围。只有执行 `ai confirm` 后，规划门禁才会变为 `CONFIRMED` 并允许进入标准需求详细设计。`ai finalize` 会生成 PRD、需求—页面—DSL—验收标准追踪矩阵、评审包和真实项目验证报告，最终状态为 `READY_FOR_HUMAN_REVIEW`，不会替代真实平台、模型、MasterGo 画布和跨角色人工评审。
 
 ## 工作流编排与智能续办（v2.0.0）
 
