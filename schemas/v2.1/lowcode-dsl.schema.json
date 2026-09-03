@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pae.local/schemas/v2.1/lowcode-dsl.schema.json",
+  "title": "PAE AI Low-code DSL Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "taskId", "planConfirmed", "targetApplication", "entities", "forms", "workflows", "permissions", "publish"],
+  "properties": {
+    "schemaVersion": { "const": "2.1" },
+    "taskId": { "type": "string", "minLength": 1 },
+    "planConfirmed": { "const": true },
+    "targetApplication": { "type": "object" },
+    "entities": { "type": "array", "minItems": 1 },
+    "forms": { "type": "array", "minItems": 1 },
+    "workflows": { "type": "array", "minItems": 1 },
+    "permissions": { "type": "array", "minItems": 1 },
+    "publish": { "type": "object" }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "scenarioId": "ai-app-builder",
+  "title": "AI 应用搭建助手",
+  "problem": "低代码应用搭建需要分别配置数据模型、表单、流程和权限，开发与运维人员需要理解多个设计器，重复配置多且容易产生跨模块不一致。",
+  "targetOutcome": "用户通过自然语言描述业务需求，AI 生成可审查、可修改、可校验、可回滚的应用搭建方案和配置草案。",
+  "actors": [
+    { "id": "ACT-BUILDER", "name": "开发与实施人员", "responsibility": "描述需求、确认方案、调整配置并验证结果" },
+    { "id": "ACT-OPERATOR", "name": "平台运维与业务配置人员", "responsibility": "使用引导式输入完成常见应用搭建" },
+    { "id": "ACT-PUBLISHER", "name": "应用发布负责人", "responsibility": "复核差异、风险和权限后确认发布" }
+  ],
+  "businessObjects": [
+    { "id": "OBJ-BUILD-TASK", "name": "AI 搭建任务", "description": "承载一次从需求输入到发布或取消的完整任务", "keyFields": ["任务编号", "创建人", "当前状态", "目标环境", "创建时间"] },
+    { "id": "OBJ-REQUIREMENT-SPEC", "name": "结构化需求规格", "description": "保存 AI 从自然语言中提取并由用户确认的业务需求", "keyFields": ["业务目标", "角色", "业务对象", "字段", "流程规则", "权限要求", "待确认问题"] },
+    { "id": "OBJ-GENERATION-PLAN", "name": "搭建方案", "description": "描述本次将创建或变更的应用、模型、表单、流程和权限", "keyFields": ["模块范围", "依赖关系", "风险", "版本", "确认状态"] },
+    { "id": "OBJ-CONFIG-DRAFT", "name": "配置草案", "description": "由 AI 生成、尚未发布的结构化低代码 DSL", "keyFields": ["DSL 类型", "DSL 内容", "来源方案", "生成版本", "校验状态"] },
+    { "id": "OBJ-VALIDATION-ISSUE", "name": "校验问题", "description": "记录配置草案中的错误、警告和处理状态", "keyFields": ["问题级别", "定位对象", "问题说明", "修复建议", "处理状态"] },
+    { "id": "OBJ-PUBLISH-VERSION", "name": "发布版本", "description": "记录发布内容、差异、操作者和回滚点", "keyFields": ["版本号", "变更摘要", "确认人", "发布时间", "回滚版本"] }
+  ],
+  "flow": [
+    { "id": "FLOW-01", "name": "创建搭建任务", "actor": "ACT-BUILDER/ACT-OPERATOR", "input": "目标应用与业务描述", "output": "OBJ-BUILD-TASK", "requiresConfirmation": false },
+    { "id": "FLOW-02", "name": "AI 理解并澄清需求", "actor": "AI + ACT-BUILDER/ACT-OPERATOR", "input": "自然语言需求", "output": "OBJ-REQUIREMENT-SPEC", "requiresConfirmation": true },
+    { "id": "FLOW-03", "name": "生成并确认搭建方案", "actor": "AI + ACT-BUILDER/ACT-OPERATOR", "input": "已确认需求规格", "output": "OBJ-GENERATION-PLAN", "requiresConfirmation": true },
+    { "id": "FLOW-04", "name": "生成低代码配置草案", "actor": "AI", "input": "已确认搭建方案", "output": "OBJ-CONFIG-DRAFT", "requiresConfirmation": false },
+    { "id": "FLOW-05", "name": "确定性校验与局部修复", "actor": "低代码引擎 + ACT-BUILDER", "input": "配置草案", "output": "OBJ-VALIDATION-ISSUE 与已校验草案", "requiresConfirmation": false },
+    { "id": "FLOW-06", "name": "预览与模拟验证", "actor": "ACT-BUILDER/ACT-OPERATOR", "input": "已校验草案", "output": "表单、流程、权限和应用预览结果", "requiresConfirmation": true },
+    { "id": "FLOW-07", "name": "确认发布并建立回滚点", "actor": "ACT-PUBLISHER", "input": "发布差异与风险摘要", "output": "OBJ-PUBLISH-VERSION", "requiresConfirmation": true }
+  ],
+  "states": [
+    { "id": "STATE-DRAFT", "name": "草稿", "terminal": false },
+    { "id": "STATE-CLARIFYING", "name": "需求澄清中", "terminal": false },
+    { "id": "STATE-PLAN-PENDING", "name": "方案待确认", "terminal": false },
+    { "id": "STATE-GENERATING", "name": "配置生成中", "terminal": false },
+    { "id": "STATE-VALIDATION-FAILED", "name": "校验未通过", "terminal": false },
+    { "id": "STATE-READY-PREVIEW", "name": "待预览验证", "terminal": false },
+    { "id": "STATE-READY-PUBLISH", "name": "待发布确认", "terminal": false },
+    { "id": "STATE-PUBLISHED", "name": "已发布", "terminal": true },
+    { "id": "STATE-FAILED", "name": "执行失败", "terminal": true },
+    { "id": "STATE-CANCELLED", "name": "已取消", "terminal": true }
+  ],
+  "exceptions": [
+    { "id": "EX-AMBIGUOUS", "trigger": "需求存在歧义或缺少关键规则", "handling": "停止生成并提出待确认问题，保留已提取内容", "recoverable": true },
+    { "id": "EX-PERMISSION", "trigger": "请求生成超出当前用户权限的对象或配置", "handling": "阻断对应模块并展示所需权限，不降低权限校验", "recoverable": true },
+    { "id": "EX-INVALID-DSL", "trigger": "生成 DSL 不符合平台 Schema 或业务规则", "handling": "定位错误并仅重新生成受影响模块，禁止进入发布", "recoverable": true },
+    { "id": "EX-MODEL-TIMEOUT", "trigger": "模型超时或返回不完整", "handling": "保存任务上下文并允许从失败步骤重试", "recoverable": true },
+    { "id": "EX-CONFLICT", "trigger": "生成内容与目标环境现有配置冲突", "handling": "展示差异并要求用户选择合并、覆盖或取消", "recoverable": true },
+    { "id": "EX-PUBLISH-FAILED", "trigger": "发布过程部分失败", "handling": "停止后续写入并回滚到发布前版本，记录审计日志", "recoverable": true }
+  ],
+  "validationCase": {
+    "name": "采购申请审批应用",
+    "prompt": "创建采购申请应用，包含采购物品、数量、预算和申请原因；金额超过5万元时由部门负责人和分管领导审批，否则只需部门负责人审批。",
+    "expectedArtifacts": ["应用结构", "采购申请实体", "申请表单", "条件审批流程", "角色权限草案", "发布前校验报告"]
+  },
+  "acceptanceCriteria": [
+    { "id": "AC-01", "description": "能够从验证指令识别采购申请实体、4个核心字段、申请人及审批角色。" },
+    { "id": "AC-02", "description": "能够生成5万元条件分支，并区分一级和两级审批路径。" },
+    { "id": "AC-03", "description": "需求规格和搭建方案未经用户确认时不得生成或发布正式配置。" },
+    { "id": "AC-04", "description": "所有生成配置必须通过 Schema、依赖、权限和业务规则校验。" },
+    { "id": "AC-05", "description": "校验失败时能够定位到模块、对象或规则，并支持局部重新生成。" },
+    { "id": "AC-06", "description": "发布前必须展示应用、表单、流程、权限及与目标环境的差异。" },
+    { "id": "AC-07", "description": "发布必须由有权限的负责人显式确认，并生成审计记录和回滚点。" },
+    { "id": "AC-08", "description": "模型超时、权限不足、配置冲突和发布失败均有明确恢复路径。" }
+  ]
+}
